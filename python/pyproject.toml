@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "slop-auditor"
+version = "0.2.0"
+description = "Security auditor with 3D visualization - Python wrapper for @slop/auditor"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "slopsecurityadmin"}
+]
+keywords = [
+    "security",
+    "auditor",
+    "scanner",
+    "slop",
+    "vulnerability",
+    "secrets",
+    "aws",
+    "devsecops"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Software Development :: Quality Assurance"
+]
+requires-python = ">=3.8"
+
+[project.urls]
+Homepage = "https://github.com/slopsecurityadmin/slop-security-auditor"
+Documentation = "https://github.com/slopsecurityadmin/slop-security-auditor#readme"
+Repository = "https://github.com/slopsecurityadmin/slop-security-auditor.git"
+Issues = "https://github.com/slopsecurityadmin/slop-security-auditor/issues"
+
+[project.scripts]
+slop-auditor = "slop_auditor.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "black>=23.0",
+    "mypy>=1.0"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.setuptools.package-data]
+slop_auditor = ["*.js", "*.json"]

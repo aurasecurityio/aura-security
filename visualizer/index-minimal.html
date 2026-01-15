@@ -1,0 +1,1279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SLOP Auditor - Security Matrix</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --matrix-green: #00ff41;
+      --matrix-dark-green: #008f11;
+      --matrix-bright: #39ff14;
+      --matrix-dim: #003b00;
+      --bg-black: #000000;
+      --bg-dark: #0a0a0a;
+      --bg-panel: rgba(0, 20, 0, 0.9);
+      --border-green: rgba(0, 255, 65, 0.3);
+      --text-green: #00ff41;
+      --danger: #ff0040;
+      --warning: #ffaa00;
+    }
+
+    body {
+      background: var(--bg-black);
+      font-family: 'Share Tech Mono', monospace;
+      color: var(--text-green);
+      overflow: hidden;
+      min-height: 100vh;
+    }
+
+    /* Matrix rain effect */
+    #matrix-rain {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      opacity: 0.15;
+      pointer-events: none;
+    }
+
+    #canvas-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    /* Panels */
+    .panel {
+      position: fixed;
+      z-index: 100;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-green);
+      padding: 15px;
+      box-shadow: 0 0 20px rgba(0, 255, 65, 0.1), inset 0 0 20px rgba(0, 0, 0, 0.5);
+    }
+
+    .panel::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--matrix-green), transparent);
+    }
+
+    /* Header */
+    #header {
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 50px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      background: linear-gradient(180deg, rgba(0, 30, 0, 0.95) 0%, rgba(0, 10, 0, 0.9) 100%);
+      border-bottom: 1px solid var(--border-green);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 16px;
+      font-weight: bold;
+      letter-spacing: 3px;
+      text-shadow: 0 0 10px var(--matrix-green);
+    }
+
+    .logo-icon {
+      font-size: 24px;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; text-shadow: 0 0 10px var(--matrix-green); }
+      50% { opacity: 0.7; text-shadow: 0 0 20px var(--matrix-green); }
+    }
+
+    .nav-tabs {
+      display: flex;
+      gap: 5px;
+    }
+
+    .nav-tab {
+      padding: 8px 20px;
+      background: transparent;
+      border: 1px solid var(--border-green);
+      color: var(--matrix-dim);
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.3s;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .nav-tab:hover {
+      color: var(--matrix-green);
+      border-color: var(--matrix-green);
+    }
+
+    .nav-tab.active {
+      background: rgba(0, 255, 65, 0.1);
+      color: var(--matrix-green);
+      border-color: var(--matrix-green);
+      text-shadow: 0 0 10px var(--matrix-green);
+    }
+
+    .header-stats {
+      display: flex;
+      gap: 20px;
+      font-size: 12px;
+    }
+
+    .header-stat {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .stat-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      animation: blink 1s infinite;
+    }
+
+    .stat-dot.critical { background: var(--danger); box-shadow: 0 0 10px var(--danger); }
+    .stat-dot.warning { background: var(--warning); box-shadow: 0 0 10px var(--warning); }
+    .stat-dot.safe { background: var(--matrix-green); box-shadow: 0 0 10px var(--matrix-green); }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* Left Panel - Scanner */
+    #scanner-panel {
+      top: 60px;
+      left: 10px;
+      width: 320px;
+      max-height: calc(100vh - 70px);
+      overflow-y: auto;
+    }
+
+    .section-header {
+      font-size: 11px;
+      color: var(--matrix-green);
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-green);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-header::before {
+      content: '>';
+      animation: cursor-blink 1s infinite;
+    }
+
+    @keyframes cursor-blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0; }
+    }
+
+    .input-group {
+      margin-bottom: 12px;
+    }
+
+    .input-group label {
+      display: block;
+      font-size: 10px;
+      color: var(--matrix-dim);
+      margin-bottom: 5px;
+      text-transform: uppercase;
+    }
+
+    .input-group input {
+      width: 100%;
+      padding: 10px;
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid var(--border-green);
+      color: var(--matrix-green);
+      font-family: inherit;
+      font-size: 12px;
+    }
+
+    .input-group input:focus {
+      outline: none;
+      border-color: var(--matrix-green);
+      box-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+    }
+
+    .input-group input::placeholder {
+      color: var(--matrix-dim);
+    }
+
+    .btn {
+      width: 100%;
+      padding: 12px;
+      background: transparent;
+      border: 1px solid var(--matrix-green);
+      color: var(--matrix-green);
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.3s;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-top: 8px;
+    }
+
+    .btn:hover {
+      background: rgba(0, 255, 65, 0.1);
+      box-shadow: 0 0 20px rgba(0, 255, 65, 0.3);
+      text-shadow: 0 0 10px var(--matrix-green);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-danger {
+      border-color: var(--danger);
+      color: var(--danger);
+    }
+
+    .btn-danger:hover {
+      background: rgba(255, 0, 64, 0.1);
+      box-shadow: 0 0 20px rgba(255, 0, 64, 0.3);
+    }
+
+    /* Scanned repos list */
+    .repo-list {
+      margin-top: 15px;
+    }
+
+    .repo-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid transparent;
+      margin-bottom: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .repo-item:hover {
+      border-color: var(--border-green);
+      background: rgba(0, 255, 65, 0.05);
+    }
+
+    .repo-item.selected {
+      border-color: var(--matrix-green);
+      background: rgba(0, 255, 65, 0.1);
+    }
+
+    .repo-item.critical { border-left: 3px solid var(--danger); }
+    .repo-item.warning { border-left: 3px solid var(--warning); }
+    .repo-item.safe { border-left: 3px solid var(--matrix-green); }
+
+    .repo-icon { font-size: 16px; }
+    .repo-name { flex: 1; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .repo-count { font-size: 10px; color: var(--matrix-dim); }
+
+    /* Right Panel - Details */
+    #details-panel {
+      top: 60px;
+      right: 10px;
+      width: 350px;
+      max-height: calc(100vh - 70px);
+      overflow-y: auto;
+    }
+
+    .finding-list {
+      margin-top: 10px;
+    }
+
+    .finding-item {
+      padding: 12px;
+      background: rgba(0, 0, 0, 0.3);
+      border-left: 3px solid;
+      margin-bottom: 8px;
+    }
+
+    .finding-item.critical { border-color: var(--danger); }
+    .finding-item.high { border-color: #ff6600; }
+    .finding-item.medium { border-color: var(--warning); }
+    .finding-item.low { border-color: var(--matrix-green); }
+
+    .finding-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+
+    .finding-severity {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .finding-item.critical .finding-severity { color: var(--danger); }
+    .finding-item.high .finding-severity { color: #ff6600; }
+    .finding-item.medium .finding-severity { color: var(--warning); }
+    .finding-item.low .finding-severity { color: var(--matrix-green); }
+
+    .finding-type {
+      font-size: 9px;
+      color: var(--matrix-dim);
+    }
+
+    .finding-message {
+      font-size: 11px;
+      color: var(--text-green);
+      margin-bottom: 6px;
+      line-height: 1.4;
+    }
+
+    .finding-file {
+      font-size: 10px;
+      color: var(--matrix-dim);
+      font-family: monospace;
+    }
+
+    /* Reports Panel (hidden by default) */
+    #reports-panel {
+      top: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 800px;
+      max-width: calc(100% - 40px);
+      max-height: calc(100vh - 80px);
+      overflow-y: auto;
+      display: none;
+    }
+
+    #reports-panel.active {
+      display: block;
+    }
+
+    .report-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+
+    .report-table th,
+    .report-table td {
+      padding: 10px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-green);
+    }
+
+    .report-table th {
+      color: var(--matrix-green);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-size: 10px;
+    }
+
+    .report-table tr:hover td {
+      background: rgba(0, 255, 65, 0.05);
+    }
+
+    .report-actions {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    .report-actions .btn {
+      width: auto;
+      padding: 8px 16px;
+    }
+
+    /* 3D View Panel (center info) */
+    #view-info {
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 20px;
+      font-size: 11px;
+      text-align: center;
+      background: rgba(0, 10, 0, 0.8);
+    }
+
+    .view-hint {
+      color: var(--matrix-dim);
+    }
+
+    .view-hint span {
+      color: var(--matrix-green);
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 30px;
+      color: var(--matrix-dim);
+    }
+
+    .empty-state-icon {
+      font-size: 40px;
+      margin-bottom: 10px;
+      opacity: 0.5;
+    }
+
+    /* Terminal output */
+    .terminal-output {
+      background: rgba(0, 0, 0, 0.5);
+      padding: 10px;
+      font-size: 10px;
+      max-height: 150px;
+      overflow-y: auto;
+      margin-top: 10px;
+      border: 1px solid var(--border-green);
+    }
+
+    .terminal-line {
+      margin-bottom: 4px;
+      opacity: 0.8;
+    }
+
+    .terminal-line.success { color: var(--matrix-green); }
+    .terminal-line.error { color: var(--danger); }
+    .terminal-line.info { color: var(--matrix-dim); }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-black); }
+    ::-webkit-scrollbar-thumb { background: var(--matrix-dim); }
+    ::-webkit-scrollbar-thumb:hover { background: var(--matrix-green); }
+
+    /* Loading animation */
+    .scanning {
+      display: inline-block;
+      animation: scanning 0.5s infinite;
+    }
+
+    @keyframes scanning {
+      0% { content: '[    ]'; }
+      25% { content: '[=   ]'; }
+      50% { content: '[==  ]'; }
+      75% { content: '[=== ]'; }
+      100% { content: '[====]'; }
+    }
+
+    .scanning::after {
+      content: '';
+      animation: dots 1s infinite;
+    }
+
+    @keyframes dots {
+      0% { content: '.'; }
+      33% { content: '..'; }
+      66% { content: '...'; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Matrix Rain Canvas -->
+  <canvas id="matrix-rain"></canvas>
+
+  <!-- Three.js 3D Canvas -->
+  <div id="canvas-container"></div>
+
+  <!-- Header -->
+  <header id="header" class="panel">
+    <div class="logo">
+      <span class="logo-icon">[S]</span>
+      <span>SLOP_AUDITOR</span>
+    </div>
+
+    <div class="nav-tabs">
+      <button class="nav-tab active" onclick="showView('scan')">SCAN</button>
+      <button class="nav-tab" onclick="showView('reports')">REPORTS</button>
+    </div>
+
+    <div class="header-stats">
+      <div class="header-stat">
+        <div class="stat-dot critical"></div>
+        <span><span id="totalCritical">0</span> CRITICAL</span>
+      </div>
+      <div class="header-stat">
+        <div class="stat-dot warning"></div>
+        <span><span id="totalWarning">0</span> WARNINGS</span>
+      </div>
+      <div class="header-stat">
+        <div class="stat-dot safe"></div>
+        <span><span id="totalRepos">0</span> REPOS</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Scanner Panel (Left) -->
+  <div id="scanner-panel" class="panel">
+    <div class="section-header">TARGET_ACQUISITION</div>
+
+    <div class="input-group">
+      <label>Local Path</label>
+      <input type="text" id="scanPath" placeholder="/path/to/project">
+    </div>
+
+    <div class="input-group">
+      <label>Git Repository URL</label>
+      <input type="text" id="gitUrl" placeholder="https://github.com/user/repo">
+    </div>
+
+    <button class="btn" id="scanBtn" onclick="executeScan()">
+      INITIATE_SCAN
+    </button>
+
+    <div class="terminal-output" id="terminal">
+      <div class="terminal-line info">> System initialized</div>
+      <div class="terminal-line info">> Awaiting target...</div>
+    </div>
+
+    <div class="section-header" style="margin-top: 20px;">SCANNED_TARGETS</div>
+
+    <div class="repo-list" id="repoList">
+      <div class="empty-state">
+        <div class="empty-state-icon">[?]</div>
+        <p>No targets scanned yet</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Details Panel (Right) -->
+  <div id="details-panel" class="panel">
+    <div class="section-header">THREAT_ANALYSIS</div>
+
+    <div id="selectedRepoInfo" style="display: none; margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.3);">
+      <div style="font-size: 12px; margin-bottom: 5px;" id="selectedRepoName">-</div>
+      <div style="font-size: 10px; color: var(--matrix-dim);" id="selectedRepoPath">-</div>
+    </div>
+
+    <div class="finding-list" id="findingList">
+      <div class="empty-state">
+        <div class="empty-state-icon">[~]</div>
+        <p>Select a target to view findings</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reports Panel (Center, hidden by default) -->
+  <div id="reports-panel" class="panel">
+    <div class="section-header">SCAN_REPORTS</div>
+
+    <div class="report-actions">
+      <button class="btn" onclick="exportReports('json')">EXPORT_JSON</button>
+      <button class="btn" onclick="exportReports('csv')">EXPORT_CSV</button>
+      <button class="btn btn-danger" onclick="clearAllReports()">CLEAR_ALL</button>
+    </div>
+
+    <table class="report-table">
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Target</th>
+          <th>Type</th>
+          <th>Secrets</th>
+          <th>Vulns</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="reportTableBody">
+        <tr>
+          <td colspan="7" style="text-align: center; color: var(--matrix-dim);">No reports yet</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- View Info -->
+  <div id="view-info" class="panel">
+    <div class="view-hint">
+      <span>[DRAG]</span> Rotate view | <span>[SCROLL]</span> Zoom | <span>[CLICK NODE]</span> View details
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ========== STATE ==========
+    const state = {
+      repos: [], // { id, name, path, type, findings, secrets, vulns, timestamp, status }
+      selectedRepo: null,
+      reports: [],
+      currentView: 'scan'
+    };
+
+    const SLOP = 'http://127.0.0.1:3000';
+
+    // ========== MATRIX RAIN ==========
+    function initMatrixRain() {
+      const canvas = document.getElementById('matrix-rain');
+      const ctx = canvas.getContext('2d');
+
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()';
+      const fontSize = 14;
+      const columns = canvas.width / fontSize;
+      const drops = Array(Math.floor(columns)).fill(1);
+
+      function draw() {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = '#00ff41';
+        ctx.font = fontSize + 'px monospace';
+
+        for (let i = 0; i < drops.length; i++) {
+          const char = chars[Math.floor(Math.random() * chars.length)];
+          ctx.fillText(char, i * fontSize, drops[i] * fontSize);
+
+          if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+            drops[i] = 0;
+          }
+          drops[i]++;
+        }
+      }
+
+      setInterval(draw, 50);
+
+      window.addEventListener('resize', () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      });
+    }
+
+    // ========== THREE.JS SETUP ==========
+    let scene, camera, renderer, controls;
+    let repoNodes = [];
+    let centralNode;
+    let raycaster, mouse;
+
+    function initScene() {
+      scene = new THREE.Scene();
+
+      camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(0, 30, 50);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setClearColor(0x000000, 0);
+      document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.maxPolarAngle = Math.PI / 2.1;
+      controls.minDistance = 20;
+      controls.maxDistance = 100;
+
+      raycaster = new THREE.Raycaster();
+      mouse = new THREE.Vector2();
+
+      // Lights
+      const ambientLight = new THREE.AmbientLight(0x003300, 0.5);
+      scene.add(ambientLight);
+
+      const mainLight = new THREE.PointLight(0x00ff41, 2, 100);
+      mainLight.position.set(0, 30, 0);
+      scene.add(mainLight);
+
+      // Grid
+      createGrid();
+
+      // Central hub
+      createCentralHub();
+
+      // Events
+      window.addEventListener('resize', onResize);
+      renderer.domElement.addEventListener('click', onMouseClick);
+      renderer.domElement.addEventListener('mousemove', onMouseMove);
+
+      animate();
+    }
+
+    function createGrid() {
+      const gridSize = 80;
+      const divisions = 40;
+
+      const gridGeometry = new THREE.BufferGeometry();
+      const points = [];
+
+      for (let i = 0; i <= divisions; i++) {
+        const pos = (i / divisions - 0.5) * gridSize;
+        points.push(-gridSize / 2, 0, pos, gridSize / 2, 0, pos);
+        points.push(pos, 0, -gridSize / 2, pos, 0, gridSize / 2);
+      }
+
+      gridGeometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+
+      const gridMaterial = new THREE.LineBasicMaterial({
+        color: 0x00ff41,
+        transparent: true,
+        opacity: 0.1
+      });
+
+      const grid = new THREE.LineSegments(gridGeometry, gridMaterial);
+      scene.add(grid);
+    }
+
+    function createCentralHub() {
+      const group = new THREE.Group();
+
+      // Core
+      const coreGeom = new THREE.OctahedronGeometry(3, 0);
+      const coreMat = new THREE.MeshPhongMaterial({
+        color: 0x00ff41,
+        emissive: 0x00ff41,
+        emissiveIntensity: 0.3,
+        transparent: true,
+        opacity: 0.8,
+        wireframe: true
+      });
+      const core = new THREE.Mesh(coreGeom, coreMat);
+      group.add(core);
+
+      // Rings
+      for (let i = 0; i < 2; i++) {
+        const ringGeom = new THREE.TorusGeometry(5 + i * 2, 0.1, 8, 32);
+        const ringMat = new THREE.MeshBasicMaterial({
+          color: 0x00ff41,
+          transparent: true,
+          opacity: 0.4
+        });
+        const ring = new THREE.Mesh(ringGeom, ringMat);
+        ring.rotation.x = Math.PI / 2;
+        ring.userData.rotationSpeed = 0.01 * (i + 1);
+        group.add(ring);
+      }
+
+      group.position.y = 5;
+      centralNode = group;
+      scene.add(group);
+    }
+
+    function addRepoNode(repo) {
+      const existingNode = repoNodes.find(n => n.userData.repoId === repo.id);
+      if (existingNode) {
+        updateNodeColor(existingNode, repo);
+        return existingNode;
+      }
+
+      const group = new THREE.Group();
+
+      // Determine color based on threat level
+      let color = 0x00ff41; // safe
+      if (repo.secrets > 0 || repo.vulns > 5) color = 0xff0040; // critical
+      else if (repo.vulns > 0) color = 0xffaa00; // warning
+
+      // Base
+      const baseGeom = new THREE.CylinderGeometry(2, 2.5, 0.5, 6);
+      const baseMat = new THREE.MeshPhongMaterial({
+        color: color,
+        emissive: color,
+        emissiveIntensity: 0.2,
+        transparent: true,
+        opacity: 0.7
+      });
+      const base = new THREE.Mesh(baseGeom, baseMat);
+      group.add(base);
+
+      // Data block
+      const blockGeom = new THREE.BoxGeometry(2.5, 3, 2.5);
+      const blockMat = new THREE.MeshPhongMaterial({
+        color: color,
+        emissive: color,
+        emissiveIntensity: 0.3,
+        transparent: true,
+        opacity: 0.8
+      });
+      const block = new THREE.Mesh(blockGeom, blockMat);
+      block.position.y = 2;
+      group.add(block);
+
+      // Wireframe overlay
+      const wireGeom = new THREE.BoxGeometry(2.7, 3.2, 2.7);
+      const wireMat = new THREE.MeshBasicMaterial({
+        color: color,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.5
+      });
+      const wireframe = new THREE.Mesh(wireGeom, wireMat);
+      wireframe.position.y = 2;
+      group.add(wireframe);
+
+      // Position in circle around central hub
+      const angle = (repoNodes.length / 8) * Math.PI * 2;
+      const radius = 15 + Math.floor(repoNodes.length / 8) * 8;
+      group.position.set(
+        Math.cos(angle) * radius,
+        0,
+        Math.sin(angle) * radius
+      );
+
+      group.userData = {
+        repoId: repo.id,
+        repoName: repo.name,
+        color: color
+      };
+
+      // Connection line to center
+      const lineGeom = new THREE.BufferGeometry().setFromPoints([
+        group.position.clone().add(new THREE.Vector3(0, 2, 0)),
+        centralNode.position.clone()
+      ]);
+      const lineMat = new THREE.LineBasicMaterial({
+        color: color,
+        transparent: true,
+        opacity: 0.3
+      });
+      const line = new THREE.Line(lineGeom, lineMat);
+      scene.add(line);
+      group.userData.connectionLine = line;
+
+      repoNodes.push(group);
+      scene.add(group);
+
+      return group;
+    }
+
+    function updateNodeColor(node, repo) {
+      let color = 0x00ff41;
+      if (repo.secrets > 0 || repo.vulns > 5) color = 0xff0040;
+      else if (repo.vulns > 0) color = 0xffaa00;
+
+      node.children.forEach(child => {
+        if (child.material) {
+          child.material.color.setHex(color);
+          if (child.material.emissive) child.material.emissive.setHex(color);
+        }
+      });
+
+      if (node.userData.connectionLine) {
+        node.userData.connectionLine.material.color.setHex(color);
+      }
+
+      node.userData.color = color;
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const time = Date.now() * 0.001;
+
+      // Rotate central hub
+      if (centralNode) {
+        centralNode.children[0].rotation.y += 0.005;
+        centralNode.children.forEach(child => {
+          if (child.userData.rotationSpeed) {
+            child.rotation.z += child.userData.rotationSpeed;
+          }
+        });
+      }
+
+      // Float repo nodes
+      repoNodes.forEach((node, i) => {
+        node.position.y = Math.sin(time + i) * 0.3;
+        node.children[1].rotation.y += 0.01;
+      });
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    function onResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function onMouseMove(event) {
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(repoNodes, true);
+      document.body.style.cursor = intersects.length > 0 ? 'pointer' : 'default';
+    }
+
+    function onMouseClick(event) {
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(repoNodes, true);
+
+      if (intersects.length > 0) {
+        let target = intersects[0].object;
+        while (target.parent && !target.userData.repoId) {
+          target = target.parent;
+        }
+        if (target.userData.repoId) {
+          selectRepo(target.userData.repoId);
+        }
+      }
+    }
+
+    // ========== UI FUNCTIONS ==========
+    function showView(view) {
+      state.currentView = view;
+      document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+      event.target.classList.add('active');
+
+      document.getElementById('scanner-panel').style.display = view === 'scan' ? 'block' : 'none';
+      document.getElementById('details-panel').style.display = view === 'scan' ? 'block' : 'none';
+      document.getElementById('reports-panel').classList.toggle('active', view === 'reports');
+      document.getElementById('view-info').style.display = view === 'scan' ? 'block' : 'none';
+
+      if (view === 'reports') updateReportsTable();
+    }
+    window.showView = showView;
+
+    function log(message, type = 'info') {
+      const terminal = document.getElementById('terminal');
+      const line = document.createElement('div');
+      line.className = `terminal-line ${type}`;
+      line.textContent = `> ${message}`;
+      terminal.appendChild(line);
+      terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    async function executeScan() {
+      const localPath = document.getElementById('scanPath').value.trim();
+      const gitUrl = document.getElementById('gitUrl').value.trim();
+
+      if (!localPath && !gitUrl) {
+        log('ERROR: No target specified', 'error');
+        return;
+      }
+
+      const scanBtn = document.getElementById('scanBtn');
+      scanBtn.disabled = true;
+      scanBtn.textContent = 'SCANNING...';
+
+      const args = { scanSecrets: true, scanPackages: true };
+      let targetName = '';
+      let targetType = '';
+
+      if (gitUrl) {
+        args.gitUrl = gitUrl;
+        targetName = gitUrl.split('/').slice(-2).join('/').replace('.git', '');
+        targetType = 'git';
+        log(`Initiating remote scan: ${gitUrl}`, 'info');
+      } else {
+        args.targetPath = localPath;
+        targetName = localPath.split(/[/\\]/).pop() || localPath;
+        targetType = 'local';
+        log(`Initiating local scan: ${localPath}`, 'info');
+      }
+
+      try {
+        const res = await fetch(`${SLOP}/tools`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tool: 'scan-local', arguments: args })
+        });
+
+        const data = await res.json();
+        console.log('Scan response:', data);
+
+        if (data.result?.error) {
+          throw new Error(data.result.error);
+        }
+
+        const scanData = data.result?.scan_details || data.result || data;
+
+        const repo = {
+          id: Date.now().toString(),
+          name: targetName,
+          path: gitUrl || localPath,
+          type: targetType,
+          secrets: scanData.secrets_found || 0,
+          vulns: scanData.package_vulns || 0,
+          findings: [],
+          timestamp: new Date().toISOString(),
+          status: 'complete',
+          rawData: scanData
+        };
+
+        // Extract findings
+        if (scanData.raw_findings?.secrets) {
+          scanData.raw_findings.secrets.forEach(s => {
+            repo.findings.push({
+              severity: 'critical',
+              type: 'SECRET',
+              message: `${s.type || 'Secret'} detected`,
+              file: s.file,
+              line: s.line
+            });
+          });
+        }
+
+        if (scanData.raw_findings?.packageVulns) {
+          scanData.raw_findings.packageVulns.forEach(v => {
+            repo.findings.push({
+              severity: v.severity?.toLowerCase() || 'medium',
+              type: 'VULN',
+              message: v.title || v.name,
+              file: v.package
+            });
+          });
+        }
+
+        if (scanData.raw_findings?.sastFindings) {
+          scanData.raw_findings.sastFindings.forEach(s => {
+            repo.findings.push({
+              severity: s.severity?.toLowerCase() || 'medium',
+              type: 'CODE',
+              message: s.message || s.rule,
+              file: s.file,
+              line: s.line
+            });
+          });
+        }
+
+        state.repos.push(repo);
+        state.reports.push(repo);
+
+        // Add 3D node
+        addRepoNode(repo);
+
+        log(`Scan complete: ${repo.secrets} secrets, ${repo.vulns} vulns`, repo.secrets > 0 ? 'error' : 'success');
+        updateUI();
+        selectRepo(repo.id);
+
+      } catch (err) {
+        console.error('Scan error:', err);
+        log(`ERROR: ${err.message}`, 'error');
+      }
+
+      scanBtn.disabled = false;
+      scanBtn.textContent = 'INITIATE_SCAN';
+    }
+    window.executeScan = executeScan;
+
+    function selectRepo(repoId) {
+      state.selectedRepo = repoId;
+      updateUI();
+
+      // Highlight node
+      repoNodes.forEach(node => {
+        const isSelected = node.userData.repoId === repoId;
+        node.scale.setScalar(isSelected ? 1.2 : 1);
+      });
+
+      // Update repo list
+      document.querySelectorAll('.repo-item').forEach(item => {
+        item.classList.toggle('selected', item.dataset.id === repoId);
+      });
+
+      // Show findings
+      const repo = state.repos.find(r => r.id === repoId);
+      if (repo) {
+        document.getElementById('selectedRepoInfo').style.display = 'block';
+        document.getElementById('selectedRepoName').textContent = repo.name;
+        document.getElementById('selectedRepoPath').textContent = repo.path;
+        updateFindingsList(repo);
+      }
+    }
+    window.selectRepo = selectRepo;
+
+    function updateUI() {
+      // Header stats
+      let totalCrit = 0, totalWarn = 0;
+      state.repos.forEach(r => {
+        totalCrit += r.secrets;
+        totalWarn += r.vulns;
+      });
+
+      document.getElementById('totalCritical').textContent = totalCrit;
+      document.getElementById('totalWarning').textContent = totalWarn;
+      document.getElementById('totalRepos').textContent = state.repos.length;
+
+      // Repo list
+      const repoList = document.getElementById('repoList');
+      if (state.repos.length === 0) {
+        repoList.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">[?]</div>
+            <p>No targets scanned yet</p>
+          </div>
+        `;
+      } else {
+        repoList.innerHTML = state.repos.map(r => {
+          let status = 'safe';
+          if (r.secrets > 0) status = 'critical';
+          else if (r.vulns > 0) status = 'warning';
+
+          return `
+            <div class="repo-item ${status} ${state.selectedRepo === r.id ? 'selected' : ''}"
+                 data-id="${r.id}" onclick="selectRepo('${r.id}')">
+              <span class="repo-icon">${r.type === 'git' ? '[G]' : '[L]'}</span>
+              <span class="repo-name">${r.name}</span>
+              <span class="repo-count">${r.secrets}S ${r.vulns}V</span>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    function updateFindingsList(repo) {
+      const container = document.getElementById('findingList');
+
+      if (!repo || repo.findings.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">[~]</div>
+            <p>${repo ? 'No findings for this target' : 'Select a target to view findings'}</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = repo.findings.map(f => `
+        <div class="finding-item ${f.severity}">
+          <div class="finding-header">
+            <span class="finding-severity">${f.severity}</span>
+            <span class="finding-type">${f.type}</span>
+          </div>
+          <div class="finding-message">${f.message}</div>
+          ${f.file ? `<div class="finding-file">${f.file}${f.line ? ':' + f.line : ''}</div>` : ''}
+        </div>
+      `).join('');
+    }
+
+    function updateReportsTable() {
+      const tbody = document.getElementById('reportTableBody');
+
+      if (state.reports.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--matrix-dim);">No reports yet</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = state.reports.map(r => `
+        <tr>
+          <td>${new Date(r.timestamp).toLocaleString()}</td>
+          <td>${r.name}</td>
+          <td>${r.type.toUpperCase()}</td>
+          <td style="color: ${r.secrets > 0 ? 'var(--danger)' : 'var(--matrix-green)'}">${r.secrets}</td>
+          <td style="color: ${r.vulns > 0 ? 'var(--warning)' : 'var(--matrix-green)'}">${r.vulns}</td>
+          <td>${r.status}</td>
+          <td>
+            <button class="btn" style="width: auto; padding: 4px 8px; font-size: 10px;" onclick="viewReport('${r.id}')">VIEW</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function viewReport(repoId) {
+      showView('scan');
+      document.querySelector('.nav-tab').classList.add('active');
+      document.querySelectorAll('.nav-tab')[1].classList.remove('active');
+      selectRepo(repoId);
+    }
+    window.viewReport = viewReport;
+
+    function exportReports(format) {
+      if (state.reports.length === 0) {
+        log('No reports to export', 'error');
+        return;
+      }
+
+      let content, filename, type;
+
+      if (format === 'json') {
+        content = JSON.stringify(state.reports, null, 2);
+        filename = `slop-audit-report-${Date.now()}.json`;
+        type = 'application/json';
+      } else {
+        // CSV
+        const headers = ['Timestamp', 'Name', 'Path', 'Type', 'Secrets', 'Vulns', 'Status'];
+        const rows = state.reports.map(r =>
+          [r.timestamp, r.name, r.path, r.type, r.secrets, r.vulns, r.status].join(',')
+        );
+        content = [headers.join(','), ...rows].join('\n');
+        filename = `slop-audit-report-${Date.now()}.csv`;
+        type = 'text/csv';
+      }
+
+      const blob = new Blob([content], { type });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      log(`Exported ${state.reports.length} reports as ${format.toUpperCase()}`, 'success');
+    }
+    window.exportReports = exportReports;
+
+    function clearAllReports() {
+      if (confirm('Clear all scan reports?')) {
+        state.reports = [];
+        state.repos = [];
+        state.selectedRepo = null;
+
+        // Remove 3D nodes
+        repoNodes.forEach(node => {
+          if (node.userData.connectionLine) scene.remove(node.userData.connectionLine);
+          scene.remove(node);
+        });
+        repoNodes = [];
+
+        updateUI();
+        updateReportsTable();
+        document.getElementById('selectedRepoInfo').style.display = 'none';
+        document.getElementById('findingList').innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">[~]</div>
+            <p>Select a target to view findings</p>
+          </div>
+        `;
+
+        log('All reports cleared', 'info');
+      }
+    }
+    window.clearAllReports = clearAllReports;
+
+    // ========== INIT ==========
+    initMatrixRain();
+    initScene();
+    log('Security matrix online', 'success');
+  </script>
+</body>
+</html>

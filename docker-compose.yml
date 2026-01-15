@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  slop-auditor:
+    build: .
+    container_name: slop-auditor
+    ports:
+      - "3000:3000"   # SLOP API server
+      - "3001:3001"   # WebSocket server
+      - "8080:8080"   # 3D Visualizer
+    volumes:
+      # Persist database and settings
+      - slop-data:/data/.slop-auditor
+      # Mount local projects for scanning (optional)
+      - ./test-repos:/projects:ro
+    environment:
+      - NODE_ENV=production
+      - SLOP_PORT=3000
+      - WS_PORT=3001
+      - VISUALIZER_PORT=8080
+      # AWS credentials (optional - for AWS scanning)
+      # - AWS_ACCESS_KEY_ID=
+      # - AWS_SECRET_ACCESS_KEY=
+      # - AWS_DEFAULT_REGION=us-east-1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/info"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Optional: Nginx reverse proxy with SSL
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: slop-nginx
+  #   ports:
+  #     - "443:443"
+  #     - "80:80"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./certs:/etc/nginx/certs:ro
+  #   depends_on:
+  #     - slop-auditor
+
+volumes:
+  slop-data:
+    driver: local
+
+networks:
+  default:
+    name: slop-network

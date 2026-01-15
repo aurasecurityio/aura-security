@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Temp files
+tmpclaude-*
+*.tmp
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+
+# Test repos (cloned for scanning)
+test-repos/
+*-results.json
+
+# Local database
+.slop-auditor/
+
+# Python build artifacts
+python/dist/
+python/build/
+python/*.egg-info/
+__pycache__/
+*.pyc

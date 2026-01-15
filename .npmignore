@@ -1,0 +1,25 @@
+# Source files
+src/
+*.ts
+!*.d.ts
+
+# Config files
+tsconfig.json
+.gitignore
+.env*
+!.env.example
+
+# Development files
+node_modules/
+test-repos/
+examples/
+.git/
+.vscode/
+*.log
+tmpclaude-*
+
+# Build artifacts
+coverage/
+
+# Large files
+*.tgz

@@ -1,0 +1,231 @@
+# SlopAuditor Security Scan - GitHub Actions Workflow
+#
+# This workflow runs SlopAuditor security scans on your codebase.
+# Copy this file to .github/workflows/security.yml in your repository.
+#
+# Features:
+# - Runs on push to main/master and pull requests
+# - Uploads SARIF results to GitHub Code Scanning
+# - Creates PR comments with scan summaries
+# - Blocks merges on critical vulnerabilities (configurable)
+#
+# Prerequisites:
+# - Node.js 18+
+# - Optional: Install security tools (gitleaks, trivy, semgrep) for better detection
+
+name: Security Scan
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      fail_on:
+        description: 'Fail on severity level'
+        required: false
+        default: 'critical'
+        type: choice
+        options:
+          - critical
+          - high
+          - medium
+          - none
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+
+jobs:
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # Optional: Install security tools for better scanning
+      - name: Install security tools
+        run: |
+          # Gitleaks - Secret detection
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.18.0/gitleaks_8.18.0_linux_x64.tar.gz | tar -xz -C /usr/local/bin gitleaks
+
+          # Trivy - Vulnerability scanner
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
+          # Semgrep - SAST
+          pip install semgrep
+
+          # Checkov - IaC scanning
+          pip install checkov
+
+          # Hadolint - Dockerfile linting
+          curl -sSfL https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64 -o /usr/local/bin/hadolint
+          chmod +x /usr/local/bin/hadolint
+
+      - name: Install SlopAuditor
+        run: npm install -g @slop/auditor
+        # Or install from local: npm install && npm run build
+
+      - name: Run security scan
+        id: scan
+        run: |
+          # Run scan and generate SARIF output
+          slop-auditor scan . \
+            --format sarif \
+            --output results.sarif \
+            --fail-on ${{ github.event.inputs.fail_on || 'critical' }} || echo "::set-output name=has_findings::true"
+
+          # Also generate JSON summary for PR comment
+          slop-auditor scan . --format summary --output summary.json || true
+        continue-on-error: true
+
+      - name: Upload SARIF to GitHub
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: results.sarif
+          category: slop-auditor
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            let summary;
+            try {
+              summary = JSON.parse(fs.readFileSync('summary.json', 'utf8'));
+            } catch (e) {
+              console.log('No summary file found');
+              return;
+            }
+
+            const { scan, summary: counts, findings } = summary;
+
+            const emoji = counts.critical > 0 ? '🚨' : counts.high > 0 ? '⚠️' : counts.medium > 0 ? '⚡' : '✅';
+
+            const body = `## ${emoji} Security Scan Results
+
+            | Severity | Count |
+            |----------|-------|
+            | Critical | ${counts.critical} |
+            | High | ${counts.high} |
+            | Medium | ${counts.medium} |
+            | Low | ${counts.low} |
+
+            **Findings Breakdown:**
+            - Secrets: ${findings.secrets}
+            - Vulnerabilities: ${findings.vulnerabilities}
+            - SAST: ${findings.sast}
+            - IaC: ${findings.iac}
+            - Dockerfile: ${findings.dockerfile}
+
+            **Tools Used:** ${scan.tools.join(', ') || 'regex-patterns'}
+            **Languages Detected:** ${scan.languages.join(', ') || 'none'}
+
+            ---
+            *Scanned by [SlopAuditor](https://github.com/slopsecurityadmin/slop-security-auditor)*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: Check scan results
+        if: steps.scan.outputs.has_findings == 'true'
+        run: |
+          echo "Security issues found!"
+          exit 1
+
+  # Optional: Run license compliance check
+  license-check:
+    name: License Compliance
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install SlopAuditor
+        run: npm install -g @slop/auditor
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts || npm install --ignore-scripts
+
+      - name: Check licenses
+        run: |
+          slop-auditor license-check . \
+            --policy permissive \
+            --output licenses.json \
+            --json
+
+      - name: Upload license report
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-report
+          path: licenses.json
+
+  # Optional: Generate SBOM
+  sbom:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install SlopAuditor
+        run: npm install -g @slop/auditor
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts || npm install --ignore-scripts
+
+      - name: Generate CycloneDX SBOM
+        run: |
+          slop-auditor sbom . \
+            --format cyclonedx \
+            --output sbom-cyclonedx.json \
+            --include-vulns
+
+      - name: Generate SPDX SBOM
+        run: |
+          slop-auditor sbom . \
+            --format spdx \
+            --output sbom-spdx.json
+
+      - name: Upload SBOMs
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: |
+            sbom-cyclonedx.json
+            sbom-spdx.json

@@ -1,0 +1,2933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SLOP Control Plane - Security Auditor</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0f;
+      font-family: 'Courier New', monospace;
+      color: #00ff88;
+      overflow: hidden;
+    }
+
+    #canvas-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    /* UI Overlay */
+    .ui-layer {
+      position: fixed;
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    .ui-layer > * {
+      pointer-events: auto;
+    }
+
+    /* Header */
+    #header {
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 50px;
+      background: linear-gradient(180deg, rgba(0,30,15,0.95) 0%, rgba(0,15,8,0.9) 100%);
+      border-bottom: 2px solid #00ff88;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+    }
+
+    #header h1 {
+      font-size: 16px;
+      letter-spacing: 3px;
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #00ff88;
+      animation: pulse 2s infinite;
+    }
+
+    .status-dot.error { background: #ff4444; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 10px #00ff88; }
+      50% { opacity: 0.5; box-shadow: 0 0 5px #00ff88; }
+    }
+
+    /* Left Panel - Controls */
+    #left-panel {
+      top: 60px;
+      left: 20px;
+      width: 320px;
+      max-height: calc(100vh - 80px);
+      overflow-y: auto;
+    }
+
+    .panel {
+      background: rgba(0, 20, 10, 0.92);
+      border: 1px solid #00ff88;
+      padding: 15px;
+      margin-bottom: 10px;
+    }
+
+    .panel-title {
+      font-size: 12px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #00ff8844;
+    }
+
+    /* Legend */
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 8px 0;
+      font-size: 11px;
+    }
+
+    .legend-icon {
+      width: 20px;
+      height: 20px;
+      border-radius: 3px;
+    }
+
+    .legend-icon.module { background: #00ff88; }
+    .legend-icon.auditor { background: #00aaff; border-radius: 50%; }
+    .legend-icon.connection { height: 3px; background: linear-gradient(90deg, #00ff88, #00aaff); }
+    .legend-icon.finding-crit { background: #ff0044; }
+    .legend-icon.finding-high { background: #ff4400; }
+    .legend-icon.finding-med { background: #ffaa00; }
+    .legend-icon.finding-low { background: #00ff88; }
+
+    /* Action Buttons */
+    .btn {
+      width: 100%;
+      padding: 12px;
+      margin: 5px 0;
+      background: linear-gradient(180deg, #00ff88 0%, #00aa55 100%);
+      border: none;
+      color: #000;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(0, 255, 136, 0.3);
+    }
+
+    .btn.danger {
+      background: linear-gradient(180deg, #ff4444 0%, #aa2222 100%);
+    }
+
+    .btn.secondary {
+      background: transparent;
+      border: 1px solid #00ff88;
+      color: #00ff88;
+    }
+
+    .btn-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    /* Right Panel - Findings */
+    #right-panel {
+      top: 60px;
+      right: 20px;
+      width: 350px;
+      max-height: calc(100vh - 80px);
+      overflow-y: auto;
+    }
+
+    .finding {
+      margin: 10px 0;
+      padding: 12px;
+      border-left: 4px solid;
+      background: rgba(0, 0, 0, 0.4);
+    }
+
+    .finding.critical { border-color: #ff0044; }
+    .finding.high { border-color: #ff4400; }
+    .finding.medium { border-color: #ffaa00; }
+    .finding.low { border-color: #00ff88; }
+
+    .finding-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .severity-badge {
+      font-size: 10px;
+      font-weight: bold;
+      padding: 3px 8px;
+      color: #000;
+    }
+
+    .severity-badge.critical { background: #ff0044; color: #fff; }
+    .severity-badge.high { background: #ff4400; }
+    .severity-badge.medium { background: #ffaa00; }
+    .severity-badge.low { background: #00ff88; }
+
+    .finding-module {
+      font-size: 10px;
+      color: #888;
+    }
+
+    .finding-claim {
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .finding-details {
+      font-size: 10px;
+      color: #666;
+      margin-top: 8px;
+      display: none;
+    }
+
+    .finding:hover .finding-details {
+      display: block;
+    }
+
+    /* Bottom Stats */
+    #stats-bar {
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 20px;
+    }
+
+    .stat-box {
+      text-align: center;
+      padding: 15px 25px;
+      background: rgba(0, 20, 10, 0.9);
+      border: 1px solid #00ff8844;
+    }
+
+    .stat-value {
+      font-size: 32px;
+      font-weight: bold;
+    }
+
+    .stat-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #888;
+    }
+
+    .stat-box.critical .stat-value { color: #ff0044; }
+    .stat-box.high .stat-value { color: #ff4400; }
+    .stat-box.medium .stat-value { color: #ffaa00; }
+    .stat-box.low .stat-value { color: #00ff88; }
+
+    /* Module Info Tooltip */
+    #tooltip {
+      position: fixed;
+      background: rgba(0, 30, 15, 0.95);
+      border: 1px solid #00ff88;
+      padding: 12px;
+      font-size: 11px;
+      max-width: 250px;
+      display: none;
+      z-index: 200;
+    }
+
+    #tooltip.visible { display: block; }
+    #tooltip h4 { margin-bottom: 5px; font-size: 13px; }
+    #tooltip .module-status { margin: 5px 0; }
+
+    /* Module Management Modal */
+    #module-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 10, 5, 0.95);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 400;
+    }
+
+    #module-modal.visible { display: flex; }
+
+    .modal-content {
+      background: rgba(0, 30, 15, 0.98);
+      border: 2px solid #00ff88;
+      padding: 25px;
+      min-width: 400px;
+      max-width: 500px;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid #00ff8844;
+    }
+
+    .modal-header h3 {
+      font-size: 14px;
+      letter-spacing: 2px;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      color: #00ff88;
+      font-size: 24px;
+      cursor: pointer;
+    }
+
+    .modal-body { margin-bottom: 20px; }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+      color: #888;
+    }
+
+    .form-group input, .form-group select {
+      width: 100%;
+      padding: 10px;
+      background: rgba(0, 20, 10, 0.8);
+      border: 1px solid #00ff88;
+      color: #00ff88;
+      font-family: inherit;
+      font-size: 12px;
+    }
+
+    .form-group input::placeholder { color: #00ff8866; }
+
+    /* Settings Panel Styles */
+    .settings-row {
+      margin-bottom: 15px;
+    }
+
+    .settings-row label {
+      display: block;
+      font-size: 12px;
+      margin-bottom: 6px;
+      color: #00ff88;
+    }
+
+    .settings-row input[type="checkbox"] {
+      margin-right: 8px;
+      accent-color: #00ff88;
+    }
+
+    .settings-tab {
+      padding: 8px 15px !important;
+      font-size: 11px !important;
+    }
+
+    .settings-tab.active {
+      background: #00ff88 !important;
+      color: #000 !important;
+    }
+
+    .settings-panel {
+      padding: 10px 0;
+    }
+
+    .module-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px;
+      background: rgba(0, 20, 10, 0.5);
+      margin: 5px 0;
+      cursor: pointer;
+    }
+
+    .module-toggle:hover { background: rgba(0, 40, 20, 0.5); }
+
+    .module-toggle.disabled { opacity: 0.5; }
+
+    .toggle-switch {
+      width: 40px;
+      height: 20px;
+      background: #333;
+      border-radius: 10px;
+      position: relative;
+      cursor: pointer;
+    }
+
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      background: #888;
+      border-radius: 50%;
+      top: 2px;
+      left: 2px;
+      transition: all 0.2s;
+    }
+
+    .toggle-switch.active { background: #00ff8844; }
+    .toggle-switch.active::after {
+      background: #00ff88;
+      left: 22px;
+    }
+
+    /* Selected module highlight */
+    .module-selected {
+      box-shadow: 0 0 30px #00ff88;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #0a0a0f; }
+    ::-webkit-scrollbar-thumb { background: #00ff88; }
+
+    /* Toast */
+    #toast-container {
+      position: fixed;
+      top: 60px;
+      right: 20px;
+      z-index: 300;
+    }
+
+    .toast {
+      background: rgba(0, 40, 20, 0.95);
+      border: 1px solid #00ff88;
+      padding: 12px 20px;
+      margin-bottom: 10px;
+      animation: slideIn 0.3s ease;
+    }
+
+    .toast.error { border-color: #ff4444; color: #ff4444; }
+
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    /* Loading */
+    #loading {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 10, 5, 0.9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 500;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+
+    #loading.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 3px solid #00ff8833;
+      border-top-color: #00ff88;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <!-- Header -->
+  <header id="header" class="ui-layer">
+    <h1>SLOP CONTROL PLANE</h1>
+    <div class="status-badge">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Connecting...</span>
+      <span style="margin-left: 15px;" id="auditCount">0 Audits</span>
+    </div>
+  </header>
+
+  <!-- Left Panel -->
+  <div id="left-panel" class="ui-layer">
+    <!-- Legend -->
+    <div class="panel">
+      <div class="panel-title">Control Plane Legend</div>
+      <div class="legend-item">
+        <div class="legend-icon auditor"></div>
+        <span>Security Auditor (Central Agent)</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-icon module"></div>
+        <span>System Module (Auth, DB, API, etc.)</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-icon connection"></div>
+        <span>Data Flow / Audit Connection</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-icon finding-crit"></div>
+        <span>Critical Finding</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-icon finding-high"></div>
+        <span>High Severity Finding</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-icon finding-med"></div>
+        <span>Medium Severity Finding</span>
+      </div>
+    </div>
+
+    <!-- Project Scanner -->
+    <div class="panel">
+      <div class="panel-title">Project Scanner</div>
+
+      <!-- Local Path Section -->
+      <div style="margin-bottom: 12px;">
+        <div style="font-size: 10px; color: #888; margin-bottom: 5px;">SCAN LOCAL DIRECTORY:</div>
+        <input type="text" id="scanPath" placeholder="C:\path\to\project" style="width: 100%; padding: 8px; background: rgba(0,20,10,0.8); border: 1px solid #00ff88; color: #00ff88; font-family: inherit; margin-bottom: 6px;">
+        <button class="btn" onclick="doScan()" style="width: 100%;">Scan Local</button>
+      </div>
+
+      <!-- Divider -->
+      <div style="border-top: 1px solid #00ff8833; margin: 12px 0;"></div>
+
+      <!-- Git URL Section -->
+      <div style="margin-bottom: 10px;">
+        <div style="font-size: 10px; color: #888; margin-bottom: 5px;">SCAN REMOTE GIT REPO (no clone):</div>
+        <input type="text" id="gitUrl" placeholder="https://github.com/user/repo" style="width: 100%; padding: 8px; background: rgba(0,20,10,0.8); border: 1px solid #00ff88; color: #00ff88; font-family: inherit; margin-bottom: 6px;">
+        <button class="btn secondary" onclick="scanGitRepo()" style="width: 100%;">Scan Remote</button>
+        <div style="font-size: 9px; color: #666; margin-top: 4px;">Fetches files via API - safe to scan untrusted repos</div>
+      </div>
+
+      <!-- Project Tabs -->
+      <div id="projectTabs" style="margin-top: 12px; display: none;">
+        <div style="font-size: 10px; color: #888; margin-bottom: 5px;">SCANNED PROJECTS:</div>
+        <div id="projectTabList" style="display: flex; flex-wrap: wrap; gap: 5px;"></div>
+      </div>
+
+      <!-- Scan Status -->
+      <div id="scanStatus" style="margin-top: 10px; font-size: 11px; color: #888;"></div>
+    </div>
+
+    <!-- Demo Mode -->
+    <div class="panel" id="demoPresets">
+      <div class="panel-title">Demo Presets</div>
+      <p style="font-size: 10px; color: #666; margin-bottom: 8px;">Test with sample security scenarios</p>
+      <button class="btn secondary" onclick="runPreset('secrets')">Secrets Leak</button>
+      <button class="btn secondary" onclick="runPreset('vulns')">Vulnerabilities</button>
+      <button class="btn secondary" onclick="runPreset('infra')">Infra Change</button>
+      <button class="btn secondary" onclick="runPreset('prod-deploy')">Prod Deploy</button>
+    </div>
+
+    <!-- Module Management -->
+    <div class="panel">
+      <div class="panel-title">Module Management</div>
+      <p style="font-size: 10px; color: #666; margin-bottom: 10px;">Click modules in 3D view to select. Use buttons below to manage.</p>
+      <button class="btn secondary" onclick="openModuleManager()">Manage Modules</button>
+      <button class="btn secondary" onclick="addNewModule()">Add New Module</button>
+      <div id="selectedModuleInfo" style="margin-top: 10px; font-size: 11px; display: none;">
+        <strong>Selected:</strong> <span id="selectedModuleName"></span>
+        <button class="btn danger" style="margin-top: 8px; padding: 8px;" onclick="removeSelectedModule()">Remove Module</button>
+      </div>
+    </div>
+
+    <!-- Module Status -->
+    <div class="panel">
+      <div class="panel-title">Module Status</div>
+      <div id="moduleStatus">
+        <div class="legend-item"><div class="legend-icon module"></div><span>AUTH - Secure</span></div>
+        <div class="legend-item"><div class="legend-icon module"></div><span>DATABASE - Secure</span></div>
+        <div class="legend-item"><div class="legend-icon module"></div><span>API - Secure</span></div>
+        <div class="legend-item"><div class="legend-icon module"></div><span>INFRA - Secure</span></div>
+        <div class="legend-item"><div class="legend-icon module"></div><span>BILLING - Secure</span></div>
+        <div class="legend-item"><div class="legend-icon module"></div><span>SECRETS - Secure</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Panel -->
+  <div id="right-panel" class="ui-layer">
+    <!-- Audit History Panel -->
+    <div class="panel">
+      <div class="panel-title">Audit History <span id="auditHistoryCount" style="color: #888; font-size: 10px;">(0)</span></div>
+      <div id="auditHistoryList" style="max-height: 200px; overflow-y: auto;">
+        <p style="color: #666; font-size: 11px;">Loading audits...</p>
+      </div>
+      <button class="btn secondary" style="margin-top: 10px; font-size: 10px;" onclick="refreshAuditHistory()">Refresh History</button>
+    </div>
+
+    <!-- Selected Audit Details -->
+    <div class="panel" id="selectedAuditPanel" style="display: none;">
+      <div class="panel-title">Selected Audit</div>
+      <div id="selectedAuditInfo" style="font-size: 11px; margin-bottom: 10px;"></div>
+      <button class="btn secondary" style="font-size: 10px;" onclick="clearSelectedAudit()">Clear Selection</button>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Security Findings</div>
+      <div id="findingsList">
+        <p style="color: #666; font-size: 11px;">No findings yet. Run an audit to detect issues.</p>
+      </div>
+    </div>
+
+    <!-- Settings Panel -->
+    <div class="panel">
+      <div class="panel-title">Settings <span id="settingsStatus" style="color: #666; font-size: 10px;"></span></div>
+      <button class="btn secondary" style="width: 100%;" onclick="openSettingsModal()">Configure Integrations</button>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h3>Integration Settings</h3>
+        <button class="modal-close" onclick="closeSettingsModal()">&times;</button>
+      </div>
+      <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+        <!-- Tabs -->
+        <div style="display: flex; gap: 5px; margin-bottom: 15px; border-bottom: 1px solid #00ff8844; padding-bottom: 10px;">
+          <button class="btn secondary settings-tab active" data-tab="aws" onclick="switchSettingsTab('aws')">AWS</button>
+          <button class="btn secondary settings-tab" data-tab="slack" onclick="switchSettingsTab('slack')">Slack</button>
+          <button class="btn secondary settings-tab" data-tab="discord" onclick="switchSettingsTab('discord')">Discord</button>
+          <button class="btn secondary settings-tab" data-tab="webhook" onclick="switchSettingsTab('webhook')">Webhook</button>
+        </div>
+
+        <!-- AWS Settings -->
+        <div id="settings-aws" class="settings-panel">
+          <div class="settings-row">
+            <label>
+              <input type="checkbox" id="aws-enabled" onchange="markSettingsDirty()">
+              Enable AWS Scanning
+            </label>
+          </div>
+          <div class="settings-row">
+            <label>AWS Region:</label>
+            <select id="aws-region" style="width: 100%; padding: 8px; background: rgba(0,20,10,0.8); border: 1px solid #00ff88; color: #00ff88;" onchange="markSettingsDirty()">
+              <option value="us-east-1">us-east-1 (N. Virginia)</option>
+              <option value="us-east-2">us-east-2 (Ohio)</option>
+              <option value="us-west-1">us-west-1 (N. California)</option>
+              <option value="us-west-2">us-west-2 (Oregon)</option>
+              <option value="eu-west-1">eu-west-1 (Ireland)</option>
+              <option value="eu-central-1">eu-central-1 (Frankfurt)</option>
+              <option value="ap-southeast-1">ap-southeast-1 (Singapore)</option>
+              <option value="ap-northeast-1">ap-northeast-1 (Tokyo)</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <label>AWS Profile (optional):</label>
+            <input type="text" id="aws-profile" placeholder="default" style="width: 100%; padding: 8px; background: rgba(0,20,10,0.8); border: 1px solid #00ff88; color: #00ff88;" onchange="markSettingsDirty()">
+          </div>
+          <div class="settings-row">
+            <label>Services to Scan:</label>
+            <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 5px;">
+              <label><input type="checkbox" id="aws-iam" checked onchange="markSettingsDirty()"> IAM</label>
+              <label><input type="checkbox" id="aws-s3" checked onchange="markSettingsDirty()"> S3</label>
+              <label><input type="checkbox" id="aws-ec2" checked onchange="markSettingsDirty()"> EC2</label>
+              <label><input type="checkbox" id="aws-lambda" checked onchange="markSettingsDirty()"> Lambda</label>
+              <label><input type="checkbox" id="aws-rds" checked onchange="markSettingsDirty()"> RDS</label>
+            </div>
+          </div>
+          <button class="btn" style="margin-top: 15px;" onclick="runAWSScan()">Run AWS Scan Now</button>
+        </div>
+
+        <!-- Slack Settings -->
+        <div id="settings-slack" class="settings-panel" style="display: none;">
+          <div class="settings-row">
+            <label>
+              <input type="checkbox" id="slack-enabled" onchange="markSettingsDirty()">
+              Enable Slack Notifications
+            </label>
+          </div>
+          <div class="settings-row">
+            <label>Webhook URL:</label>
+            <input type="text" id="slack-webhook" placeholder="https://hooks.slack.com/services/..." style="width: 100%; padding: 8px; background: rgba(0,20,10,0.8); border: 1px solid #00ff88; color: #00ff88;" onchange="markSettingsDirty()">
+          </div>
+          <div class="settings-row">
+            <label>Channel (optional):</label>
+            <input type="text" id="slack-channel" placeholder="#security-alerts" style="width: 100%; padding: 8px; background: rgba(0,20,10,0.8); border: 1px solid #00ff88; color: #00ff88;" onchange="markSettingsDirty()">
+          </div>
+          <button class="btn secondary" style="margin-top: 15px;" onclick="testNotification('slack')">Test Slack</button>
+        </div>
+
+        <!-- Discord Settings -->
+        <div id="settings-discord" class="settings-panel" style="display: none;">
+          <div class="settings-row">
+            <label>
+              <input type="checkbox" id="discord-enabled" onchange="markSettingsDirty()">
+              Enable Discord Notifications
+            </label>
+          </div>
+          <div class="settings-row">
+            <label>Webhook URL:</label>
+            <input type="text" id="discord-webhook" placeholder="https://discord.com/api/webhooks/..." style="width: 100%; padding: 8px; background: rgba(0,20,10,0.8); border: 1px solid #00ff88; color: #00ff88;" onchange="markSettingsDirty()">
+          </div>
+          <button class="btn secondary" style="margin-top: 15px;" onclick="testNotification('discord')">Test Discord</button>
+        </div>
+
+        <!-- Custom Webhook Settings -->
+        <div id="settings-webhook" class="settings-panel" style="display: none;">
+          <div class="settings-row">
+            <label>
+              <input type="checkbox" id="webhook-enabled" onchange="markSettingsDirty()">
+              Enable Custom Webhook
+            </label>
+          </div>
+          <div class="settings-row">
+            <label>Webhook URL:</label>
+            <input type="text" id="webhook-url" placeholder="https://your-server.com/webhook" style="width: 100%; padding: 8px; background: rgba(0,20,10,0.8); border: 1px solid #00ff88; color: #00ff88;" onchange="markSettingsDirty()">
+          </div>
+          <div class="settings-row">
+            <label>Custom Headers (JSON, optional):</label>
+            <textarea id="webhook-headers" placeholder='{"Authorization": "Bearer token"}' style="width: 100%; height: 60px; padding: 8px; background: rgba(0,20,10,0.8); border: 1px solid #00ff88; color: #00ff88; font-family: inherit; resize: vertical;" onchange="markSettingsDirty()"></textarea>
+          </div>
+          <button class="btn secondary" style="margin-top: 15px;" onclick="testNotification('webhook')">Test Webhook</button>
+        </div>
+      </div>
+      <div class="modal-footer" style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 15px; padding-top: 15px; border-top: 1px solid #00ff8844;">
+        <button class="btn secondary" onclick="closeSettingsModal()">Cancel</button>
+        <button class="btn" id="saveSettingsBtn" onclick="saveSettings()" disabled>Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats Bar -->
+  <div id="stats-bar" class="ui-layer">
+    <div class="stat-box critical">
+      <div class="stat-value" id="statCritical">0</div>
+      <div class="stat-label">Critical</div>
+    </div>
+    <div class="stat-box high">
+      <div class="stat-value" id="statHigh">0</div>
+      <div class="stat-label">High</div>
+    </div>
+    <div class="stat-box medium">
+      <div class="stat-value" id="statMedium">0</div>
+      <div class="stat-label">Medium</div>
+    </div>
+    <div class="stat-box low">
+      <div class="stat-value" id="statLow">0</div>
+      <div class="stat-label">Low</div>
+    </div>
+  </div>
+
+  <!-- Tooltip -->
+  <div id="tooltip">
+    <h4 id="tooltipTitle">Module</h4>
+    <div id="tooltipContent"></div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+
+  <!-- Loading -->
+  <div id="loading"><div class="spinner"></div></div>
+
+  <!-- Module Manager Modal -->
+  <div id="module-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modalTitle">MANAGE MODULES</h3>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="modalBody">
+        <!-- Content injected by JS -->
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="saveModuleChanges()">Save Changes</button>
+        <button class="btn secondary" onclick="closeModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ========== CONFIGURATION ==========
+    const SLOP_URL = 'http://127.0.0.1:3000';
+    const WS_URL = 'ws://127.0.0.1:3001';
+    const POLL_INTERVAL = 5000; // Slower polling as WebSocket handles real-time
+    let wsConnected = false;
+    let ws = null;
+
+    // Module definitions - what systems exist in the control plane
+    // Base modules - always restored after clearing the map
+    const BASE_MODULES = [
+      { id: 'auth', name: 'AUTH', desc: 'Authentication & Identity', pos: [-15, 0, -10], color: 0x00ff88 },
+      { id: 'database', name: 'DATABASE', desc: 'Data Storage & Queries', pos: [15, 0, -10], color: 0x00aaff },
+      { id: 'api', name: 'API', desc: 'External Endpoints', pos: [-15, 0, 10], color: 0xffaa00 },
+      { id: 'infra', name: 'INFRA', desc: 'Infrastructure & Network', pos: [15, 0, 10], color: 0xff00ff },
+      { id: 'billing', name: 'BILLING', desc: 'Payment Processing', pos: [-20, 0, 0], color: 0xff8800 },
+      { id: 'secrets', name: 'SECRETS', desc: 'Credentials & Keys', pos: [20, 0, 0], color: 0xff0088 }
+    ];
+
+    // Active modules - starts with base modules, can have more added
+    const MODULES = [...BASE_MODULES];
+
+    // Connections between modules (data flows)
+    const CONNECTIONS = [
+      { from: 'auth', to: 'database', label: 'User Data' },
+      { from: 'auth', to: 'secrets', label: 'Credentials' },
+      { from: 'api', to: 'auth', label: 'Auth Requests' },
+      { from: 'api', to: 'database', label: 'Queries' },
+      { from: 'billing', to: 'database', label: 'Transactions' },
+      { from: 'billing', to: 'secrets', label: 'Payment Keys' },
+      { from: 'infra', to: 'database', label: 'Backups' },
+      { from: 'infra', to: 'secrets', label: 'Service Accounts' }
+    ];
+
+    // Presets for quick testing
+    const PRESETS = {
+      'secrets': {
+        change_event: {
+          id: 'preset-secrets-' + Date.now(),
+          type: 'pull_request',
+          environment: 'staging',
+          repo: 'acme/webapp',
+          commit: 'a'.repeat(40),
+          files_changed: ['src/config/secrets.ts', 'src/auth/oauth.ts'],
+          diff: '+const AWS_SECRET = "AKIAIOSFODNN7EXAMPLE";\n+const DB_PASSWORD = "super_secret_123";'
+        },
+        evidence_bundle: { vuln_scan: 'critical: 0\nhigh: 0' },
+        policy_context: { critical_assets: ['auth', 'secrets'], risk_tolerance: 'low' }
+      },
+      'vulns': {
+        change_event: {
+          id: 'preset-vulns-' + Date.now(),
+          type: 'pull_request',
+          environment: 'staging',
+          repo: 'acme/webapp',
+          commit: 'b'.repeat(40),
+          files_changed: ['package.json', 'package-lock.json'],
+          diff: '+  "lodash": "4.17.0"'
+        },
+        evidence_bundle: { vuln_scan: 'critical: 5\nhigh: 12\nmedium: 23' },
+        policy_context: { critical_assets: ['dependencies'], risk_tolerance: 'low' }
+      },
+      'prod-deploy': {
+        change_event: {
+          id: 'preset-deploy-' + Date.now(),
+          type: 'deploy',
+          environment: 'prod',
+          repo: 'acme/webapp',
+          commit: 'c'.repeat(40),
+          files_changed: ['dist/app.js'],
+          diff: ''
+        },
+        evidence_bundle: { vuln_scan: 'critical: 0\nhigh: 1' },
+        policy_context: { critical_assets: ['production'], risk_tolerance: 'medium' }
+      },
+      'infra': {
+        change_event: {
+          id: 'preset-infra-' + Date.now(),
+          type: 'infra_change',
+          environment: 'staging',
+          repo: 'acme/terraform',
+          commit: 'd'.repeat(40),
+          files_changed: ['modules/vpc/main.tf', 'modules/security-groups/main.tf'],
+          diff: '+resource "aws_security_group_rule" "allow_all" {\n+  cidr_blocks = ["0.0.0.0/0"]\n+}'
+        },
+        evidence_bundle: { iac_scan: 'warnings: 3' },
+        policy_context: { critical_assets: ['infra', 'network'], risk_tolerance: 'low' }
+      },
+      'clean': {
+        change_event: {
+          id: 'preset-clean-' + Date.now(),
+          type: 'pull_request',
+          environment: 'dev',
+          repo: 'acme/webapp',
+          commit: 'e'.repeat(40),
+          files_changed: ['src/utils/helpers.ts'],
+          diff: '+export function formatDate(d: Date) { return d.toISOString(); }'
+        },
+        evidence_bundle: { vuln_scan: 'critical: 0\nhigh: 0' },
+        policy_context: { critical_assets: ['auth'], risk_tolerance: 'high' }
+      },
+      'full-breach': {
+        change_event: {
+          id: 'preset-breach-' + Date.now(),
+          type: 'pull_request',
+          environment: 'prod',
+          repo: 'acme/webapp',
+          commit: 'f'.repeat(40),
+          files_changed: ['src/auth/admin.ts', 'src/billing/stripe.ts', 'config/database.yml'],
+          diff: '+const ADMIN_PASSWORD = "admin123";\n+const STRIPE_SECRET = "sk_live_xxx";\n+const DB_CONNECTION = "postgres://root:password@prod-db:5432";'
+        },
+        evidence_bundle: { vuln_scan: 'critical: 8\nhigh: 15', sast_results: 'sql_injection: 3\nxss: 5' },
+        policy_context: { critical_assets: ['auth', 'billing', 'database', 'secrets'], risk_tolerance: 'low' }
+      }
+    };
+
+    // ========== THREE.JS SETUP ==========
+    let scene, camera, renderer, controls;
+    let auditorNode, moduleNodes = {}, connectionLines = [], findingMarkers = [];
+    let raycaster, mouse;
+    let connected = false;
+    let currentFindings = [];
+    let mapCleared = false; // Track if map has been cleared for scan mode
+
+    // Multi-project support
+    const scannedProjects = {}; // { projectName: { path, scanResult, modules, services } }
+    let activeProject = null;
+
+    const COLORS = {
+      idle: 0x888888,
+      analyzing: 0x00aaff,
+      conflict: 0xffaa00,
+      escalated: 0xff00ff,
+      blocked: 0xff0044
+    };
+
+    // Clear the map - remove all modules and connections to start fresh
+    function clearMap() {
+      console.log('Clearing map for fresh scan...');
+
+      if (!scene) {
+        console.warn('Scene not initialized yet');
+        return;
+      }
+
+      // Remove all module nodes from scene
+      for (const id in moduleNodes) {
+        if (moduleNodes[id]) {
+          scene.remove(moduleNodes[id]);
+        }
+      }
+      moduleNodes = {};
+
+      // Remove all connection lines from scene
+      connectionLines.forEach(line => {
+        if (line) scene.remove(line);
+      });
+      connectionLines = [];
+
+      // Remove all finding markers
+      findingMarkers.forEach(marker => {
+        if (marker) scene.remove(marker);
+      });
+      findingMarkers = [];
+
+      // Clear the MODULES array and restore base modules
+      MODULES.length = 0;
+      BASE_MODULES.forEach(mod => MODULES.push({...mod}));
+
+      // Clear module enabled states and restore base modules
+      for (const key in moduleEnabled) {
+        delete moduleEnabled[key];
+      }
+      BASE_MODULES.forEach(mod => moduleEnabled[mod.id] = true);
+
+      // Clear module statuses
+      for (const key in moduleStatuses) {
+        delete moduleStatuses[key];
+      }
+
+      // Update UI
+      updateModuleStatusPanel([]);
+      currentFindings = [];
+      selectedModule = null;
+
+      // Hide selected module info
+      const selectedInfo = document.getElementById('selectedModuleInfo');
+      if (selectedInfo) selectedInfo.style.display = 'none';
+
+      // Recreate base module nodes and connections in 3D
+      createModuleNodes();
+      createConnections();
+
+      mapCleared = true;
+    }
+
+    function initScene() {
+      // Scene
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x0a0a0f);
+      scene.fog = new THREE.Fog(0x0a0a0f, 60, 150);
+
+      // Camera
+      camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(0, 50, 50);
+      camera.lookAt(0, 0, 0);
+
+      // Renderer
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+      // Controls
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.maxPolarAngle = Math.PI / 2.2;
+      controls.minDistance = 20;
+      controls.maxDistance = 100;
+
+      // Raycaster for mouse interaction
+      raycaster = new THREE.Raycaster();
+      mouse = new THREE.Vector2();
+
+      // Lighting
+      const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+      scene.add(ambientLight);
+
+      const pointLight = new THREE.PointLight(0x00ff88, 1, 100);
+      pointLight.position.set(0, 30, 0);
+      scene.add(pointLight);
+
+      // Grid
+      const gridHelper = new THREE.GridHelper(80, 40, 0x00ff88, 0x002211);
+      scene.add(gridHelper);
+
+      // Ground plane
+      const groundGeom = new THREE.PlaneGeometry(80, 80);
+      const groundMat = new THREE.MeshBasicMaterial({ color: 0x001108, transparent: true, opacity: 0.8 });
+      const ground = new THREE.Mesh(groundGeom, groundMat);
+      ground.rotation.x = -Math.PI / 2;
+      ground.position.y = -0.1;
+      scene.add(ground);
+
+      // Create scene elements
+      createAuditorNode();
+      createModuleNodes();
+      createConnections();
+      createParticles();
+
+      // Event listeners
+      window.addEventListener('resize', onWindowResize);
+      window.addEventListener('mousemove', onMouseMove);
+    }
+
+    function createAuditorNode() {
+      const group = new THREE.Group();
+
+      // Base platform
+      const baseGeom = new THREE.CylinderGeometry(4, 5, 1.5, 8);
+      const baseMat = new THREE.MeshPhongMaterial({
+        color: 0x00aaff,
+        emissive: 0x00aaff,
+        emissiveIntensity: 0.3
+      });
+      const base = new THREE.Mesh(baseGeom, baseMat);
+      base.name = 'auditor-base';
+      group.add(base);
+
+      // Core sphere
+      const coreGeom = new THREE.IcosahedronGeometry(2.5, 1);
+      const coreMat = new THREE.MeshPhongMaterial({
+        color: 0x00ff88,
+        emissive: 0x00ff88,
+        emissiveIntensity: 0.5,
+        wireframe: false
+      });
+      const core = new THREE.Mesh(coreGeom, coreMat);
+      core.position.y = 5;
+      core.name = 'auditor-core';
+      group.add(core);
+
+      // Rotating rings
+      for (let i = 0; i < 3; i++) {
+        const ringGeom = new THREE.TorusGeometry(3 + i * 0.5, 0.1, 8, 32);
+        const ringMat = new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.6 });
+        const ring = new THREE.Mesh(ringGeom, ringMat);
+        ring.position.y = 5;
+        ring.rotation.x = Math.PI / 2 + (i * 0.3);
+        ring.name = `auditor-ring-${i}`;
+        group.add(ring);
+      }
+
+      // Label
+      const labelSprite = createTextSprite('SECURITY\nAUDITOR', 0x00aaff);
+      labelSprite.position.y = 10;
+      labelSprite.scale.set(8, 4, 1);
+      group.add(labelSprite);
+
+      group.position.y = 1;
+      group.userData = { type: 'auditor', name: 'Security Auditor', desc: 'Central security analysis agent' };
+      auditorNode = group;
+      scene.add(auditorNode);
+    }
+
+    function createModuleNodes() {
+      MODULES.forEach(mod => {
+        const group = new THREE.Group();
+
+        // Module box
+        const boxGeom = new THREE.BoxGeometry(5, 3, 5);
+        const boxMat = new THREE.MeshPhongMaterial({
+          color: mod.color,
+          emissive: mod.color,
+          emissiveIntensity: 0.2
+        });
+        const box = new THREE.Mesh(boxGeom, boxMat);
+        box.name = `module-${mod.id}`;
+        group.add(box);
+
+        // Top indicator
+        const indicatorGeom = new THREE.CylinderGeometry(0.5, 0.5, 0.3, 16);
+        const indicatorMat = new THREE.MeshBasicMaterial({ color: 0x00ff88 });
+        const indicator = new THREE.Mesh(indicatorGeom, indicatorMat);
+        indicator.position.y = 1.8;
+        indicator.name = `indicator-${mod.id}`;
+        group.add(indicator);
+
+        // Label
+        const labelSprite = createTextSprite(mod.name, mod.color);
+        labelSprite.position.y = 4;
+        labelSprite.scale.set(6, 3, 1);
+        group.add(labelSprite);
+
+        group.position.set(mod.pos[0], mod.pos[1] + 2, mod.pos[2]);
+        group.userData = { type: 'module', id: mod.id, name: mod.name, desc: mod.desc, status: 'secure' };
+        moduleNodes[mod.id] = group;
+        scene.add(group);
+      });
+    }
+
+    function createConnections() {
+      // Connections from auditor to all modules
+      MODULES.forEach(mod => {
+        const line = createConnectionLine(
+          new THREE.Vector3(0, 5, 0),
+          new THREE.Vector3(mod.pos[0], mod.pos[1] + 2, mod.pos[2]),
+          0x00aaff,
+          true
+        );
+        line.userData = { type: 'audit-connection', to: mod.id };
+        connectionLines.push(line);
+        scene.add(line);
+      });
+
+      // Connections between modules
+      CONNECTIONS.forEach(conn => {
+        const fromMod = MODULES.find(m => m.id === conn.from);
+        const toMod = MODULES.find(m => m.id === conn.to);
+        if (fromMod && toMod) {
+          const line = createConnectionLine(
+            new THREE.Vector3(fromMod.pos[0], fromMod.pos[1] + 2, fromMod.pos[2]),
+            new THREE.Vector3(toMod.pos[0], toMod.pos[1] + 2, toMod.pos[2]),
+            0x00ff8844,
+            false
+          );
+          line.userData = { type: 'data-flow', from: conn.from, to: conn.to, label: conn.label };
+          connectionLines.push(line);
+          scene.add(line);
+        }
+      });
+    }
+
+    function createConnectionLine(start, end, color, dashed) {
+      const points = [start, end];
+      const geometry = new THREE.BufferGeometry().setFromPoints(points);
+
+      let material;
+      if (dashed) {
+        material = new THREE.LineDashedMaterial({
+          color: color,
+          dashSize: 1,
+          gapSize: 0.5,
+          transparent: true,
+          opacity: 0.6
+        });
+      } else {
+        material = new THREE.LineBasicMaterial({
+          color: color,
+          transparent: true,
+          opacity: 0.3
+        });
+      }
+
+      const line = new THREE.Line(geometry, material);
+      if (dashed) line.computeLineDistances();
+      return line;
+    }
+
+    function createTextSprite(text, color) {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = 256;
+      canvas.height = 128;
+
+      ctx.fillStyle = 'transparent';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.font = 'bold 28px Courier New';
+      ctx.fillStyle = '#' + color.toString(16).padStart(6, '0');
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      const lines = text.split('\n');
+      lines.forEach((line, i) => {
+        ctx.fillText(line, canvas.width / 2, canvas.height / 2 + (i - (lines.length - 1) / 2) * 30);
+      });
+
+      const texture = new THREE.CanvasTexture(canvas);
+      const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+      return new THREE.Sprite(material);
+    }
+
+    function createParticles() {
+      const particleCount = 300;
+      const geometry = new THREE.BufferGeometry();
+      const positions = new Float32Array(particleCount * 3);
+
+      for (let i = 0; i < particleCount; i++) {
+        positions[i * 3] = (Math.random() - 0.5) * 80;
+        positions[i * 3 + 1] = Math.random() * 40;
+        positions[i * 3 + 2] = (Math.random() - 0.5) * 80;
+      }
+
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+      const material = new THREE.PointsMaterial({
+        color: 0x00ff88,
+        size: 0.2,
+        transparent: true,
+        opacity: 0.4
+      });
+
+      const particles = new THREE.Points(geometry, material);
+      particles.name = 'particles';
+      scene.add(particles);
+    }
+
+    // ========== STATE UPDATES ==========
+    function updateAuditorState(state) {
+      const color = COLORS[state] || COLORS.idle;
+
+      auditorNode.traverse(child => {
+        if (child.isMesh && child.name === 'auditor-base') {
+          child.material.color.setHex(color);
+          child.material.emissive.setHex(color);
+        }
+      });
+    }
+
+    function updateModuleStatus(moduleId, status, severity) {
+      const node = moduleNodes[moduleId];
+      if (!node) {
+        console.warn('[VISUALIZER] Module node not found:', moduleId);
+        return;
+      }
+
+      let color = 0x00ff88; // secure (green)
+      if (status === 'warning') color = 0xffaa00; // warning (orange)
+      if (status === 'critical') color = 0xff0044; // critical (red)
+
+      console.log('[VISUALIZER] Updating module:', moduleId, 'to', status, 'color:', color.toString(16));
+
+      // Update the status indicator sphere
+      node.traverse(child => {
+        if (child.name === `indicator-${moduleId}`) {
+          child.material.color.setHex(color);
+          // Make critical indicators glow more
+          if (status === 'critical') {
+            child.material.emissive = new THREE.Color(color);
+            child.material.emissiveIntensity = 0.5;
+          } else {
+            child.material.emissiveIntensity = 0;
+          }
+        }
+        // Also change the main module box color for critical findings
+        if (child.name === `module-${moduleId}` && status === 'critical') {
+          child.material.color.setHex(0xff2222);
+          child.material.emissive = new THREE.Color(0xff0000);
+          child.material.emissiveIntensity = 0.3;
+        } else if (child.name === `module-${moduleId}` && status !== 'critical') {
+          // Restore original color for the module
+          const mod = MODULES.find(m => m.id === moduleId);
+          if (mod) {
+            child.material.color.setHex(mod.color);
+            child.material.emissiveIntensity = 0.2;
+          }
+        }
+      });
+
+      node.userData.status = status;
+    }
+
+    function clearFindingMarkers() {
+      findingMarkers.forEach(marker => scene.remove(marker));
+      findingMarkers = [];
+    }
+
+    function addFindingMarker(finding, index) {
+      const severity = finding.payload.severity;
+      const colors = { critical: 0xff0044, high: 0xff4400, medium: 0xffaa00, low: 0x00ff88 };
+      const color = colors[severity] || 0xffffff;
+
+      // Position around auditor
+      const angle = (index / 8) * Math.PI * 2;
+      const radius = 8;
+
+      const geometry = new THREE.OctahedronGeometry(0.8, 0);
+      const material = new THREE.MeshBasicMaterial({ color });
+      const marker = new THREE.Mesh(geometry, material);
+
+      marker.position.set(
+        Math.cos(angle) * radius,
+        6 + Math.sin(index) * 2,
+        Math.sin(angle) * radius
+      );
+
+      marker.userData = { finding, severity };
+      findingMarkers.push(marker);
+      scene.add(marker);
+
+      // Update affected modules
+      finding.payload.affected_assets.forEach(asset => {
+        const modId = asset.toLowerCase();
+        if (moduleNodes[modId]) {
+          updateModuleStatus(modId, severity === 'critical' || severity === 'high' ? 'critical' : 'warning', severity);
+        }
+      });
+    }
+
+    function updateFindings(events) {
+      clearFindingMarkers();
+      currentFindings = events.filter(e =>
+        e.event_type === 'finding_raised' || e.event_type === 'escalation_triggered'
+      );
+
+      currentFindings.forEach((event, i) => addFindingMarker(event, i));
+      renderFindingsList(currentFindings);
+      updateStats(currentFindings);
+      updateModuleStatusPanel(currentFindings);
+    }
+
+    function renderFindingsList(findings) {
+      const container = document.getElementById('findingsList');
+      if (findings.length === 0) {
+        container.innerHTML = '<p style="color: #666; font-size: 11px;">No findings yet. Run an audit to detect issues.</p>';
+        return;
+      }
+
+      container.innerHTML = findings.map(f => `
+        <div class="finding ${f.payload.severity}">
+          <div class="finding-header">
+            <span class="severity-badge ${f.payload.severity}">${f.payload.severity.toUpperCase()}</span>
+            <span class="finding-module">${f.payload.affected_assets[0] || 'system'}</span>
+          </div>
+          <div class="finding-claim">${f.payload.claim}</div>
+          <div class="finding-details">
+            <strong>Attack Path:</strong><br>
+            ${f.payload.attack_path.map(p => '&bull; ' + p).join('<br>')}
+            <br><br>
+            <strong>Confidence:</strong> ${(f.payload.confidence * 100).toFixed(0)}%
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function updateStats(findings) {
+      const counts = { critical: 0, high: 0, medium: 0, low: 0 };
+      findings.forEach(f => {
+        if (counts[f.payload.severity] !== undefined) {
+          counts[f.payload.severity]++;
+        }
+      });
+
+      document.getElementById('statCritical').textContent = counts.critical;
+      document.getElementById('statHigh').textContent = counts.high;
+      document.getElementById('statMedium').textContent = counts.medium;
+      document.getElementById('statLow').textContent = counts.low;
+    }
+
+    function updateModuleStatusPanel(findings) {
+      // Reset all modules
+      MODULES.forEach(mod => updateModuleStatus(mod.id, 'secure', 'low'));
+
+      // Update based on findings
+      findings.forEach(f => {
+        f.payload.affected_assets.forEach(asset => {
+          const modId = MODULES.find(m =>
+            asset.toLowerCase().includes(m.id) ||
+            m.id.includes(asset.toLowerCase())
+          )?.id;
+
+          if (modId) {
+            const status = f.payload.severity === 'critical' || f.payload.severity === 'high' ? 'critical' : 'warning';
+            updateModuleStatus(modId, status, f.payload.severity);
+          }
+        });
+      });
+
+      // Refresh the sidebar display
+      refreshModuleStatusPanel();
+    }
+
+    // Refresh the module status sidebar without resetting statuses
+    function refreshModuleStatusPanel() {
+      const container = document.getElementById('moduleStatus');
+      container.innerHTML = MODULES.map(mod => {
+        const node = moduleNodes[mod.id];
+        const status = node?.userData?.status || 'secure';
+        const color = status === 'critical' ? '#ff0044' : status === 'warning' ? '#ffaa00' : '#00ff88';
+        return `<div class="legend-item">
+          <div class="legend-icon module" style="background: ${color}"></div>
+          <span>${mod.name} - ${status.toUpperCase()}</span>
+        </div>`;
+      }).join('');
+    }
+
+    // ========== API INTEGRATION ==========
+    async function pollSlop() {
+      try {
+        const infoRes = await fetch(`${SLOP_URL}/info`);
+        if (!infoRes.ok) throw new Error('Not connected');
+
+        if (!connected) {
+          connected = true;
+          document.getElementById('statusDot').classList.remove('error');
+          document.getElementById('statusText').textContent = wsConnected ? 'Connected (WS)' : 'Connected';
+        }
+
+        // Use the real /stats endpoint for database-backed statistics
+        const statsRes = await fetch(`${SLOP_URL}/stats`);
+        const stats = await statsRes.json();
+
+        document.getElementById('auditCount').textContent = `${stats.totalAudits || 0} Audits`;
+
+        // Update severity counts from real data (only if no audit is selected)
+        if (!selectedAuditId) {
+          const sev = stats.severityCounts || { critical: 0, high: 0, medium: 0, low: 0 };
+          document.getElementById('statCritical').textContent = sev.critical;
+          document.getElementById('statHigh').textContent = sev.high;
+          document.getElementById('statMedium').textContent = sev.medium;
+          document.getElementById('statLow').textContent = sev.low;
+        }
+
+      } catch (err) {
+        if (connected) {
+          connected = false;
+          document.getElementById('statusDot').classList.add('error');
+          document.getElementById('statusText').textContent = 'Disconnected';
+        }
+      }
+    }
+
+    // ========== WEBSOCKET CONNECTION ==========
+    function connectWebSocket() {
+      if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
+        return; // Already connected or connecting
+      }
+
+      try {
+        ws = new WebSocket(WS_URL);
+
+        ws.onopen = () => {
+          console.log('[WS] Connected to WebSocket server');
+          wsConnected = true;
+          document.getElementById('statusDot').classList.remove('error');
+          document.getElementById('statusText').textContent = 'Connected (WS)';
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            handleWebSocketMessage(msg);
+          } catch (err) {
+            console.error('[WS] Invalid message:', err);
+          }
+        };
+
+        ws.onclose = () => {
+          console.log('[WS] Disconnected');
+          wsConnected = false;
+          // Retry connection after 3 seconds
+          setTimeout(connectWebSocket, 3000);
+        };
+
+        ws.onerror = (err) => {
+          console.error('[WS] Error:', err);
+          wsConnected = false;
+        };
+      } catch (err) {
+        console.error('[WS] Failed to connect:', err);
+        wsConnected = false;
+      }
+    }
+
+    function handleWebSocketMessage(msg) {
+      switch (msg.type) {
+        case 'audit_started':
+          console.log('[WS] Audit started:', msg.payload);
+          showToast(`Scanning: ${msg.payload.target}`, false);
+          showLoading(true);
+          break;
+
+        case 'audit_completed':
+          console.log('[WS] Audit completed:', msg.payload);
+          showLoading(false);
+          // Refresh the audit history to show the new audit
+          refreshAuditHistory();
+          // Update stats display
+          if (msg.payload.summary) {
+            const s = msg.payload.summary;
+            const total = s.critical + s.high + s.medium + s.low;
+            showToast(`Scan complete: ${total} findings`, s.critical > 0 || s.high > 0);
+          }
+          break;
+
+        case 'finding':
+          console.log('[WS] Finding:', msg.payload);
+          // Could add real-time finding display here
+          break;
+
+        case 'settings_changed':
+          console.log('[WS] Settings changed:', msg.payload);
+          showToast('Settings updated', false);
+          break;
+
+        case 'ping':
+          // Respond to ping
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'pong', payload: { time: Date.now() }, timestamp: new Date().toISOString() }));
+          }
+          break;
+
+        case 'status':
+          console.log('[WS] Status:', msg.payload);
+          break;
+      }
+    }
+
+    async function runPreset(presetName) {
+      showLoading(true);
+
+      const preset = PRESETS[presetName];
+      if (!preset) {
+        showToast('Unknown preset', true);
+        showLoading(false);
+        return;
+      }
+
+      preset.change_event.id = `preset-${presetName}-${Date.now()}`;
+
+      try {
+        const res = await fetch(`${SLOP_URL}/tools`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tool: 'audit', arguments: preset })
+        });
+
+        const data = await res.json();
+
+        if (data.result) {
+          updateAuditorState(data.result.agent_state);
+          updateFindings(data.result.events);
+          showToast(`Audit: ${data.result.agent_state.toUpperCase()}`);
+        } else {
+          showToast('Audit failed', true);
+        }
+      } catch (err) {
+        showToast('Request failed: ' + err.message, true);
+      }
+
+      showLoading(false);
+    }
+
+    // ========== AUDIT HISTORY ==========
+    let auditHistoryCache = [];
+    let selectedAuditId = null;
+
+    async function refreshAuditHistory() {
+      try {
+        // Use the new /audits database endpoint for real data
+        const res = await fetch(`${SLOP_URL}/audits?limit=20`);
+        const data = await res.json();
+        auditHistoryCache = data.audits || [];
+
+        document.getElementById('auditHistoryCount').textContent = `(${data.total || 0})`;
+
+        const listEl = document.getElementById('auditHistoryList');
+        if (auditHistoryCache.length === 0) {
+          listEl.innerHTML = '<p style="color: #666; font-size: 11px;">No audits yet. Run a scan to see results.</p>';
+          return;
+        }
+
+        listEl.innerHTML = auditHistoryCache.map((audit) => {
+          const shortId = audit.id.length > 25 ? audit.id.substring(0, 25) + '...' : audit.id;
+          const shortTarget = audit.target ? (audit.target.length > 30 ? '...' + audit.target.slice(-30) : audit.target) : 'Unknown';
+          const summary = audit.summary || { critical: 0, high: 0, medium: 0, low: 0 };
+          const totalFindings = summary.critical + summary.high + summary.medium + summary.low;
+
+          // Color based on severity
+          let stateColor = '#00ff88'; // green = safe
+          if (summary.critical > 0) stateColor = '#ff0044';
+          else if (summary.high > 0) stateColor = '#ff4400';
+          else if (summary.medium > 0) stateColor = '#ffaa00';
+
+          const timestamp = new Date(audit.timestamp).toLocaleString();
+          const isSelected = audit.id === selectedAuditId ? 'background: rgba(0,255,136,0.2);' : '';
+
+          return `
+            <div class="audit-history-item" onclick="selectAudit('${audit.id}')" style="
+              padding: 8px;
+              margin: 4px 0;
+              border-left: 3px solid ${stateColor};
+              background: rgba(0,0,0,0.3);
+              cursor: pointer;
+              ${isSelected}
+            ">
+              <div style="font-size: 11px; font-weight: bold;">${audit.type.toUpperCase()} Scan</div>
+              <div style="font-size: 10px; color: #888; margin: 2px 0;">${shortTarget}</div>
+              <div style="font-size: 9px; color: ${stateColor};">
+                ${totalFindings > 0 ? `${totalFindings} findings (${summary.critical}C/${summary.high}H/${summary.medium}M/${summary.low}L)` : 'No issues found'}
+              </div>
+              <div style="font-size: 8px; color: #555; margin-top: 3px;">${timestamp}</div>
+            </div>
+          `;
+        }).join('');
+
+      } catch (err) {
+        console.error('Failed to load audit history:', err);
+        document.getElementById('auditHistoryList').innerHTML =
+          `<p style="color: #ff4444; font-size: 11px;">Error: ${err.message}</p>`;
+      }
+    }
+
+    async function selectAudit(auditId) {
+      selectedAuditId = auditId;
+      showLoading(true);
+
+      try {
+        // Use the new /audits/:id endpoint for real database data
+        const res = await fetch(`${SLOP_URL}/audits/${encodeURIComponent(auditId)}`);
+        const audit = await res.json();
+
+        if (audit && !audit.error) {
+          // Show selected audit panel
+          const panel = document.getElementById('selectedAuditPanel');
+          panel.style.display = 'block';
+
+          const summary = audit.summary || { critical: 0, high: 0, medium: 0, low: 0 };
+          const scanData = audit.data || {};
+          const totalFindings = summary.critical + summary.high + summary.medium + summary.low;
+
+          let info = `<div><strong>ID:</strong> ${audit.id}</div>`;
+          info += `<div><strong>Type:</strong> ${audit.type.toUpperCase()}</div>`;
+          info += `<div><strong>Target:</strong> ${audit.target}</div>`;
+          info += `<div><strong>Time:</strong> ${new Date(audit.timestamp).toLocaleString()}</div>`;
+
+          info += `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #00ff8844;">`;
+          info += `<div><strong>Findings:</strong> ${totalFindings}</div>`;
+          info += `<div style="font-size: 10px; color: #888;">
+            Critical: ${summary.critical} | High: ${summary.high} | Medium: ${summary.medium} | Low: ${summary.low}
+          </div>`;
+
+          if (scanData.secrets && scanData.secrets.length > 0) {
+            info += `<div style="margin-top: 5px;"><strong>Secrets Found:</strong> ${scanData.secrets.length}</div>`;
+          }
+          if (scanData.packages && scanData.packages.length > 0) {
+            info += `<div><strong>Vulnerable Packages:</strong> ${scanData.packages.length}</div>`;
+          }
+          if (scanData.sastFindings && scanData.sastFindings.length > 0) {
+            info += `<div><strong>SAST Issues:</strong> ${scanData.sastFindings.length}</div>`;
+          }
+          if (scanData.toolsUsed) {
+            info += `<div><strong>Tools:</strong> ${scanData.toolsUsed.join(', ')}</div>`;
+          }
+          info += `</div>`;
+
+          // Show detailed findings if any
+          if (scanData.secrets && scanData.secrets.length > 0) {
+            info += `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #ff004444;">`;
+            info += `<div style="color: #ff0044; font-weight: bold; margin-bottom: 5px;">SECRETS DETECTED:</div>`;
+            scanData.secrets.slice(0, 5).forEach(s => {
+              info += `<div style="font-size: 9px; color: #ff6666; margin: 2px 0;">
+                ${s.type}: ${s.file}:${s.line}
+              </div>`;
+            });
+            if (scanData.secrets.length > 5) {
+              info += `<div style="font-size: 9px; color: #888;">...and ${scanData.secrets.length - 5} more</div>`;
+            }
+            info += `</div>`;
+          }
+
+          document.getElementById('selectedAuditInfo').innerHTML = info;
+
+          // Update stats bar with this audit's findings
+          document.getElementById('statCritical').textContent = summary.critical;
+          document.getElementById('statHigh').textContent = summary.high;
+          document.getElementById('statMedium').textContent = summary.medium;
+          document.getElementById('statLow').textContent = summary.low;
+
+          showToast(`Loaded audit: ${audit.type} scan`);
+        } else {
+          showToast('Audit not found', true);
+        }
+      } catch (err) {
+        console.error('Failed to load audit:', err);
+        showToast('Failed to load audit: ' + err.message, true);
+      }
+
+      showLoading(false);
+      refreshAuditHistory(); // Refresh to update selection highlight
+    }
+
+    function clearSelectedAudit() {
+      selectedAuditId = null;
+      document.getElementById('selectedAuditPanel').style.display = 'none';
+      // Reset stats
+      document.getElementById('statCritical').textContent = '0';
+      document.getElementById('statHigh').textContent = '0';
+      document.getElementById('statMedium').textContent = '0';
+      document.getElementById('statLow').textContent = '0';
+      refreshAuditHistory();
+    }
+
+    // ========== SETTINGS FUNCTIONS ==========
+    let settingsDirty = false;
+
+    async function openSettingsModal() {
+      document.getElementById('settingsModal').style.display = 'flex';
+      settingsDirty = false;
+      document.getElementById('saveSettingsBtn').disabled = true;
+
+      // Load current settings from server
+      try {
+        const res = await fetch(`${SLOP_URL}/settings`);
+        if (res.ok) {
+          const data = await res.json();
+          populateSettings(data.settings);
+        }
+      } catch (err) {
+        console.error('Failed to load settings:', err);
+        showToast('Failed to load settings', true);
+      }
+    }
+
+    function closeSettingsModal() {
+      document.getElementById('settingsModal').style.display = 'none';
+    }
+
+    function switchSettingsTab(tab) {
+      // Update tab buttons
+      document.querySelectorAll('.settings-tab').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tab);
+      });
+
+      // Show/hide panels
+      document.querySelectorAll('.settings-panel').forEach(panel => {
+        panel.style.display = 'none';
+      });
+      document.getElementById(`settings-${tab}`).style.display = 'block';
+    }
+
+    function markSettingsDirty() {
+      settingsDirty = true;
+      document.getElementById('saveSettingsBtn').disabled = false;
+    }
+
+    function populateSettings(settings) {
+      // AWS settings
+      document.getElementById('aws-enabled').checked = settings['aws.enabled'] === 'true';
+      document.getElementById('aws-region').value = settings['aws.region'] || 'us-east-1';
+      document.getElementById('aws-profile').value = settings['aws.profile'] || '';
+      document.getElementById('aws-iam').checked = settings['aws.services.iam'] !== 'false';
+      document.getElementById('aws-s3').checked = settings['aws.services.s3'] !== 'false';
+      document.getElementById('aws-ec2').checked = settings['aws.services.ec2'] !== 'false';
+      document.getElementById('aws-lambda').checked = settings['aws.services.lambda'] !== 'false';
+      document.getElementById('aws-rds').checked = settings['aws.services.rds'] !== 'false';
+
+      // Slack settings
+      document.getElementById('slack-enabled').checked = settings['notifications.slack.enabled'] === 'true';
+      document.getElementById('slack-webhook').value = settings['notifications.slack.webhookUrl'] || '';
+      document.getElementById('slack-channel').value = settings['notifications.slack.channel'] || '';
+
+      // Discord settings
+      document.getElementById('discord-enabled').checked = settings['notifications.discord.enabled'] === 'true';
+      document.getElementById('discord-webhook').value = settings['notifications.discord.webhookUrl'] || '';
+
+      // Webhook settings
+      document.getElementById('webhook-enabled').checked = settings['notifications.webhook.enabled'] === 'true';
+      document.getElementById('webhook-url').value = settings['notifications.webhook.url'] || '';
+      document.getElementById('webhook-headers').value = settings['notifications.webhook.headers'] || '';
+
+      // Update status indicator
+      const enabledCount = [
+        settings['aws.enabled'] === 'true',
+        settings['notifications.slack.enabled'] === 'true',
+        settings['notifications.discord.enabled'] === 'true',
+        settings['notifications.webhook.enabled'] === 'true'
+      ].filter(Boolean).length;
+
+      document.getElementById('settingsStatus').textContent = enabledCount > 0 ? `(${enabledCount} active)` : '';
+    }
+
+    async function saveSettings() {
+      const settings = {
+        // AWS settings
+        'aws.enabled': document.getElementById('aws-enabled').checked.toString(),
+        'aws.region': document.getElementById('aws-region').value,
+        'aws.profile': document.getElementById('aws-profile').value,
+        'aws.services.iam': document.getElementById('aws-iam').checked.toString(),
+        'aws.services.s3': document.getElementById('aws-s3').checked.toString(),
+        'aws.services.ec2': document.getElementById('aws-ec2').checked.toString(),
+        'aws.services.lambda': document.getElementById('aws-lambda').checked.toString(),
+        'aws.services.rds': document.getElementById('aws-rds').checked.toString(),
+
+        // Slack settings
+        'notifications.slack.enabled': document.getElementById('slack-enabled').checked.toString(),
+        'notifications.slack.webhookUrl': document.getElementById('slack-webhook').value,
+        'notifications.slack.channel': document.getElementById('slack-channel').value,
+
+        // Discord settings
+        'notifications.discord.enabled': document.getElementById('discord-enabled').checked.toString(),
+        'notifications.discord.webhookUrl': document.getElementById('discord-webhook').value,
+
+        // Webhook settings
+        'notifications.webhook.enabled': document.getElementById('webhook-enabled').checked.toString(),
+        'notifications.webhook.url': document.getElementById('webhook-url').value,
+        'notifications.webhook.headers': document.getElementById('webhook-headers').value
+      };
+
+      try {
+        const res = await fetch(`${SLOP_URL}/settings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ settings })
+        });
+
+        if (res.ok) {
+          showToast('Settings saved');
+          settingsDirty = false;
+          document.getElementById('saveSettingsBtn').disabled = true;
+          closeSettingsModal();
+
+          // Update status indicator
+          const enabledCount = [
+            settings['aws.enabled'] === 'true',
+            settings['notifications.slack.enabled'] === 'true',
+            settings['notifications.discord.enabled'] === 'true',
+            settings['notifications.webhook.enabled'] === 'true'
+          ].filter(Boolean).length;
+          document.getElementById('settingsStatus').textContent = enabledCount > 0 ? `(${enabledCount} active)` : '';
+        } else {
+          showToast('Failed to save settings', true);
+        }
+      } catch (err) {
+        console.error('Failed to save settings:', err);
+        showToast('Failed to save settings', true);
+      }
+    }
+
+    async function testNotification(channel) {
+      showLoading(true);
+      try {
+        const res = await fetch(`${SLOP_URL}/notifications/test`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ channel })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          showToast(`${channel} test sent successfully`);
+        } else {
+          showToast(`${channel} test failed: ${data.error}`, true);
+        }
+      } catch (err) {
+        showToast(`${channel} test failed`, true);
+      }
+      showLoading(false);
+    }
+
+    async function runAWSScan() {
+      // First save the settings
+      await saveSettings();
+
+      showLoading(true);
+      try {
+        // Get AWS settings
+        const region = document.getElementById('aws-region').value;
+        const services = [];
+        if (document.getElementById('aws-iam').checked) services.push('iam');
+        if (document.getElementById('aws-s3').checked) services.push('s3');
+        if (document.getElementById('aws-ec2').checked) services.push('ec2');
+        if (document.getElementById('aws-lambda').checked) services.push('lambda');
+        if (document.getElementById('aws-rds').checked) services.push('rds');
+
+        const res = await fetch(`${SLOP_URL}/tools`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tool: 'scan-aws',
+            arguments: { region, services }
+          })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          showToast('AWS scan started');
+          closeSettingsModal();
+          // Refresh audit history to show results
+          setTimeout(refreshAuditHistory, 2000);
+        } else {
+          showToast('AWS scan failed', true);
+        }
+      } catch (err) {
+        console.error('AWS scan error:', err);
+        showToast('AWS scan failed', true);
+      }
+      showLoading(false);
+    }
+
+    // ========== UI HELPERS ==========
+    function showLoading(show) {
+      document.getElementById('loading').classList.toggle('active', show);
+    }
+
+    function showToast(message, isError = false) {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `toast ${isError ? 'error' : ''}`;
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 4000);
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function onMouseMove(event) {
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+      // Raycast for tooltips
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(scene.children, true);
+
+      const tooltip = document.getElementById('tooltip');
+
+      if (intersects.length > 0) {
+        let obj = intersects[0].object;
+        while (obj.parent && !obj.userData.type) {
+          obj = obj.parent;
+        }
+
+        if (obj.userData.type) {
+          tooltip.classList.add('visible');
+          tooltip.style.left = event.clientX + 15 + 'px';
+          tooltip.style.top = event.clientY + 15 + 'px';
+          document.getElementById('tooltipTitle').textContent = obj.userData.name || obj.userData.type;
+          document.getElementById('tooltipContent').innerHTML = `
+            <div>${obj.userData.desc || ''}</div>
+            ${obj.userData.status ? `<div class="module-status">Status: ${obj.userData.status.toUpperCase()}</div>` : ''}
+          `;
+          return;
+        }
+      }
+
+      tooltip.classList.remove('visible');
+    }
+
+    // ========== MODULE MANAGEMENT ==========
+    let selectedModule = null;
+    let moduleEnabled = {};
+
+    // Initialize all modules as enabled
+    MODULES.forEach(mod => moduleEnabled[mod.id] = true);
+
+    function onMouseClick(event) {
+      // Ignore clicks on UI elements
+      if (event.target.closest('.ui-layer') || event.target.closest('#module-modal')) return;
+
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(scene.children, true);
+
+      if (intersects.length > 0) {
+        let obj = intersects[0].object;
+        while (obj.parent && !obj.userData.type) {
+          obj = obj.parent;
+        }
+
+        if (obj.userData.type === 'module') {
+          selectModule(obj.userData.id);
+          return;
+        }
+
+        if (obj.userData.type === 'auditor') {
+          selectModule(null);
+          showToast('Security Auditor selected - central analysis node');
+          return;
+        }
+      }
+
+      // Clicked empty space - deselect
+      selectModule(null);
+    }
+
+    function selectModule(moduleId) {
+      // Clear previous selection visual
+      if (selectedModule && moduleNodes[selectedModule]) {
+        moduleNodes[selectedModule].traverse(child => {
+          if (child.isMesh && child.name?.startsWith('module-')) {
+            child.material.emissiveIntensity = 0.2;
+          }
+        });
+      }
+
+      selectedModule = moduleId;
+
+      if (moduleId && moduleNodes[moduleId]) {
+        // Highlight selected module
+        moduleNodes[moduleId].traverse(child => {
+          if (child.isMesh && child.name?.startsWith('module-')) {
+            child.material.emissiveIntensity = 0.8;
+          }
+        });
+
+        const mod = MODULES.find(m => m.id === moduleId);
+        document.getElementById('selectedModuleInfo').style.display = 'block';
+        document.getElementById('selectedModuleName').textContent = mod?.name || moduleId;
+        showToast(`Selected: ${mod?.name || moduleId}`);
+      } else {
+        document.getElementById('selectedModuleInfo').style.display = 'none';
+      }
+    }
+
+    function openModuleManager() {
+      document.getElementById('modalTitle').textContent = 'MANAGE MODULES';
+      document.getElementById('modalBody').innerHTML = `
+        <p style="font-size: 11px; color: #888; margin-bottom: 15px;">Toggle modules on/off to include them in security audits.</p>
+        ${MODULES.map(mod => `
+          <div class="module-toggle ${moduleEnabled[mod.id] ? '' : 'disabled'}" onclick="toggleModule('${mod.id}')">
+            <div>
+              <strong style="color: #${mod.color.toString(16).padStart(6, '0')}">${mod.name}</strong>
+              <div style="font-size: 10px; color: #666;">${mod.desc}</div>
+            </div>
+            <div class="toggle-switch ${moduleEnabled[mod.id] ? 'active' : ''}" id="toggle-${mod.id}"></div>
+          </div>
+        `).join('')}
+      `;
+      document.getElementById('module-modal').classList.add('visible');
+    }
+
+    function addNewModule() {
+      document.getElementById('modalTitle').textContent = 'ADD NEW MODULE';
+      document.getElementById('modalBody').innerHTML = `
+        <div class="form-group">
+          <label>Module ID (lowercase, no spaces)</label>
+          <input type="text" id="newModuleId" placeholder="e.g., logging" pattern="[a-z0-9_-]+">
+        </div>
+        <div class="form-group">
+          <label>Display Name</label>
+          <input type="text" id="newModuleName" placeholder="e.g., LOGGING">
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <input type="text" id="newModuleDesc" placeholder="e.g., Audit Logging & Events">
+        </div>
+        <div class="form-group">
+          <label>Color</label>
+          <select id="newModuleColor">
+            <option value="0x00ff88">Green</option>
+            <option value="0x00aaff">Blue</option>
+            <option value="0xffaa00">Orange</option>
+            <option value="0xff00ff">Purple</option>
+            <option value="0xff0088">Pink</option>
+            <option value="0xffff00">Yellow</option>
+            <option value="0x00ffff">Cyan</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Connect To (existing module)</label>
+          <select id="newModuleConnect">
+            <option value="">-- No Connection --</option>
+            ${MODULES.map(m => `<option value="${m.id}">${m.name}</option>`).join('')}
+          </select>
+        </div>
+      `;
+      document.getElementById('module-modal').classList.add('visible');
+    }
+
+    function toggleModule(moduleId) {
+      moduleEnabled[moduleId] = !moduleEnabled[moduleId];
+
+      const toggle = document.getElementById(`toggle-${moduleId}`);
+      const toggleParent = toggle?.parentElement;
+
+      if (toggle) {
+        toggle.classList.toggle('active', moduleEnabled[moduleId]);
+      }
+      if (toggleParent) {
+        toggleParent.classList.toggle('disabled', !moduleEnabled[moduleId]);
+      }
+
+      // Visual feedback in 3D
+      if (moduleNodes[moduleId]) {
+        moduleNodes[moduleId].visible = moduleEnabled[moduleId];
+      }
+
+      // Update connections
+      connectionLines.forEach(line => {
+        if (line.userData.to === moduleId || line.userData.from === moduleId) {
+          line.visible = moduleEnabled[moduleId];
+        }
+      });
+    }
+
+    function removeSelectedModule() {
+      if (!selectedModule) {
+        showToast('No module selected', true);
+        return;
+      }
+
+      const modIndex = MODULES.findIndex(m => m.id === selectedModule);
+      if (modIndex === -1) return;
+
+      // Remove from scene
+      if (moduleNodes[selectedModule]) {
+        scene.remove(moduleNodes[selectedModule]);
+        delete moduleNodes[selectedModule];
+      }
+
+      // Remove connections
+      connectionLines = connectionLines.filter(line => {
+        if (line.userData.to === selectedModule || line.userData.from === selectedModule) {
+          scene.remove(line);
+          return false;
+        }
+        return true;
+      });
+
+      // Remove from MODULES array
+      MODULES.splice(modIndex, 1);
+      delete moduleEnabled[selectedModule];
+
+      showToast(`Removed module: ${selectedModule}`);
+      selectModule(null);
+      updateModuleStatusPanel([]);
+    }
+
+    function saveModuleChanges() {
+      const modalTitle = document.getElementById('modalTitle').textContent;
+
+      if (modalTitle === 'ADD NEW MODULE') {
+        const id = document.getElementById('newModuleId')?.value?.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+        const name = document.getElementById('newModuleName')?.value?.toUpperCase();
+        const desc = document.getElementById('newModuleDesc')?.value;
+        const color = parseInt(document.getElementById('newModuleColor')?.value || '0x00ff88');
+        const connectTo = document.getElementById('newModuleConnect')?.value;
+
+        if (!id || !name) {
+          showToast('Module ID and Name are required', true);
+          return;
+        }
+
+        if (MODULES.find(m => m.id === id)) {
+          showToast('Module ID already exists', true);
+          return;
+        }
+
+        // Calculate position (find empty spot)
+        const angle = MODULES.length * (Math.PI / 4);
+        const radius = 18;
+        const pos = [
+          Math.cos(angle) * radius,
+          0,
+          Math.sin(angle) * radius
+        ];
+
+        // Add to MODULES array
+        const newMod = { id, name, desc, pos, color };
+        MODULES.push(newMod);
+        moduleEnabled[id] = true;
+
+        // Create 3D node
+        createSingleModuleNode(newMod);
+
+        // Add audit connection
+        const auditLine = createConnectionLine(
+          new THREE.Vector3(0, 5, 0),
+          new THREE.Vector3(pos[0], pos[1] + 2, pos[2]),
+          0x00aaff,
+          true
+        );
+        auditLine.userData = { type: 'audit-connection', to: id };
+        connectionLines.push(auditLine);
+        scene.add(auditLine);
+
+        // Add module-to-module connection if specified
+        if (connectTo) {
+          const targetMod = MODULES.find(m => m.id === connectTo);
+          if (targetMod) {
+            const dataLine = createConnectionLine(
+              new THREE.Vector3(pos[0], pos[1] + 2, pos[2]),
+              new THREE.Vector3(targetMod.pos[0], targetMod.pos[1] + 2, targetMod.pos[2]),
+              0x00ff8844,
+              false
+            );
+            dataLine.userData = { type: 'data-flow', from: id, to: connectTo, label: 'Data' };
+            connectionLines.push(dataLine);
+            scene.add(dataLine);
+            CONNECTIONS.push({ from: id, to: connectTo, label: 'Data' });
+          }
+        }
+
+        showToast(`Added module: ${name}`);
+        updateModuleStatusPanel([]);
+      }
+
+      closeModal();
+    }
+
+    function createSingleModuleNode(mod) {
+      const group = new THREE.Group();
+
+      const boxGeom = new THREE.BoxGeometry(5, 3, 5);
+      const boxMat = new THREE.MeshPhongMaterial({
+        color: mod.color,
+        emissive: mod.color,
+        emissiveIntensity: 0.2
+      });
+      const box = new THREE.Mesh(boxGeom, boxMat);
+      box.name = `module-${mod.id}`;
+      group.add(box);
+
+      const indicatorGeom = new THREE.CylinderGeometry(0.5, 0.5, 0.3, 16);
+      const indicatorMat = new THREE.MeshBasicMaterial({ color: 0x00ff88 });
+      const indicator = new THREE.Mesh(indicatorGeom, indicatorMat);
+      indicator.position.y = 1.8;
+      indicator.name = `indicator-${mod.id}`;
+      group.add(indicator);
+
+      const labelSprite = createTextSprite(mod.name, mod.color);
+      labelSprite.position.y = 4;
+      labelSprite.scale.set(6, 3, 1);
+      group.add(labelSprite);
+
+      group.position.set(mod.pos[0], mod.pos[1] + 2, mod.pos[2]);
+      group.userData = { type: 'module', id: mod.id, name: mod.name, desc: mod.desc, status: 'secure' };
+      moduleNodes[mod.id] = group;
+      scene.add(group);
+    }
+
+    function closeModal() {
+      document.getElementById('module-modal').classList.remove('visible');
+    }
+
+    // ========== ANIMATION LOOP ==========
+    let time = 0;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      time += 0.01;
+
+      // Rotate auditor rings
+      auditorNode.children.forEach(child => {
+        if (child.name?.startsWith('auditor-ring')) {
+          child.rotation.z += 0.01;
+        }
+        if (child.name === 'auditor-core') {
+          child.rotation.y += 0.02;
+          child.position.y = 5 + Math.sin(time * 2) * 0.3;
+        }
+      });
+
+      // Pulse finding markers
+      findingMarkers.forEach((marker, i) => {
+        marker.rotation.y += 0.03;
+        marker.position.y = 6 + Math.sin(time * 3 + i) * 0.5;
+        const scale = 1 + Math.sin(time * 4 + i) * 0.2;
+        marker.scale.set(scale, scale, scale);
+      });
+
+      // Animate particles
+      const particles = scene.getObjectByName('particles');
+      if (particles) {
+        particles.rotation.y += 0.0003;
+        const positions = particles.geometry.attributes.position.array;
+        for (let i = 0; i < positions.length; i += 3) {
+          positions[i + 1] += 0.01;
+          if (positions[i + 1] > 40) positions[i + 1] = 0;
+        }
+        particles.geometry.attributes.position.needsUpdate = true;
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    // ========== PROJECT SCANNING ==========
+    let currentScanDetails = null;
+    let scanMode = 'local';
+
+    // Switch between local and git scan modes
+    function setScanMode(mode) {
+      scanMode = mode;
+      document.getElementById('localInput').style.display = mode === 'local' ? 'block' : 'none';
+      document.getElementById('gitInput').style.display = mode === 'git' ? 'block' : 'none';
+      document.getElementById('tabLocal').className = mode === 'local' ? 'btn' : 'btn secondary';
+      document.getElementById('tabGit').className = mode === 'git' ? 'btn' : 'btn secondary';
+    }
+
+    // Get project name from path or URL
+    function getProjectName(pathOrUrl) {
+      if (!pathOrUrl) return 'Project';
+      // Handle git URLs
+      if (pathOrUrl.includes('github.com') || pathOrUrl.includes('gitlab.com') || pathOrUrl.endsWith('.git')) {
+        const match = pathOrUrl.match(/\/([^\/]+?)(\.git)?$/);
+        return match ? match[1] : 'GitRepo';
+      }
+      // Handle local paths
+      const parts = pathOrUrl.replace(/\\/g, '/').split('/').filter(p => p);
+      return parts[parts.length - 1] || 'Project';
+    }
+
+    // Main scan function
+    async function doScan() {
+      const targetPath = document.getElementById('scanPath').value.trim();
+      if (!targetPath) {
+        showToast('Enter a directory path', true);
+        return;
+      }
+      await performScan(targetPath);
+    }
+
+    // Scan a Git repository
+    async function scanGitRepo() {
+      const gitUrl = document.getElementById('gitUrl').value.trim();
+      if (!gitUrl) {
+        showToast('Enter a Git URL', true);
+        return;
+      }
+
+      const statusEl = document.getElementById('scanStatus');
+      statusEl.innerHTML = '<span style="color: #00aaff;">Scanning remote repository...</span>';
+      showLoading(true);
+
+      // Clear map before scanning
+      try {
+        clearMap();
+      } catch (e) {
+        console.warn('clearMap error:', e);
+      }
+
+      try {
+        // Call backend to scan via API (no clone)
+        const res = await fetch(`${SLOP_URL}/tools`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tool: 'scan-local',
+            arguments: { gitUrl: gitUrl }
+          })
+        });
+
+        const data = await res.json();
+        console.log('Git scan response:', data);
+
+        if (data.result && data.result.scan_details) {
+          await handleScanResult(data.result, gitUrl);
+        } else if (data.error) {
+          statusEl.innerHTML = `<span style="color: #ff4444;">Error: ${data.error}</span>`;
+          showToast('Git scan failed', true);
+        } else {
+          statusEl.innerHTML = '<span style="color: #ff4444;">Scan failed</span>';
+        }
+      } catch (err) {
+        console.error('Git scan error:', err);
+        statusEl.innerHTML = `<span style="color: #ff4444;">Error: ${err.message}</span>`;
+        showToast('Git scan error', true);
+      }
+
+      showLoading(false);
+    }
+
+    // Perform local scan
+    async function performScan(targetPath) {
+      const statusEl = document.getElementById('scanStatus');
+      statusEl.innerHTML = '<span style="color: #00aaff;">Scanning...</span>';
+      showLoading(true);
+
+      // Clear map first
+      try {
+        clearMap();
+      } catch (e) {
+        console.warn('clearMap error:', e);
+      }
+
+      try {
+        console.log('Starting scan of:', targetPath);
+
+        const res = await fetch(`${SLOP_URL}/tools`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tool: 'scan-local',
+            arguments: { targetPath: targetPath }
+          })
+        });
+
+        const data = await res.json();
+        console.log('Scan response:', data);
+
+        if (data.result && data.result.scan_details) {
+          await handleScanResult(data.result, targetPath);
+        } else if (data.error) {
+          statusEl.innerHTML = `<span style="color: #ff4444;">Error: ${data.error}</span>`;
+          showToast('Scan failed', true);
+        } else {
+          statusEl.innerHTML = '<span style="color: #ff4444;">No scan results</span>';
+        }
+      } catch (err) {
+        console.error('Scan error:', err);
+        statusEl.innerHTML = `<span style="color: #ff4444;">Error: ${err.message}</span>`;
+        showToast('Scan error', true);
+      }
+
+      showLoading(false);
+    }
+
+    // Handle scan result
+    async function handleScanResult(result, sourcePath) {
+      const details = result.scan_details;
+      currentScanDetails = details;
+
+      const projectName = getProjectName(sourcePath);
+
+      // Store project
+      scannedProjects[projectName] = {
+        path: details.path,
+        scanResult: result,
+        details: details
+      };
+      activeProject = projectName;
+
+      // Update UI
+      updateProjectTabs();
+      updateAuditorState(result.agent_state || 'idle');
+      updateFindings(result.events || []);
+      showScanSummary(details);
+
+      // Build the map from discovered items
+      try {
+        updateModulesFromScan(details);
+      } catch (e) {
+        console.warn('updateModulesFromScan error:', e);
+      }
+
+      showToast(`Scanned: ${projectName}`);
+    }
+
+    // Switch between scanned projects
+    function switchProject(projectName) {
+      if (!scannedProjects[projectName]) return;
+
+      activeProject = projectName;
+      const project = scannedProjects[projectName];
+
+      try { clearMap(); } catch(e) { console.warn(e); }
+
+      currentScanDetails = project.details;
+      updateAuditorState(project.scanResult.agent_state || 'idle');
+      updateFindings(project.scanResult.events || []);
+      showScanSummary(project.details);
+
+      try { updateModulesFromScan(project.details); } catch(e) { console.warn(e); }
+
+      updateProjectTabs();
+      showToast(`Switched to: ${projectName}`);
+    }
+
+    // Update project tabs UI
+    function updateProjectTabs() {
+      const projectNames = Object.keys(scannedProjects);
+      const tabsContainer = document.getElementById('projectTabs');
+      const tabList = document.getElementById('projectTabList');
+
+      if (projectNames.length === 0) {
+        tabsContainer.style.display = 'none';
+        return;
+      }
+
+      tabsContainer.style.display = 'block';
+      tabList.innerHTML = projectNames.map(name => `
+        <button onclick="switchProject('${name}')" style="
+          padding: 4px 8px; font-size: 10px; cursor: pointer; font-family: inherit;
+          background: ${name === activeProject ? '#00ff88' : 'rgba(0,20,10,0.8)'};
+          color: ${name === activeProject ? '#000' : '#00ff88'};
+          border: 1px solid #00ff88;
+        ">${name}</button>
+      `).join('');
+    }
+
+    // Show scan summary
+    function showScanSummary(details) {
+      const servicesCount = details.discovered_services?.length || 0;
+      const modulesCount = details.discovered_modules?.length || 0;
+      const sastCount = details.sast_findings || 0;
+      const toolsUsed = details.tools_used || [];
+
+      document.getElementById('scanStatus').innerHTML = `
+        <div style="color: #00ff88; font-weight: bold;">Scan Complete</div>
+        <div style="margin-top: 5px; font-size: 10px; color: #666; word-break: break-all;">${details.path}</div>
+        <div style="margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+          <div>Secrets: <span style="color: ${details.secrets_found > 0 ? '#ff4444' : '#00ff88'}">${details.secrets_found || 0}</span></div>
+          <div>Modules: <span style="color: #88ff00;">${modulesCount}</span></div>
+          <div>Services: <span style="color: #00aaff;">${servicesCount}</span></div>
+          <div>Packages: ${details.packages_scanned || 0}</div>
+          <div>SAST: <span style="color: ${sastCount > 0 ? '#ffaa00' : '#00ff88'}">${sastCount}</span></div>
+          <div>Vulns: <span style="color: ${details.package_vulns > 0 ? '#ff4444' : '#00ff88'}">${details.package_vulns || 0}</span></div>
+        </div>
+        ${toolsUsed.length > 0 ? `<div style="margin-top: 8px; font-size: 10px; color: #00aaff;">
+          Tools: ${toolsUsed.join(', ')}
+        </div>` : ''}
+        ${modulesCount > 0 ? `<div style="margin-top: 5px; font-size: 10px; color: #666;">
+          ${details.discovered_modules.slice(0,4).map(m => m.name).join(', ')}${modulesCount > 4 ? '...' : ''}
+        </div>` : ''}
+      `;
+    }
+
+    // Legacy compatibility
+    async function runLocalScan() { await doScan(); }
+    async function scanProject() { await doScan(); }
+    async function addProject() { await doScan(); }
+
+    // Service type to color mapping
+    const SERVICE_COLORS = {
+      database: 0x00aaff,
+      cache: 0xff6600,
+      cloud: 0xff00ff,
+      api: 0xffaa00,
+      messaging: 0x00ffaa,
+      storage: 0x00ff88,
+      auth: 0x00ff00,
+      monitoring: 0x888888
+    };
+
+    function updateModulesFromScan(scanDetails) {
+      console.log('[VISUALIZER] updateModulesFromScan called', scanDetails);
+
+      // Reset all modules to secure first
+      MODULES.forEach(mod => updateModuleStatus(mod.id, 'secure', 'low'));
+
+      if (!scanDetails.raw_findings) {
+        console.log('[VISUALIZER] No raw_findings in scan details');
+        // Still update the status panel
+        refreshModuleStatusPanel();
+        return;
+      }
+
+      const findings = scanDetails.raw_findings;
+      console.log('[VISUALIZER] Processing findings:', findings.secrets?.length, 'secrets');
+
+      // Update SECRETS module if env files or secrets found
+      if (findings.secrets?.length > 0 || findings.envFiles?.some(e => e.hasSecrets)) {
+        const hasCritical = findings.secrets?.some(s => s.severity === 'critical');
+        console.log('[VISUALIZER] Setting SECRETS to:', hasCritical ? 'CRITICAL' : 'WARNING');
+        updateModuleStatus('secrets', hasCritical ? 'critical' : 'warning', hasCritical ? 'critical' : 'high');
+      }
+
+      // Check what types of secrets were found and update relevant modules
+      findings.secrets?.forEach(secret => {
+        const type = (secret.type || '').toLowerCase();
+        if (type.includes('aws') || type.includes('connection')) {
+          updateModuleStatus('infra', 'critical', 'critical');
+        }
+        if (type.includes('password') || type.includes('token')) {
+          updateModuleStatus('auth', 'warning', 'high');
+        }
+        if (type.includes('database') || type.includes('postgres') || type.includes('mysql')) {
+          updateModuleStatus('database', 'critical', 'critical');
+        }
+      });
+
+      // Update from package vulnerabilities
+      findings.packages?.forEach(pkg => {
+        if (pkg.severity === 'critical' || pkg.severity === 'high') {
+          updateModuleStatus('api', 'warning', pkg.severity);
+        }
+      });
+
+      // Update from SAST findings (semgrep etc.)
+      findings.sastFindings?.forEach(finding => {
+        const rule = finding.rule?.toLowerCase() || '';
+        const message = finding.message?.toLowerCase() || '';
+        const sev = finding.severity?.toLowerCase() || 'warning';
+        const severity = sev === 'error' ? 'critical' : sev === 'warning' ? 'high' : 'medium';
+
+        // Map SAST findings to modules based on rule type
+        if (rule.includes('sql') || rule.includes('injection') || message.includes('sql')) {
+          updateModuleStatus('database', 'critical', 'critical');
+        }
+        if (rule.includes('xss') || rule.includes('csrf') || message.includes('xss')) {
+          updateModuleStatus('api', 'warning', severity);
+        }
+        if (rule.includes('auth') || rule.includes('password') || rule.includes('jwt')) {
+          updateModuleStatus('auth', 'warning', severity);
+        }
+        if (rule.includes('secrets') || rule.includes('hardcoded') || rule.includes('credential')) {
+          updateModuleStatus('secrets', 'critical', 'critical');
+        }
+        if (rule.includes('command') || rule.includes('exec') || rule.includes('shell')) {
+          updateModuleStatus('infra', 'critical', 'critical');
+        }
+      });
+
+      // Refresh the status panel to show current module states
+      refreshModuleStatusPanel();
+
+      // DYNAMIC MAP BUILDING: Add discovered services as new nodes
+      if (scanDetails.discovered_services && scanDetails.discovered_services.length > 0) {
+        addDiscoveredServicesToMap(scanDetails.discovered_services);
+      }
+
+      // DYNAMIC MAP BUILDING: Add discovered code modules/directories
+      if (scanDetails.discovered_modules && scanDetails.discovered_modules.length > 0) {
+        addDiscoveredModulesToMap(scanDetails.discovered_modules);
+      }
+    }
+
+    function addDiscoveredServicesToMap(services) {
+      let addedCount = 0;
+
+      services.forEach((service, index) => {
+        // Skip if module already exists
+        if (moduleNodes[service.id] || MODULES.find(m => m.id === service.id)) {
+          // Just update its status based on severity
+          if (moduleNodes[service.id]) {
+            const status = service.severity === 'critical' ? 'critical' :
+                          service.severity === 'high' ? 'warning' : 'secure';
+            updateModuleStatus(service.id, status, service.severity);
+          }
+          return;
+        }
+
+        // Calculate position for new module (spiral outward)
+        const baseModuleCount = MODULES.length;
+        const angle = (baseModuleCount + addedCount) * (Math.PI / 5);
+        const radius = 22 + Math.floor(addedCount / 8) * 5;
+        const pos = [
+          Math.cos(angle) * radius,
+          0,
+          Math.sin(angle) * radius
+        ];
+
+        // Get color based on service type
+        const color = SERVICE_COLORS[service.type] || 0x00ff88;
+
+        // Create new module definition
+        const newMod = {
+          id: service.id,
+          name: service.name.toUpperCase(),
+          desc: `${service.type.toUpperCase()} - Found in ${service.source}`,
+          pos,
+          color
+        };
+
+        MODULES.push(newMod);
+        moduleEnabled[service.id] = true;
+
+        // Create 3D node
+        createSingleModuleNode(newMod);
+
+        // Add audit connection from central auditor
+        const auditLine = createConnectionLine(
+          new THREE.Vector3(0, 5, 0),
+          new THREE.Vector3(pos[0], pos[1] + 2, pos[2]),
+          0x00aaff,
+          true
+        );
+        auditLine.userData = { type: 'audit-connection', to: service.id };
+        connectionLines.push(auditLine);
+        scene.add(auditLine);
+
+        // Connect to related existing modules based on type
+        connectServiceToRelatedModules(service, pos);
+
+        // Set initial status based on severity
+        const status = service.severity === 'critical' ? 'critical' :
+                      service.severity === 'high' ? 'warning' : 'secure';
+        updateModuleStatus(service.id, status, service.severity);
+
+        addedCount++;
+        showToast(`Discovered: ${service.name} (${service.type})`);
+      });
+
+      if (addedCount > 0) {
+        updateModuleStatusPanel(currentFindings);
+        console.log(`Added ${addedCount} discovered services to map`);
+      }
+    }
+
+    function connectServiceToRelatedModules(service, pos) {
+      // Connect databases to the DATABASE module
+      if (service.type === 'database' && moduleNodes['database']) {
+        const dbMod = MODULES.find(m => m.id === 'database');
+        if (dbMod) {
+          const line = createConnectionLine(
+            new THREE.Vector3(pos[0], pos[1] + 2, pos[2]),
+            new THREE.Vector3(dbMod.pos[0], dbMod.pos[1] + 2, dbMod.pos[2]),
+            0x00aaff44,
+            false
+          );
+          line.userData = { type: 'data-flow', from: service.id, to: 'database', label: 'Data' };
+          connectionLines.push(line);
+          scene.add(line);
+        }
+      }
+
+      // Connect auth services to AUTH module
+      if (service.type === 'auth' && moduleNodes['auth']) {
+        const authMod = MODULES.find(m => m.id === 'auth');
+        if (authMod) {
+          const line = createConnectionLine(
+            new THREE.Vector3(pos[0], pos[1] + 2, pos[2]),
+            new THREE.Vector3(authMod.pos[0], authMod.pos[1] + 2, authMod.pos[2]),
+            0x00ff8844,
+            false
+          );
+          line.userData = { type: 'data-flow', from: service.id, to: 'auth', label: 'Auth' };
+          connectionLines.push(line);
+          scene.add(line);
+        }
+      }
+
+      // Connect cloud services to INFRA module
+      if ((service.type === 'cloud' || service.type === 'storage') && moduleNodes['infra']) {
+        const infraMod = MODULES.find(m => m.id === 'infra');
+        if (infraMod) {
+          const line = createConnectionLine(
+            new THREE.Vector3(pos[0], pos[1] + 2, pos[2]),
+            new THREE.Vector3(infraMod.pos[0], infraMod.pos[1] + 2, infraMod.pos[2]),
+            0xff00ff44,
+            false
+          );
+          line.userData = { type: 'data-flow', from: service.id, to: 'infra', label: 'Cloud' };
+          connectionLines.push(line);
+          scene.add(line);
+        }
+      }
+
+      // Connect API services to API module
+      if (service.type === 'api' && moduleNodes['api']) {
+        const apiMod = MODULES.find(m => m.id === 'api');
+        if (apiMod) {
+          const line = createConnectionLine(
+            new THREE.Vector3(pos[0], pos[1] + 2, pos[2]),
+            new THREE.Vector3(apiMod.pos[0], apiMod.pos[1] + 2, apiMod.pos[2]),
+            0xffaa0044,
+            false
+          );
+          line.userData = { type: 'data-flow', from: service.id, to: 'api', label: 'API' };
+          connectionLines.push(line);
+          scene.add(line);
+        }
+      }
+    }
+
+    // Colors for discovered code module types
+    const MODULE_TYPE_COLORS = {
+      source: 0x00ff88,     // Green - source code
+      component: 0x00aaff,  // Blue - UI components
+      service: 0xff00ff,    // Magenta - services
+      api: 0xffaa00,        // Orange - API
+      lib: 0x88ff00,        // Lime - libraries
+      config: 0xffff00,     // Yellow - config
+      test: 0x00ffff,       // Cyan - tests
+      infra: 0xff00aa,      // Pink - infrastructure
+      docs: 0x8888ff        // Light blue - docs
+    };
+
+    function addDiscoveredModulesToMap(modules) {
+      let addedCount = 0;
+
+      modules.forEach((mod, index) => {
+        // Skip if module already exists
+        if (moduleNodes[mod.id] || MODULES.find(m => m.id === mod.id)) {
+          return;
+        }
+
+        // Calculate position for new module (different ring from services)
+        const baseCount = MODULES.length + addedCount;
+        const angle = baseCount * (Math.PI / 6) + Math.PI / 12; // Offset to not overlap with services
+        const radius = 18 + Math.floor(addedCount / 10) * 6;
+        const pos = [
+          Math.cos(angle) * radius,
+          -2, // Slightly lower than services
+          Math.sin(angle) * radius
+        ];
+
+        // Get color based on module type
+        const color = MODULE_TYPE_COLORS[mod.type] || 0x00ff88;
+
+        // Create new module definition
+        const newMod = {
+          id: mod.id,
+          name: mod.name.toUpperCase(),
+          desc: `${mod.type.toUpperCase()} - ${mod.fileCount} files`,
+          pos,
+          color
+        };
+
+        MODULES.push(newMod);
+        moduleEnabled[mod.id] = true;
+
+        // Create 3D node
+        createSingleModuleNode(newMod);
+
+        // Add audit connection from central auditor
+        const auditLine = createConnectionLine(
+          new THREE.Vector3(0, 5, 0),
+          new THREE.Vector3(pos[0], pos[1] + 2, pos[2]),
+          0x00aaff,
+          true
+        );
+        auditLine.userData = { type: 'audit-connection', to: mod.id };
+        connectionLines.push(auditLine);
+        scene.add(auditLine);
+
+        // Connect modules based on their imports
+        connectModuleByImports(mod, pos);
+
+        // Set status as secure by default (code modules aren't inherently insecure)
+        updateModuleStatus(mod.id, 'secure', 'info');
+
+        addedCount++;
+        showToast(`Mapped: ${mod.name} (${mod.type})`);
+      });
+
+      if (addedCount > 0) {
+        updateModuleStatusPanel(currentFindings);
+        console.log(`Added ${addedCount} discovered code modules to map`);
+      }
+    }
+
+    function connectModuleByImports(mod, pos) {
+      // Connect to modules this one imports from
+      if (mod.imports && mod.imports.length > 0) {
+        mod.imports.forEach(importName => {
+          const targetMod = MODULES.find(m =>
+            m.id === importName.toLowerCase() ||
+            m.name.toLowerCase() === importName.toLowerCase()
+          );
+          if (targetMod && moduleNodes[targetMod.id]) {
+            const line = createConnectionLine(
+              new THREE.Vector3(pos[0], pos[1] + 2, pos[2]),
+              new THREE.Vector3(targetMod.pos[0], targetMod.pos[1] + 2, targetMod.pos[2]),
+              0x00ff8844,
+              false
+            );
+            line.userData = { type: 'import', from: mod.id, to: targetMod.id, label: 'imports' };
+            connectionLines.push(line);
+            scene.add(line);
+          }
+        });
+      }
+    }
+
+    // ========== INITIALIZE ==========
+    // Expose functions to window for button onclick handlers
+    window.runPreset = runPreset;
+    window.runLocalScan = runLocalScan;
+    window.doScan = doScan;
+    window.scanProject = scanProject;
+    window.addProject = addProject;
+    window.switchProject = switchProject;
+    window.setScanMode = setScanMode;
+    window.scanGitRepo = scanGitRepo;
+    window.openModuleManager = openModuleManager;
+    window.addNewModule = addNewModule;
+    window.toggleModule = toggleModule;
+    window.removeSelectedModule = removeSelectedModule;
+    window.saveModuleChanges = saveModuleChanges;
+    window.closeModal = closeModal;
+    window.refreshAuditHistory = refreshAuditHistory;
+    window.selectAudit = selectAudit;
+    window.clearSelectedAudit = clearSelectedAudit;
+    window.openSettingsModal = openSettingsModal;
+    window.closeSettingsModal = closeSettingsModal;
+    window.switchSettingsTab = switchSettingsTab;
+    window.markSettingsDirty = markSettingsDirty;
+    window.saveSettings = saveSettings;
+    window.testNotification = testNotification;
+    window.runAWSScan = runAWSScan;
+
+    initScene();
+    animate();
+    pollSlop();
+    refreshAuditHistory();
+    connectWebSocket(); // Connect to WebSocket for real-time updates
+    setInterval(pollSlop, POLL_INTERVAL);
+    setInterval(refreshAuditHistory, POLL_INTERVAL * 2); // Refresh history less frequently
+
+    // Add click handler for module selection
+    window.addEventListener('click', onMouseClick);
+
+    console.log('SLOP Control Plane initialized');
+    console.log('WebSocket: ws://127.0.0.1:3001 (real-time updates)');
+    console.log('Enter a directory path and click "Scan Directory" to map your project.');
+    console.log('Use "+ Add" to scan multiple projects and switch between them.');
+  </script>
+</body>
+</html>

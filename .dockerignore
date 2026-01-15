@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+
+# Build outputs (rebuilt in container)
+dist/
+
+# Development files
+*.log
+*.md
+!README.md
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# Test files
+test-repos/
+*.test.ts
+*.test.js
+
+# Python wrapper (separate package)
+python/
+
+# Environment files with secrets
+.env
+.env.*
+*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Docker files (prevent recursive context)
+Dockerfile*
+docker-compose*
+.dockerignore

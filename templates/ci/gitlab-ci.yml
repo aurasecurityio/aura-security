@@ -1,0 +1,276 @@
+# SlopAuditor Security Scan - GitLab CI Pipeline
+#
+# This pipeline runs SlopAuditor security scans on your codebase.
+# Copy this file to .gitlab-ci.yml in your repository, or include it.
+#
+# Features:
+# - Runs on merge requests and main/master branches
+# - Generates GitLab-native security reports (SAST, Dependency Scanning, Secret Detection)
+# - Creates MR comments with scan summaries
+# - Blocks merges on critical vulnerabilities (configurable)
+# - Generates SBOM artifacts on main branch
+#
+# Prerequisites:
+# - Node.js 18+
+# - GitLab Ultimate for full Security Dashboard integration (reports work on all tiers)
+
+stages:
+  - test
+  - security
+  - compliance
+  - artifacts
+
+variables:
+  FAIL_ON_SEVERITY: "critical"  # critical, high, medium, or none
+  LICENSE_POLICY: "permissive"  # permissive, strict, or copyleft
+
+# Cache node_modules across jobs
+.node-cache: &node-cache
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - node_modules/
+      - .npm/
+
+# Base job for security scanning
+.security-base:
+  image: node:20-slim
+  before_script:
+    # Install security tools
+    - apt-get update && apt-get install -y curl python3 python3-pip
+    # Gitleaks
+    - curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.18.0/gitleaks_8.18.0_linux_amd64.tar.gz | tar -xz -C /usr/local/bin gitleaks
+    # Trivy
+    - curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+    # Python tools
+    - pip3 install semgrep checkov pip-licenses --break-system-packages
+    # Hadolint
+    - curl -sSfL https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64 -o /usr/local/bin/hadolint && chmod +x /usr/local/bin/hadolint
+    # Install SlopAuditor
+    - npm install -g @slop/auditor
+
+# ============ Security Scanning Jobs ============
+
+# Main security scan - runs on all branches
+security-scan:
+  extends: .security-base
+  stage: security
+  <<: *node-cache
+  script:
+    - npm ci --ignore-scripts || npm install --ignore-scripts || true
+    - |
+      slop-auditor scan . \
+        --format json \
+        --output security-results.json \
+        --fail-on ${FAIL_ON_SEVERITY} || echo "SCAN_FAILED=true" >> scan.env
+  artifacts:
+    paths:
+      - security-results.json
+    reports:
+      dotenv: scan.env
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# SAST Report for GitLab Security Dashboard
+sast:
+  extends: .security-base
+  stage: security
+  <<: *node-cache
+  script:
+    - npm ci --ignore-scripts || npm install --ignore-scripts || true
+    - slop-auditor scan . --format gitlab-sast --output gl-sast-report.json --no-fail
+  artifacts:
+    paths:
+      - gl-sast-report.json
+    reports:
+      sast: gl-sast-report.json
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Dependency Scanning Report for GitLab Security Dashboard
+dependency_scanning:
+  extends: .security-base
+  stage: security
+  <<: *node-cache
+  script:
+    - npm ci --ignore-scripts || npm install --ignore-scripts || true
+    - slop-auditor scan . --format gitlab-deps --output gl-dependency-scanning-report.json --no-fail
+  artifacts:
+    paths:
+      - gl-dependency-scanning-report.json
+    reports:
+      dependency_scanning: gl-dependency-scanning-report.json
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Secret Detection (runs on MRs)
+secret_detection:
+  extends: .security-base
+  stage: security
+  script:
+    - |
+      slop-auditor scan . \
+        --scanners gitleaks \
+        --format json \
+        --output secrets-report.json \
+        --no-fail
+    # Convert to GitLab format if needed
+    - |
+      if [ -f secrets-report.json ]; then
+        node -e "
+          const r = require('./secrets-report.json');
+          const report = {
+            version: '15.0.0',
+            vulnerabilities: r.secrets.map(s => ({
+              id: 'secret-' + Buffer.from(s.file + s.line).toString('base64').substring(0, 16),
+              category: 'secret_detection',
+              name: s.type,
+              message: s.type + ' detected',
+              severity: s.severity === 'critical' ? 'Critical' : s.severity === 'high' ? 'High' : s.severity === 'medium' ? 'Medium' : 'Low',
+              scanner: { id: 'slop-auditor', name: 'SlopAuditor' },
+              location: { file: s.file, start_line: s.line },
+              identifiers: [{ type: 'slop_secret', name: s.type, value: s.type }]
+            })),
+            scan: { analyzer: { id: 'slop-auditor', name: 'SlopAuditor', version: '0.2.0', vendor: { name: 'SlopAuditor' } }, scanner: { id: 'slop-auditor', name: 'SlopAuditor', version: '0.2.0', vendor: { name: 'SlopAuditor' } }, type: 'secret_detection', start_time: new Date().toISOString(), end_time: new Date().toISOString(), status: 'success' }
+          };
+          require('fs').writeFileSync('gl-secret-detection-report.json', JSON.stringify(report, null, 2));
+        "
+      fi
+  artifacts:
+    paths:
+      - gl-secret-detection-report.json
+    reports:
+      secret_detection: gl-secret-detection-report.json
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+# ============ Compliance Jobs ============
+
+# License compliance check
+license-compliance:
+  extends: .security-base
+  stage: compliance
+  <<: *node-cache
+  script:
+    - npm ci --ignore-scripts || npm install --ignore-scripts || true
+    - |
+      slop-auditor license-check . \
+        --policy ${LICENSE_POLICY} \
+        --output licenses.json \
+        --json
+  artifacts:
+    paths:
+      - licenses.json
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  allow_failure: true
+
+# ============ Artifact Generation Jobs ============
+
+# Generate SBOM (main branch only)
+sbom-cyclonedx:
+  extends: .security-base
+  stage: artifacts
+  <<: *node-cache
+  script:
+    - npm ci --ignore-scripts || npm install --ignore-scripts || true
+    - |
+      slop-auditor sbom . \
+        --format cyclonedx \
+        --output sbom-cyclonedx.json \
+        --include-vulns \
+        --name "${CI_PROJECT_NAME}" || true
+  artifacts:
+    paths:
+      - sbom-cyclonedx.json
+    expire_in: 1 month
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+sbom-spdx:
+  extends: .security-base
+  stage: artifacts
+  <<: *node-cache
+  script:
+    - npm ci --ignore-scripts || npm install --ignore-scripts || true
+    - |
+      slop-auditor sbom . \
+        --format spdx \
+        --output sbom-spdx.json \
+        --name "${CI_PROJECT_NAME}" || true
+  artifacts:
+    paths:
+      - sbom-spdx.json
+    expire_in: 1 month
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ============ Gate Job ============
+
+# Fail pipeline if critical issues found
+security-gate:
+  stage: .post
+  image: alpine:latest
+  script:
+    - |
+      if [ "$SCAN_FAILED" = "true" ]; then
+        echo "Security scan found critical issues!"
+        exit 1
+      fi
+      echo "Security gate passed"
+  needs:
+    - job: security-scan
+      artifacts: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: always
+
+# ============ MR Comment Job ============
+
+# Add comment to MR with scan summary (requires GITLAB_TOKEN)
+mr-comment:
+  stage: .post
+  image: curlimages/curl:latest
+  script:
+    - |
+      if [ -z "$GITLAB_TOKEN" ]; then
+        echo "GITLAB_TOKEN not set, skipping MR comment"
+        exit 0
+      fi
+
+      if [ ! -f security-results.json ]; then
+        echo "No results file found"
+        exit 0
+      fi
+
+      # Parse results and create comment
+      CRITICAL=$(cat security-results.json | grep -o '"severity":"critical"' | wc -l || echo "0")
+      HIGH=$(cat security-results.json | grep -o '"severity":"high"' | wc -l || echo "0")
+      MEDIUM=$(cat security-results.json | grep -o '"severity":"medium"' | wc -l || echo "0")
+      LOW=$(cat security-results.json | grep -o '"severity":"low"' | wc -l || echo "0")
+
+      EMOJI="✅"
+      [ "$CRITICAL" -gt 0 ] && EMOJI="🚨"
+      [ "$HIGH" -gt 0 ] && EMOJI="⚠️"
+
+      BODY="## $EMOJI Security Scan Results\n\n| Severity | Count |\n|----------|-------|\n| Critical | $CRITICAL |\n| High | $HIGH |\n| Medium | $MEDIUM |\n| Low | $LOW |\n\n---\n*Scanned by [SlopAuditor](https://github.com/slopsecurityadmin/slop-security-auditor)*"
+
+      curl --request POST \
+        --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+        --header "Content-Type: application/json" \
+        --data "{\"body\": \"$BODY\"}" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${CI_MERGE_REQUEST_IID}/notes"
+  needs:
+    - job: security-scan
+      artifacts: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  allow_failure: true

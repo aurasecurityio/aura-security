@@ -1,0 +1,30 @@
+{
+  "tool": "audit",
+  "arguments": {
+    "change_event": {
+      "id": "pr-1234",
+      "type": "pull_request",
+      "environment": "staging",
+      "repo": "myorg/myapp",
+      "commit": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+      "files_changed": [
+        "src/auth/login.ts",
+        "src/billing/payment.ts",
+        "config/database.yml"
+      ],
+      "diff": "--- a/src/auth/login.ts\n+++ b/src/auth/login.ts\n@@ -10,6 +10,7 @@\n function authenticate(user) {\n+  const api_key = 'sk-test-1234567890';\n   return validateCredentials(user);\n }"
+    },
+    "evidence_bundle": {
+      "sbom": "component:lodash@4.17.21\ncomponent:express@4.18.2",
+      "vuln_scan": "critical: 0\nhigh: 2\nmedium: 5",
+      "sast_results": "issues: 3",
+      "iac_scan": "",
+      "provenance": "signed:true",
+      "runtime_delta": ""
+    },
+    "policy_context": {
+      "critical_assets": ["auth", "billing", "phi", "infra"],
+      "risk_tolerance": "low"
+    }
+  }
+}
