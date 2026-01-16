@@ -1456,11 +1456,14 @@
           rawData: scanData
         };
 
-        // Extract findings
-        if (scanData.raw_findings?.secrets) {
-          scanData.raw_findings.secrets.forEach(s => {
+        // Extract findings from all sources
+        const rf = scanData.raw_findings || {};
+
+        // Secrets - use actual severity from scanner
+        if (rf.secrets) {
+          rf.secrets.forEach(s => {
             repo.findings.push({
-              severity: 'critical',
+              severity: s.severity?.toLowerCase() || 'critical',
               type: 'SECRET',
               message: `${s.type || 'Secret'} detected`,
               file: s.file,
@@ -1469,25 +1472,52 @@
           });
         }
 
-        if (scanData.raw_findings?.packageVulns) {
-          scanData.raw_findings.packageVulns.forEach(v => {
+        // Package vulnerabilities (backend uses 'packages' not 'packageVulns')
+        if (rf.packages) {
+          rf.packages.forEach(v => {
             repo.findings.push({
               severity: v.severity?.toLowerCase() || 'medium',
               type: 'VULN',
-              message: v.title || v.name,
-              file: v.package
+              message: v.title || v.vulnId || v.name,
+              file: `${v.name}@${v.version}`
             });
           });
         }
 
-        if (scanData.raw_findings?.sastFindings) {
-          scanData.raw_findings.sastFindings.forEach(s => {
+        // SAST findings
+        if (rf.sastFindings) {
+          rf.sastFindings.forEach(s => {
             repo.findings.push({
               severity: s.severity?.toLowerCase() || 'medium',
               type: 'CODE',
               message: s.message || s.rule,
               file: s.file,
               line: s.line
+            });
+          });
+        }
+
+        // IaC findings (Terraform, Kubernetes, etc.)
+        if (rf.iacFindings) {
+          rf.iacFindings.forEach(i => {
+            repo.findings.push({
+              severity: i.severity?.toLowerCase() || 'medium',
+              type: 'IAC',
+              message: i.title || i.checkId,
+              file: i.file
+            });
+          });
+        }
+
+        // Dockerfile findings
+        if (rf.dockerfileFindings) {
+          rf.dockerfileFindings.forEach(d => {
+            repo.findings.push({
+              severity: d.severity?.toLowerCase() || 'medium',
+              type: 'DOCKER',
+              message: d.message || d.code,
+              file: d.file,
+              line: d.line
             });
           });
         }
