@@ -1050,7 +1050,8 @@ const SECRET_PATTERNS = [
   { name: 'Password', regex: /password\s*[=:]\s*['"]([^'"]{8,})['"](?!\s*[,;]?\s*$)/gi, severity: 'critical' as const },
   // These are definitive patterns - actual secret formats
   { name: 'AWS Access Key', regex: /AKIA[0-9A-Z]{16}/g, severity: 'critical' as const },
-  { name: 'AWS Secret Key', regex: /[A-Za-z0-9\/+=]{40}(?=\s|$|")/g, severity: 'critical' as const },
+  // Note: AWS Secret Key pattern removed - too broad (matches any 40-char base64 string)
+  // Real AWS secrets are detected via AKIA access key pattern above
   { name: 'Private Key', regex: /-----BEGIN\s+(RSA|EC|OPENSSH|PGP|ENCRYPTED)?\s*PRIVATE\s+KEY-----/g, severity: 'critical' as const },
   { name: 'GitHub Token', regex: /gh[pousr]_[A-Za-z0-9_]{36,}/g, severity: 'critical' as const },
   { name: 'GitLab Token', regex: /glpat-[A-Za-z0-9_-]{20,}/g, severity: 'critical' as const },
