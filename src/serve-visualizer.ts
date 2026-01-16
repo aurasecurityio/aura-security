@@ -32,10 +32,21 @@ const server = createServer((req, res) => {
     return;
   }
 
-  // Use minimal UI by default, or classic with ?classic
-  const useClassic = req.url?.includes('classic');
-  const defaultPage = useClassic ? 'index.html' : 'index-minimal.html';
-  let filePath = join(VISUALIZER_DIR, req.url === '/' || req.url === '/?classic' ? defaultPage : req.url!.split('?')[0]);
+  const url = req.url?.split('?')[0] ?? '/';
+  let filePath: string;
+
+  // Route: / -> landing page
+  // Route: /app -> dashboard (3D visualizer)
+  // Route: /app/classic -> classic dashboard
+  if (url === '/') {
+    filePath = join(VISUALIZER_DIR, 'landing.html');
+  } else if (url === '/app' || url === '/app/') {
+    filePath = join(VISUALIZER_DIR, 'index-minimal.html');
+  } else if (url === '/app/classic') {
+    filePath = join(VISUALIZER_DIR, 'index.html');
+  } else {
+    filePath = join(VISUALIZER_DIR, url);
+  }
 
   if (!existsSync(filePath)) {
     res.writeHead(404);
@@ -59,13 +70,16 @@ const server = createServer((req, res) => {
 server.listen(PORT, () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║         SLOP 3D VISUALIZER - CONTROL PLANE                ║
+║              SLOP AUDITOR - WEB SERVER                    ║
 ╠═══════════════════════════════════════════════════════════╣
-║  Visualizer: http://127.0.0.1:${PORT}                        ║
+║  Landing:    http://127.0.0.1:${PORT}                        ║
+║  Dashboard:  http://127.0.0.1:${PORT}/app                    ║
 ║  SLOP API:   http://127.0.0.1:3000                        ║
 ╚═══════════════════════════════════════════════════════════╝
 
-Open the visualizer URL in your browser to see the 3D control plane.
-The visualizer polls the SLOP API every 2 seconds for updates.
+Routes:
+  /          Landing page
+  /app       3D Dashboard (visualizer)
+  /app/classic   Classic dashboard UI
 `);
 });

@@ -3,44 +3,39 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SLOP Auditor - Security Matrix</title>
+  <title>SLOP Auditor</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root {
-      --matrix-green: #00ff41;
-      --matrix-dark-green: #008f11;
-      --matrix-bright: #39ff14;
-      --matrix-dim: #003b00;
-      --bg-black: #000000;
-      --bg-dark: #0a0a0a;
-      --bg-panel: rgba(0, 20, 0, 0.9);
-      --border-green: rgba(0, 255, 65, 0.3);
-      --text-green: #00ff41;
-      --danger: #ff0040;
-      --warning: #ffaa00;
+      --bg-primary: #0d1117;
+      --bg-secondary: #161b22;
+      --bg-tertiary: #21262d;
+      --border: #30363d;
+      --border-light: #484f58;
+      --text-primary: #e6edf3;
+      --text-secondary: #8b949e;
+      --text-muted: #6e7681;
+      --accent: #58a6ff;
+      --accent-subtle: rgba(56, 139, 253, 0.15);
+      --critical: #f85149;
+      --critical-subtle: rgba(248, 81, 73, 0.15);
+      --high: #db6d28;
+      --high-subtle: rgba(219, 109, 40, 0.15);
+      --warning: #d29922;
+      --warning-subtle: rgba(210, 153, 34, 0.15);
+      --success: #3fb950;
+      --success-subtle: rgba(63, 185, 80, 0.15);
     }
 
     body {
-      background: var(--bg-black);
-      font-family: 'Share Tech Mono', monospace;
-      color: var(--text-green);
+      background: var(--bg-primary);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: var(--text-primary);
       overflow: hidden;
       min-height: 100vh;
-    }
-
-    /* Matrix rain effect */
-    #matrix-rain {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 0;
-      opacity: 0.15;
-      pointer-events: none;
     }
 
     #canvas-container {
@@ -56,20 +51,10 @@
     .panel {
       position: fixed;
       z-index: 100;
-      background: var(--bg-panel);
-      border: 1px solid var(--border-green);
-      padding: 15px;
-      box-shadow: 0 0 20px rgba(0, 255, 65, 0.1), inset 0 0 20px rgba(0, 0, 0, 0.5);
-    }
-
-    .panel::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 2px;
-      background: linear-gradient(90deg, transparent, var(--matrix-green), transparent);
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
     }
 
     /* Header */
@@ -77,123 +62,109 @@
       top: 0;
       left: 0;
       right: 0;
-      height: 50px;
+      height: 56px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 0 20px;
-      background: linear-gradient(180deg, rgba(0, 30, 0, 0.95) 0%, rgba(0, 10, 0, 0.9) 100%);
-      border-bottom: 1px solid var(--border-green);
+      background: var(--bg-secondary);
+      border-radius: 0;
+      border-top: none;
+      border-left: none;
+      border-right: none;
     }
 
     .logo {
       display: flex;
       align-items: center;
-      gap: 12px;
-      font-size: 16px;
-      font-weight: bold;
-      letter-spacing: 3px;
-      text-shadow: 0 0 10px var(--matrix-green);
+      gap: 10px;
+      font-size: 14px;
+      font-weight: 600;
     }
 
     .logo-icon {
-      font-size: 24px;
-      animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; text-shadow: 0 0 10px var(--matrix-green); }
-      50% { opacity: 0.7; text-shadow: 0 0 20px var(--matrix-green); }
+      width: 28px;
+      height: 28px;
+      background: var(--accent);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 600;
+      color: white;
     }
 
     .nav-tabs {
       display: flex;
-      gap: 5px;
+      gap: 4px;
+      background: var(--bg-tertiary);
+      padding: 4px;
+      border-radius: 6px;
     }
 
     .nav-tab {
-      padding: 8px 20px;
+      padding: 6px 16px;
       background: transparent;
-      border: 1px solid var(--border-green);
-      color: var(--matrix-dim);
+      border: none;
+      color: var(--text-secondary);
       font-family: inherit;
-      font-size: 12px;
+      font-size: 13px;
+      font-weight: 500;
       cursor: pointer;
-      transition: all 0.3s;
-      text-transform: uppercase;
-      letter-spacing: 1px;
+      transition: all 0.15s;
+      border-radius: 4px;
     }
 
     .nav-tab:hover {
-      color: var(--matrix-green);
-      border-color: var(--matrix-green);
+      color: var(--text-primary);
+      background: var(--bg-secondary);
     }
 
     .nav-tab.active {
-      background: rgba(0, 255, 65, 0.1);
-      color: var(--matrix-green);
-      border-color: var(--matrix-green);
-      text-shadow: 0 0 10px var(--matrix-green);
+      background: var(--bg-secondary);
+      color: var(--text-primary);
     }
 
     .header-stats {
       display: flex;
-      gap: 20px;
-      font-size: 12px;
+      gap: 16px;
+      font-size: 13px;
     }
 
     .header-stat {
       display: flex;
       align-items: center;
       gap: 6px;
+      color: var(--text-secondary);
     }
 
-    .stat-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      animation: blink 1s infinite;
+    .stat-value {
+      font-weight: 600;
+      color: var(--text-primary);
     }
 
-    .stat-dot.critical { background: var(--danger); box-shadow: 0 0 10px var(--danger); }
-    .stat-dot.warning { background: var(--warning); box-shadow: 0 0 10px var(--warning); }
-    .stat-dot.safe { background: var(--matrix-green); box-shadow: 0 0 10px var(--matrix-green); }
-
-    @keyframes blink {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
+    .stat-value.critical { color: var(--critical); }
+    .stat-value.warning { color: var(--warning); }
 
     /* Left Panel - Scanner */
     #scanner-panel {
-      top: 60px;
-      left: 10px;
+      top: 72px;
+      left: 16px;
       width: 320px;
-      max-height: calc(100vh - 70px);
+      max-height: calc(100vh - 88px);
       overflow-y: auto;
     }
 
     .section-header {
-      font-size: 11px;
-      color: var(--matrix-green);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
       text-transform: uppercase;
-      letter-spacing: 2px;
+      letter-spacing: 0.5px;
       margin-bottom: 12px;
       padding-bottom: 8px;
-      border-bottom: 1px solid var(--border-green);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .section-header::before {
-      content: '>';
-      animation: cursor-blink 1s infinite;
-    }
-
-    @keyframes cursor-blink {
-      0%, 50% { opacity: 1; }
-      51%, 100% { opacity: 0; }
+      border-bottom: 1px solid var(--border);
     }
 
     .input-group {
@@ -202,336 +173,348 @@
 
     .input-group label {
       display: block;
-      font-size: 10px;
-      color: var(--matrix-dim);
-      margin-bottom: 5px;
-      text-transform: uppercase;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
     }
 
     .input-group input {
       width: 100%;
-      padding: 10px;
-      background: rgba(0, 0, 0, 0.5);
-      border: 1px solid var(--border-green);
-      color: var(--matrix-green);
+      padding: 10px 12px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-primary);
       font-family: inherit;
-      font-size: 12px;
+      font-size: 13px;
+      transition: border-color 0.15s;
     }
 
     .input-group input:focus {
       outline: none;
-      border-color: var(--matrix-green);
-      box-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+      border-color: var(--accent);
     }
 
     .input-group input::placeholder {
-      color: var(--matrix-dim);
+      color: var(--text-muted);
     }
 
     .btn {
       width: 100%;
-      padding: 12px;
-      background: transparent;
-      border: 1px solid var(--matrix-green);
-      color: var(--matrix-green);
+      padding: 10px 16px;
+      background: var(--accent);
+      border: none;
+      border-radius: 6px;
+      color: white;
       font-family: inherit;
-      font-size: 12px;
+      font-size: 13px;
+      font-weight: 500;
       cursor: pointer;
-      transition: all 0.3s;
-      text-transform: uppercase;
-      letter-spacing: 2px;
+      transition: all 0.15s;
       margin-top: 8px;
     }
 
     .btn:hover {
-      background: rgba(0, 255, 65, 0.1);
-      box-shadow: 0 0 20px rgba(0, 255, 65, 0.3);
-      text-shadow: 0 0 10px var(--matrix-green);
+      background: #4c9aff;
     }
 
     .btn:disabled {
-      opacity: 0.5;
+      opacity: 0.6;
       cursor: not-allowed;
     }
 
+    .btn-secondary {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+
+    .btn-secondary:hover {
+      background: var(--border);
+    }
+
     .btn-danger {
-      border-color: var(--danger);
-      color: var(--danger);
+      background: var(--critical-subtle);
+      color: var(--critical);
     }
 
     .btn-danger:hover {
-      background: rgba(255, 0, 64, 0.1);
-      box-shadow: 0 0 20px rgba(255, 0, 64, 0.3);
+      background: rgba(248, 81, 73, 0.25);
     }
 
     /* Scanned repos list */
     .repo-list {
-      margin-top: 15px;
+      margin-top: 16px;
     }
 
     .repo-item {
       display: flex;
       align-items: center;
-      gap: 10px;
-      padding: 10px;
-      background: rgba(0, 0, 0, 0.3);
-      border: 1px solid transparent;
-      margin-bottom: 6px;
+      gap: 12px;
+      padding: 12px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 8px;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.15s;
     }
 
     .repo-item:hover {
-      border-color: var(--border-green);
-      background: rgba(0, 255, 65, 0.05);
+      border-color: var(--border-light);
     }
 
     .repo-item.selected {
-      border-color: var(--matrix-green);
-      background: rgba(0, 255, 65, 0.1);
+      border-color: var(--accent);
+      background: var(--accent-subtle);
     }
 
-    .repo-item.critical { border-left: 3px solid var(--danger); }
-    .repo-item.warning { border-left: 3px solid var(--warning); }
-    .repo-item.safe { border-left: 3px solid var(--matrix-green); }
+    .repo-status {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
 
-    .repo-icon { font-size: 16px; }
-    .repo-name { flex: 1; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .repo-count { font-size: 10px; color: var(--matrix-dim); }
+    .repo-status.critical { background: var(--critical); }
+    .repo-status.warning { background: var(--warning); }
+    .repo-status.safe { background: var(--success); }
+
+    .repo-info { flex: 1; min-width: 0; }
+    .repo-name { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .repo-path { font-size: 11px; color: var(--text-muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .repo-stats { font-size: 11px; color: var(--text-secondary); }
 
     /* Right Panel - Details */
     #details-panel {
-      top: 60px;
-      right: 10px;
-      width: 350px;
-      max-height: calc(100vh - 70px);
+      top: 72px;
+      right: 16px;
+      width: 360px;
+      max-height: calc(100vh - 88px);
       overflow-y: auto;
     }
 
+    .selected-repo-header {
+      display: none;
+      padding: 12px;
+      background: var(--bg-primary);
+      border-radius: 6px;
+      margin-bottom: 16px;
+    }
+
+    .selected-repo-header.visible { display: block; }
+    .selected-repo-name { font-size: 14px; font-weight: 500; }
+    .selected-repo-path { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
     .finding-list {
-      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
 
     .finding-item {
       padding: 12px;
-      background: rgba(0, 0, 0, 0.3);
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
       border-left: 3px solid;
-      margin-bottom: 8px;
     }
 
-    .finding-item.critical { border-color: var(--danger); }
-    .finding-item.high { border-color: #ff6600; }
-    .finding-item.medium { border-color: var(--warning); }
-    .finding-item.low { border-color: var(--matrix-green); }
+    .finding-item.critical { border-left-color: var(--critical); background: var(--critical-subtle); }
+    .finding-item.high { border-left-color: var(--high); background: var(--high-subtle); }
+    .finding-item.medium { border-left-color: var(--warning); background: var(--warning-subtle); }
+    .finding-item.low { border-left-color: var(--success); background: var(--success-subtle); }
 
     .finding-header {
       display: flex;
       justify-content: space-between;
+      align-items: center;
       margin-bottom: 6px;
     }
 
     .finding-severity {
       font-size: 10px;
+      font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 1px;
+      letter-spacing: 0.5px;
     }
 
-    .finding-item.critical .finding-severity { color: var(--danger); }
-    .finding-item.high .finding-severity { color: #ff6600; }
+    .finding-item.critical .finding-severity { color: var(--critical); }
+    .finding-item.high .finding-severity { color: var(--high); }
     .finding-item.medium .finding-severity { color: var(--warning); }
-    .finding-item.low .finding-severity { color: var(--matrix-green); }
+    .finding-item.low .finding-severity { color: var(--success); }
 
     .finding-type {
-      font-size: 9px;
-      color: var(--matrix-dim);
+      font-size: 10px;
+      color: var(--text-muted);
+      background: var(--bg-tertiary);
+      padding: 2px 6px;
+      border-radius: 3px;
     }
 
     .finding-message {
-      font-size: 11px;
-      color: var(--text-green);
+      font-size: 13px;
+      color: var(--text-primary);
       margin-bottom: 6px;
       line-height: 1.4;
     }
 
     .finding-file {
-      font-size: 10px;
-      color: var(--matrix-dim);
-      font-family: monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: 'SF Mono', Monaco, monospace;
     }
 
-    /* Reports Panel (hidden by default) */
+    /* Reports Panel */
     #reports-panel {
-      top: 60px;
+      top: 72px;
       left: 50%;
       transform: translateX(-50%);
-      width: 800px;
+      width: 900px;
       max-width: calc(100% - 40px);
-      max-height: calc(100vh - 80px);
+      max-height: calc(100vh - 88px);
       overflow-y: auto;
       display: none;
     }
 
-    #reports-panel.active {
-      display: block;
+    #reports-panel.active { display: block; }
+
+    .report-actions {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .report-actions .btn {
+      width: auto;
+      padding: 8px 14px;
     }
 
     .report-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 11px;
+      font-size: 13px;
     }
 
     .report-table th,
     .report-table td {
-      padding: 10px;
+      padding: 12px;
       text-align: left;
-      border-bottom: 1px solid var(--border-green);
+      border-bottom: 1px solid var(--border);
     }
 
     .report-table th {
-      color: var(--matrix-green);
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      font-size: 10px;
+      color: var(--text-secondary);
+      font-weight: 500;
+      font-size: 12px;
     }
 
     .report-table tr:hover td {
-      background: rgba(0, 255, 65, 0.05);
+      background: var(--bg-tertiary);
     }
 
-    .report-actions {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 15px;
-    }
-
-    .report-actions .btn {
-      width: auto;
-      padding: 8px 16px;
-    }
-
-    /* 3D View Panel (center info) */
+    /* View Info */
     #view-info {
       bottom: 20px;
       left: 50%;
       transform: translateX(-50%);
-      padding: 10px 20px;
-      font-size: 11px;
+      padding: 8px 16px;
+      font-size: 12px;
       text-align: center;
-      background: rgba(0, 10, 0, 0.8);
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+      border-radius: 6px;
     }
 
-    .view-hint {
-      color: var(--matrix-dim);
-    }
-
-    .view-hint span {
-      color: var(--matrix-green);
+    #view-info kbd {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      color: var(--text-primary);
     }
 
     /* Empty state */
     .empty-state {
       text-align: center;
-      padding: 30px;
-      color: var(--matrix-dim);
+      padding: 32px 16px;
+      color: var(--text-muted);
     }
 
     .empty-state-icon {
-      font-size: 40px;
-      margin-bottom: 10px;
+      font-size: 32px;
+      margin-bottom: 8px;
       opacity: 0.5;
     }
 
-    /* Terminal output */
-    .terminal-output {
-      background: rgba(0, 0, 0, 0.5);
-      padding: 10px;
-      font-size: 10px;
-      max-height: 150px;
+    .empty-state p {
+      font-size: 13px;
+    }
+
+    /* Log output */
+    .log-output {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      font-size: 12px;
+      font-family: 'SF Mono', Monaco, monospace;
+      max-height: 140px;
       overflow-y: auto;
-      margin-top: 10px;
-      border: 1px solid var(--border-green);
+      margin-top: 12px;
     }
 
-    .terminal-line {
+    .log-line {
       margin-bottom: 4px;
-      opacity: 0.8;
+      color: var(--text-secondary);
     }
 
-    .terminal-line.success { color: var(--matrix-green); }
-    .terminal-line.error { color: var(--danger); }
-    .terminal-line.info { color: var(--matrix-dim); }
+    .log-line.success { color: var(--success); }
+    .log-line.error { color: var(--critical); }
 
     /* Scrollbar */
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: var(--bg-black); }
-    ::-webkit-scrollbar-thumb { background: var(--matrix-dim); }
-    ::-webkit-scrollbar-thumb:hover { background: var(--matrix-green); }
-
-    /* Loading animation */
-    .scanning {
-      display: inline-block;
-      animation: scanning 0.5s infinite;
-    }
-
-    @keyframes scanning {
-      0% { content: '[    ]'; }
-      25% { content: '[=   ]'; }
-      50% { content: '[==  ]'; }
-      75% { content: '[=== ]'; }
-      100% { content: '[====]'; }
-    }
-
-    .scanning::after {
-      content: '';
-      animation: dots 1s infinite;
-    }
-
-    @keyframes dots {
-      0% { content: '.'; }
-      33% { content: '..'; }
-      66% { content: '...'; }
-    }
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
   </style>
 </head>
 <body>
-  <!-- Matrix Rain Canvas -->
-  <canvas id="matrix-rain"></canvas>
-
   <!-- Three.js 3D Canvas -->
   <div id="canvas-container"></div>
 
   <!-- Header -->
   <header id="header" class="panel">
     <div class="logo">
-      <span class="logo-icon">[S]</span>
-      <span>SLOP_AUDITOR</span>
+      <div class="logo-icon">S</div>
+      <span>SLOP Auditor</span>
     </div>
 
     <div class="nav-tabs">
-      <button class="nav-tab active" onclick="showView('scan')">SCAN</button>
-      <button class="nav-tab" onclick="showView('reports')">REPORTS</button>
+      <button class="nav-tab active" onclick="showView('scan')">Scan</button>
+      <button class="nav-tab" onclick="showView('reports')">Reports</button>
     </div>
 
     <div class="header-stats">
       <div class="header-stat">
-        <div class="stat-dot critical"></div>
-        <span><span id="totalCritical">0</span> CRITICAL</span>
+        <span class="stat-value critical" id="totalCritical">0</span>
+        <span>Critical</span>
       </div>
       <div class="header-stat">
-        <div class="stat-dot warning"></div>
-        <span><span id="totalWarning">0</span> WARNINGS</span>
+        <span class="stat-value warning" id="totalWarning">0</span>
+        <span>Warnings</span>
       </div>
       <div class="header-stat">
-        <div class="stat-dot safe"></div>
-        <span><span id="totalRepos">0</span> REPOS</span>
+        <span class="stat-value" id="totalRepos">0</span>
+        <span>Scanned</span>
       </div>
     </div>
   </header>
 
   <!-- Scanner Panel (Left) -->
   <div id="scanner-panel" class="panel">
-    <div class="section-header">TARGET_ACQUISITION</div>
+    <div class="section-header">New Scan</div>
 
     <div class="input-group">
       <label>Local Path</label>
@@ -544,19 +527,18 @@
     </div>
 
     <button class="btn" id="scanBtn" onclick="executeScan()">
-      INITIATE_SCAN
+      Start Scan
     </button>
 
-    <div class="terminal-output" id="terminal">
-      <div class="terminal-line info">> System initialized</div>
-      <div class="terminal-line info">> Awaiting target...</div>
+    <div class="log-output" id="logOutput">
+      <div class="log-line">Ready to scan</div>
     </div>
 
-    <div class="section-header" style="margin-top: 20px;">SCANNED_TARGETS</div>
+    <div class="section-header" style="margin-top: 20px;">Scanned Targets</div>
 
     <div class="repo-list" id="repoList">
       <div class="empty-state">
-        <div class="empty-state-icon">[?]</div>
+        <div class="empty-state-icon">📁</div>
         <p>No targets scanned yet</p>
       </div>
     </div>
@@ -564,16 +546,16 @@
 
   <!-- Details Panel (Right) -->
   <div id="details-panel" class="panel">
-    <div class="section-header">THREAT_ANALYSIS</div>
+    <div class="section-header">Findings</div>
 
-    <div id="selectedRepoInfo" style="display: none; margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.3);">
-      <div style="font-size: 12px; margin-bottom: 5px;" id="selectedRepoName">-</div>
-      <div style="font-size: 10px; color: var(--matrix-dim);" id="selectedRepoPath">-</div>
+    <div class="selected-repo-header" id="selectedRepoInfo">
+      <div class="selected-repo-name" id="selectedRepoName">-</div>
+      <div class="selected-repo-path" id="selectedRepoPath">-</div>
     </div>
 
     <div class="finding-list" id="findingList">
       <div class="empty-state">
-        <div class="empty-state-icon">[~]</div>
+        <div class="empty-state-icon">🔍</div>
         <p>Select a target to view findings</p>
       </div>
     </div>
@@ -581,12 +563,12 @@
 
   <!-- Reports Panel (Center, hidden by default) -->
   <div id="reports-panel" class="panel">
-    <div class="section-header">SCAN_REPORTS</div>
+    <div class="section-header">Scan Reports</div>
 
     <div class="report-actions">
-      <button class="btn" onclick="exportReports('json')">EXPORT_JSON</button>
-      <button class="btn" onclick="exportReports('csv')">EXPORT_CSV</button>
-      <button class="btn btn-danger" onclick="clearAllReports()">CLEAR_ALL</button>
+      <button class="btn" onclick="exportReports('json')">Export JSON</button>
+      <button class="btn btn-secondary" onclick="exportReports('csv')">Export CSV</button>
+      <button class="btn btn-danger" onclick="clearAllReports()">Clear All</button>
     </div>
 
     <table class="report-table">
@@ -603,7 +585,7 @@
       </thead>
       <tbody id="reportTableBody">
         <tr>
-          <td colspan="7" style="text-align: center; color: var(--matrix-dim);">No reports yet</td>
+          <td colspan="7" style="text-align: center; color: var(--text-muted);">No reports yet</td>
         </tr>
       </tbody>
     </table>
@@ -611,9 +593,7 @@
 
   <!-- View Info -->
   <div id="view-info" class="panel">
-    <div class="view-hint">
-      <span>[DRAG]</span> Rotate view | <span>[SCROLL]</span> Zoom | <span>[CLICK NODE]</span> View details
-    </div>
+    <kbd>Drag</kbd> Rotate &nbsp; <kbd>Scroll</kbd> Zoom &nbsp; <kbd>Click</kbd> Select node
   </div>
 
   <!-- Scripts -->
@@ -632,52 +612,13 @@
 
     // ========== STATE ==========
     const state = {
-      repos: [], // { id, name, path, type, findings, secrets, vulns, timestamp, status }
+      repos: [],
       selectedRepo: null,
       reports: [],
       currentView: 'scan'
     };
 
     const SLOP = 'http://127.0.0.1:3000';
-
-    // ========== MATRIX RAIN ==========
-    function initMatrixRain() {
-      const canvas = document.getElementById('matrix-rain');
-      const ctx = canvas.getContext('2d');
-
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-
-      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()';
-      const fontSize = 14;
-      const columns = canvas.width / fontSize;
-      const drops = Array(Math.floor(columns)).fill(1);
-
-      function draw() {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        ctx.fillStyle = '#00ff41';
-        ctx.font = fontSize + 'px monospace';
-
-        for (let i = 0; i < drops.length; i++) {
-          const char = chars[Math.floor(Math.random() * chars.length)];
-          ctx.fillText(char, i * fontSize, drops[i] * fontSize);
-
-          if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
-            drops[i] = 0;
-          }
-          drops[i]++;
-        }
-      }
-
-      setInterval(draw, 50);
-
-      window.addEventListener('resize', () => {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-      });
-    }
 
     // ========== THREE.JS SETUP ==========
     let scene, camera, renderer, controls;
@@ -687,40 +628,40 @@
 
     function initScene() {
       scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x0d1117);
 
       camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-      camera.position.set(0, 30, 50);
+      camera.position.set(0, 25, 45);
 
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer = new THREE.WebGLRenderer({ antialias: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.setClearColor(0x000000, 0);
       document.getElementById('canvas-container').appendChild(renderer.domElement);
 
       controls = new OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true;
       controls.dampingFactor = 0.05;
       controls.maxPolarAngle = Math.PI / 2.1;
-      controls.minDistance = 20;
-      controls.maxDistance = 100;
+      controls.minDistance = 15;
+      controls.maxDistance = 80;
 
       raycaster = new THREE.Raycaster();
       mouse = new THREE.Vector2();
 
       // Lights
-      const ambientLight = new THREE.AmbientLight(0x003300, 0.5);
+      const ambientLight = new THREE.AmbientLight(0x404040, 1);
       scene.add(ambientLight);
 
-      const mainLight = new THREE.PointLight(0x00ff41, 2, 100);
-      mainLight.position.set(0, 30, 0);
+      const mainLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      mainLight.position.set(10, 20, 10);
       scene.add(mainLight);
 
-      // Grid
-      createGrid();
+      const fillLight = new THREE.DirectionalLight(0x58a6ff, 0.3);
+      fillLight.position.set(-10, 10, -10);
+      scene.add(fillLight);
 
-      // Central hub
+      createGrid();
       createCentralHub();
 
-      // Events
       window.addEventListener('resize', onResize);
       renderer.domElement.addEventListener('click', onMouseClick);
       renderer.domElement.addEventListener('mousemove', onMouseMove);
@@ -729,61 +670,36 @@
     }
 
     function createGrid() {
-      const gridSize = 80;
-      const divisions = 40;
-
-      const gridGeometry = new THREE.BufferGeometry();
-      const points = [];
-
-      for (let i = 0; i <= divisions; i++) {
-        const pos = (i / divisions - 0.5) * gridSize;
-        points.push(-gridSize / 2, 0, pos, gridSize / 2, 0, pos);
-        points.push(pos, 0, -gridSize / 2, pos, 0, gridSize / 2);
-      }
-
-      gridGeometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
-
-      const gridMaterial = new THREE.LineBasicMaterial({
-        color: 0x00ff41,
-        transparent: true,
-        opacity: 0.1
-      });
-
-      const grid = new THREE.LineSegments(gridGeometry, gridMaterial);
-      scene.add(grid);
+      const gridHelper = new THREE.GridHelper(60, 30, 0x30363d, 0x21262d);
+      scene.add(gridHelper);
     }
 
     function createCentralHub() {
       const group = new THREE.Group();
 
-      // Core
-      const coreGeom = new THREE.OctahedronGeometry(3, 0);
+      // Core sphere
+      const coreGeom = new THREE.IcosahedronGeometry(2.5, 1);
       const coreMat = new THREE.MeshPhongMaterial({
-        color: 0x00ff41,
-        emissive: 0x00ff41,
-        emissiveIntensity: 0.3,
-        transparent: true,
-        opacity: 0.8,
-        wireframe: true
+        color: 0x58a6ff,
+        emissive: 0x58a6ff,
+        emissiveIntensity: 0.2,
+        flatShading: true
       });
       const core = new THREE.Mesh(coreGeom, coreMat);
       group.add(core);
 
-      // Rings
-      for (let i = 0; i < 2; i++) {
-        const ringGeom = new THREE.TorusGeometry(5 + i * 2, 0.1, 8, 32);
-        const ringMat = new THREE.MeshBasicMaterial({
-          color: 0x00ff41,
-          transparent: true,
-          opacity: 0.4
-        });
-        const ring = new THREE.Mesh(ringGeom, ringMat);
-        ring.rotation.x = Math.PI / 2;
-        ring.userData.rotationSpeed = 0.01 * (i + 1);
-        group.add(ring);
-      }
+      // Outer ring
+      const ringGeom = new THREE.TorusGeometry(4, 0.15, 8, 32);
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: 0x58a6ff,
+        transparent: true,
+        opacity: 0.4
+      });
+      const ring = new THREE.Mesh(ringGeom, ringMat);
+      ring.rotation.x = Math.PI / 2;
+      group.add(ring);
 
-      group.position.y = 5;
+      group.position.y = 4;
       centralNode = group;
       scene.add(group);
     }
@@ -798,50 +714,43 @@
       const group = new THREE.Group();
 
       // Determine color based on threat level
-      let color = 0x00ff41; // safe
-      if (repo.secrets > 0 || repo.vulns > 5) color = 0xff0040; // critical
-      else if (repo.vulns > 0) color = 0xffaa00; // warning
+      let color = 0x3fb950; // success/safe
+      if (repo.secrets > 0 || repo.vulns > 10) color = 0xf85149; // critical
+      else if (repo.vulns > 0) color = 0xd29922; // warning
 
-      // Base
-      const baseGeom = new THREE.CylinderGeometry(2, 2.5, 0.5, 6);
+      // Base platform
+      const baseGeom = new THREE.CylinderGeometry(1.8, 2, 0.3, 6);
       const baseMat = new THREE.MeshPhongMaterial({
-        color: color,
-        emissive: color,
-        emissiveIntensity: 0.2,
-        transparent: true,
-        opacity: 0.7
+        color: 0x21262d,
+        flatShading: true
       });
       const base = new THREE.Mesh(baseGeom, baseMat);
       group.add(base);
 
-      // Data block
-      const blockGeom = new THREE.BoxGeometry(2.5, 3, 2.5);
+      // Main block
+      const blockGeom = new THREE.BoxGeometry(2, 2.5, 2);
       const blockMat = new THREE.MeshPhongMaterial({
         color: color,
-        emissive: color,
-        emissiveIntensity: 0.3,
-        transparent: true,
-        opacity: 0.8
+        flatShading: true
       });
       const block = new THREE.Mesh(blockGeom, blockMat);
-      block.position.y = 2;
+      block.position.y = 1.5;
       group.add(block);
 
-      // Wireframe overlay
-      const wireGeom = new THREE.BoxGeometry(2.7, 3.2, 2.7);
-      const wireMat = new THREE.MeshBasicMaterial({
+      // Top indicator
+      const topGeom = new THREE.ConeGeometry(0.5, 0.8, 4);
+      const topMat = new THREE.MeshPhongMaterial({
         color: color,
-        wireframe: true,
-        transparent: true,
-        opacity: 0.5
+        emissive: color,
+        emissiveIntensity: 0.3
       });
-      const wireframe = new THREE.Mesh(wireGeom, wireMat);
-      wireframe.position.y = 2;
-      group.add(wireframe);
+      const top = new THREE.Mesh(topGeom, topMat);
+      top.position.y = 3.2;
+      group.add(top);
 
-      // Position in circle around central hub
+      // Position in circle
       const angle = (repoNodes.length / 8) * Math.PI * 2;
-      const radius = 15 + Math.floor(repoNodes.length / 8) * 8;
+      const radius = 12 + Math.floor(repoNodes.length / 8) * 7;
       group.position.set(
         Math.cos(angle) * radius,
         0,
@@ -854,9 +763,9 @@
         color: color
       };
 
-      // Connection line to center
+      // Connection line
       const lineGeom = new THREE.BufferGeometry().setFromPoints([
-        group.position.clone().add(new THREE.Vector3(0, 2, 0)),
+        group.position.clone().add(new THREE.Vector3(0, 1.5, 0)),
         centralNode.position.clone()
       ]);
       const lineMat = new THREE.LineBasicMaterial({
@@ -875,12 +784,12 @@
     }
 
     function updateNodeColor(node, repo) {
-      let color = 0x00ff41;
-      if (repo.secrets > 0 || repo.vulns > 5) color = 0xff0040;
-      else if (repo.vulns > 0) color = 0xffaa00;
+      let color = 0x3fb950;
+      if (repo.secrets > 0 || repo.vulns > 10) color = 0xf85149;
+      else if (repo.vulns > 0) color = 0xd29922;
 
-      node.children.forEach(child => {
-        if (child.material) {
+      node.children.forEach((child, i) => {
+        if (i > 0 && child.material) {
           child.material.color.setHex(color);
           if (child.material.emissive) child.material.emissive.setHex(color);
         }
@@ -898,20 +807,15 @@
 
       const time = Date.now() * 0.001;
 
-      // Rotate central hub
+      // Gentle rotation of central hub
       if (centralNode) {
-        centralNode.children[0].rotation.y += 0.005;
-        centralNode.children.forEach(child => {
-          if (child.userData.rotationSpeed) {
-            child.rotation.z += child.userData.rotationSpeed;
-          }
-        });
+        centralNode.children[0].rotation.y += 0.003;
+        centralNode.children[1].rotation.z += 0.005;
       }
 
-      // Float repo nodes
+      // Subtle float for repo nodes
       repoNodes.forEach((node, i) => {
-        node.position.y = Math.sin(time + i) * 0.3;
-        node.children[1].rotation.y += 0.01;
+        node.position.y = Math.sin(time * 0.5 + i) * 0.15;
       });
 
       controls.update();
@@ -964,12 +868,12 @@
     window.showView = showView;
 
     function log(message, type = 'info') {
-      const terminal = document.getElementById('terminal');
+      const output = document.getElementById('logOutput');
       const line = document.createElement('div');
-      line.className = `terminal-line ${type}`;
-      line.textContent = `> ${message}`;
-      terminal.appendChild(line);
-      terminal.scrollTop = terminal.scrollHeight;
+      line.className = `log-line ${type}`;
+      line.textContent = message;
+      output.appendChild(line);
+      output.scrollTop = output.scrollHeight;
     }
 
     async function executeScan() {
@@ -977,13 +881,13 @@
       const gitUrl = document.getElementById('gitUrl').value.trim();
 
       if (!localPath && !gitUrl) {
-        log('ERROR: No target specified', 'error');
+        log('Error: No target specified', 'error');
         return;
       }
 
       const scanBtn = document.getElementById('scanBtn');
       scanBtn.disabled = true;
-      scanBtn.textContent = 'SCANNING...';
+      scanBtn.textContent = 'Scanning...';
 
       const args = { scanSecrets: true, scanPackages: true };
       let targetName = '';
@@ -993,12 +897,12 @@
         args.gitUrl = gitUrl;
         targetName = gitUrl.split('/').slice(-2).join('/').replace('.git', '');
         targetType = 'git';
-        log(`Initiating remote scan: ${gitUrl}`, 'info');
+        log(`Scanning: ${gitUrl}`);
       } else {
         args.targetPath = localPath;
         targetName = localPath.split(/[/\\]/).pop() || localPath;
         targetType = 'local';
-        log(`Initiating local scan: ${localPath}`, 'info');
+        log(`Scanning: ${localPath}`);
       }
 
       try {
@@ -1009,7 +913,6 @@
         });
 
         const data = await res.json();
-        console.log('Scan response:', data);
 
         if (data.result?.error) {
           throw new Error(data.result.error);
@@ -1069,20 +972,19 @@
         state.repos.push(repo);
         state.reports.push(repo);
 
-        // Add 3D node
         addRepoNode(repo);
 
-        log(`Scan complete: ${repo.secrets} secrets, ${repo.vulns} vulns`, repo.secrets > 0 ? 'error' : 'success');
+        log(`Complete: ${repo.secrets} secrets, ${repo.vulns} vulnerabilities`, repo.secrets > 0 ? 'error' : 'success');
         updateUI();
         selectRepo(repo.id);
 
       } catch (err) {
         console.error('Scan error:', err);
-        log(`ERROR: ${err.message}`, 'error');
+        log(`Error: ${err.message}`, 'error');
       }
 
       scanBtn.disabled = false;
-      scanBtn.textContent = 'INITIATE_SCAN';
+      scanBtn.textContent = 'Start Scan';
     }
     window.executeScan = executeScan;
 
@@ -1090,21 +992,18 @@
       state.selectedRepo = repoId;
       updateUI();
 
-      // Highlight node
       repoNodes.forEach(node => {
         const isSelected = node.userData.repoId === repoId;
-        node.scale.setScalar(isSelected ? 1.2 : 1);
+        node.scale.setScalar(isSelected ? 1.15 : 1);
       });
 
-      // Update repo list
       document.querySelectorAll('.repo-item').forEach(item => {
         item.classList.toggle('selected', item.dataset.id === repoId);
       });
 
-      // Show findings
       const repo = state.repos.find(r => r.id === repoId);
       if (repo) {
-        document.getElementById('selectedRepoInfo').style.display = 'block';
+        document.getElementById('selectedRepoInfo').classList.add('visible');
         document.getElementById('selectedRepoName').textContent = repo.name;
         document.getElementById('selectedRepoPath').textContent = repo.path;
         updateFindingsList(repo);
@@ -1113,7 +1012,6 @@
     window.selectRepo = selectRepo;
 
     function updateUI() {
-      // Header stats
       let totalCrit = 0, totalWarn = 0;
       state.repos.forEach(r => {
         totalCrit += r.secrets;
@@ -1124,12 +1022,11 @@
       document.getElementById('totalWarning').textContent = totalWarn;
       document.getElementById('totalRepos').textContent = state.repos.length;
 
-      // Repo list
       const repoList = document.getElementById('repoList');
       if (state.repos.length === 0) {
         repoList.innerHTML = `
           <div class="empty-state">
-            <div class="empty-state-icon">[?]</div>
+            <div class="empty-state-icon">📁</div>
             <p>No targets scanned yet</p>
           </div>
         `;
@@ -1140,11 +1037,14 @@
           else if (r.vulns > 0) status = 'warning';
 
           return `
-            <div class="repo-item ${status} ${state.selectedRepo === r.id ? 'selected' : ''}"
+            <div class="repo-item ${state.selectedRepo === r.id ? 'selected' : ''}"
                  data-id="${r.id}" onclick="selectRepo('${r.id}')">
-              <span class="repo-icon">${r.type === 'git' ? '[G]' : '[L]'}</span>
-              <span class="repo-name">${r.name}</span>
-              <span class="repo-count">${r.secrets}S ${r.vulns}V</span>
+              <div class="repo-status ${status}"></div>
+              <div class="repo-info">
+                <div class="repo-name">${r.name}</div>
+                <div class="repo-path">${r.type === 'git' ? '🌐' : '📁'} ${r.path}</div>
+              </div>
+              <div class="repo-stats">${r.secrets}S / ${r.vulns}V</div>
             </div>
           `;
         }).join('');
@@ -1157,7 +1057,7 @@
       if (!repo || repo.findings.length === 0) {
         container.innerHTML = `
           <div class="empty-state">
-            <div class="empty-state-icon">[~]</div>
+            <div class="empty-state-icon">✓</div>
             <p>${repo ? 'No findings for this target' : 'Select a target to view findings'}</p>
           </div>
         `;
@@ -1180,7 +1080,7 @@
       const tbody = document.getElementById('reportTableBody');
 
       if (state.reports.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--matrix-dim);">No reports yet</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No reports yet</td></tr>';
         return;
       }
 
@@ -1189,11 +1089,11 @@
           <td>${new Date(r.timestamp).toLocaleString()}</td>
           <td>${r.name}</td>
           <td>${r.type.toUpperCase()}</td>
-          <td style="color: ${r.secrets > 0 ? 'var(--danger)' : 'var(--matrix-green)'}">${r.secrets}</td>
-          <td style="color: ${r.vulns > 0 ? 'var(--warning)' : 'var(--matrix-green)'}">${r.vulns}</td>
+          <td style="color: ${r.secrets > 0 ? 'var(--critical)' : 'var(--success)'}">${r.secrets}</td>
+          <td style="color: ${r.vulns > 0 ? 'var(--warning)' : 'var(--success)'}">${r.vulns}</td>
           <td>${r.status}</td>
           <td>
-            <button class="btn" style="width: auto; padding: 4px 8px; font-size: 10px;" onclick="viewReport('${r.id}')">VIEW</button>
+            <button class="btn btn-secondary" style="width: auto; padding: 4px 10px; font-size: 11px;" onclick="viewReport('${r.id}')">View</button>
           </td>
         </tr>
       `).join('');
@@ -1217,16 +1117,15 @@
 
       if (format === 'json') {
         content = JSON.stringify(state.reports, null, 2);
-        filename = `slop-audit-report-${Date.now()}.json`;
+        filename = `slop-audit-${Date.now()}.json`;
         type = 'application/json';
       } else {
-        // CSV
         const headers = ['Timestamp', 'Name', 'Path', 'Type', 'Secrets', 'Vulns', 'Status'];
         const rows = state.reports.map(r =>
           [r.timestamp, r.name, r.path, r.type, r.secrets, r.vulns, r.status].join(',')
         );
         content = [headers.join(','), ...rows].join('\n');
-        filename = `slop-audit-report-${Date.now()}.csv`;
+        filename = `slop-audit-${Date.now()}.csv`;
         type = 'text/csv';
       }
 
@@ -1238,7 +1137,7 @@
       a.click();
       URL.revokeObjectURL(url);
 
-      log(`Exported ${state.reports.length} reports as ${format.toUpperCase()}`, 'success');
+      log(`Exported ${state.reports.length} reports`, 'success');
     }
     window.exportReports = exportReports;
 
@@ -1248,7 +1147,6 @@
         state.repos = [];
         state.selectedRepo = null;
 
-        // Remove 3D nodes
         repoNodes.forEach(node => {
           if (node.userData.connectionLine) scene.remove(node.userData.connectionLine);
           scene.remove(node);
@@ -1257,23 +1155,22 @@
 
         updateUI();
         updateReportsTable();
-        document.getElementById('selectedRepoInfo').style.display = 'none';
+        document.getElementById('selectedRepoInfo').classList.remove('visible');
         document.getElementById('findingList').innerHTML = `
           <div class="empty-state">
-            <div class="empty-state-icon">[~]</div>
+            <div class="empty-state-icon">🔍</div>
             <p>Select a target to view findings</p>
           </div>
         `;
 
-        log('All reports cleared', 'info');
+        log('All reports cleared');
       }
     }
     window.clearAllReports = clearAllReports;
 
     // ========== INIT ==========
-    initMatrixRain();
     initScene();
-    log('Security matrix online', 'success');
+    log('Ready to scan');
   </script>
 </body>
 </html>
