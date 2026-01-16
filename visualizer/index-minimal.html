@@ -47,6 +47,56 @@
       z-index: 1;
     }
 
+    /* 3D Hover Tooltip */
+    #tooltip3d {
+      position: fixed;
+      z-index: 200;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+      max-width: 280px;
+    }
+
+    #tooltip3d.visible {
+      opacity: 1;
+    }
+
+    #tooltip3d .tooltip-name {
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+      font-size: 13px;
+    }
+
+    #tooltip3d .tooltip-stats {
+      display: flex;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    #tooltip3d .tooltip-stat {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    #tooltip3d .tooltip-stat.critical { color: var(--critical); }
+    #tooltip3d .tooltip-stat.warning { color: var(--warning); }
+    #tooltip3d .tooltip-stat.safe { color: var(--success); }
+
+    #tooltip3d .tooltip-hint {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 6px;
+      border-top: 1px solid var(--border);
+      padding-top: 6px;
+    }
+
     /* Panels */
     .panel {
       position: fixed;
@@ -484,6 +534,16 @@
   <!-- Three.js 3D Canvas -->
   <div id="canvas-container"></div>
 
+  <!-- 3D Hover Tooltip -->
+  <div id="tooltip3d">
+    <div class="tooltip-name"></div>
+    <div class="tooltip-stats">
+      <span class="tooltip-stat critical"><span class="count">0</span> Secrets</span>
+      <span class="tooltip-stat warning"><span class="count">0</span> Vulns</span>
+    </div>
+    <div class="tooltip-hint">Click to view findings in 3D</div>
+  </div>
+
   <!-- Header -->
   <header id="header" class="panel">
     <div class="logo">
@@ -627,6 +687,9 @@
     let repoNodes = [];
     let centralNode;
     let raycaster, mouse;
+    let findingNodes = [];  // 3D nodes for vulnerabilities/secrets
+    let findingLines = [];  // Connection lines for findings
+    let hoveredNode = null; // Currently hovered repo node
 
     function initScene() {
       scene = new THREE.Scene();
@@ -804,6 +867,112 @@
       node.userData.color = color;
     }
 
+    // Clear all finding nodes from the scene
+    function clearFindingNodes() {
+      findingNodes.forEach(node => {
+        scene.remove(node);
+        if (node.geometry) node.geometry.dispose();
+        if (node.material) node.material.dispose();
+      });
+      findingNodes = [];
+
+      findingLines.forEach(line => {
+        scene.remove(line);
+        if (line.geometry) line.geometry.dispose();
+        if (line.material) line.material.dispose();
+      });
+      findingLines = [];
+    }
+
+    // Create 3D nodes for findings around a repo
+    function showFindingsIn3D(repo, repoNode) {
+      clearFindingNodes();
+
+      if (!repo.findings || repo.findings.length === 0) return;
+
+      const repoPos = repoNode.position.clone();
+      repoPos.y += 2; // Offset above the repo block
+
+      // Limit to 20 findings for performance
+      const findings = repo.findings.slice(0, 20);
+      const radius = 4;
+
+      findings.forEach((finding, i) => {
+        // Determine color by severity/type
+        let color;
+        if (finding.type === 'SECRET' || finding.severity === 'critical') {
+          color = 0xf85149; // red
+        } else if (finding.severity === 'high') {
+          color = 0xdb6d28; // orange
+        } else if (finding.severity === 'medium' || finding.type === 'VULN') {
+          color = 0xd29922; // yellow
+        } else {
+          color = 0x58a6ff; // blue
+        }
+
+        // Create finding node (small sphere)
+        const size = finding.type === 'SECRET' ? 0.4 : 0.3;
+        const geom = finding.type === 'SECRET'
+          ? new THREE.OctahedronGeometry(size, 0)
+          : new THREE.SphereGeometry(size, 8, 8);
+        const mat = new THREE.MeshPhongMaterial({
+          color: color,
+          emissive: color,
+          emissiveIntensity: 0.4,
+          flatShading: true
+        });
+        const mesh = new THREE.Mesh(geom, mat);
+
+        // Position in a spiral around the repo
+        const angle = (i / findings.length) * Math.PI * 2;
+        const yOffset = (i / findings.length) * 3 - 1.5;
+        mesh.position.set(
+          repoPos.x + Math.cos(angle) * radius,
+          repoPos.y + yOffset + 2,
+          repoPos.z + Math.sin(angle) * radius
+        );
+
+        mesh.userData = {
+          findingType: finding.type,
+          findingSeverity: finding.severity,
+          findingMessage: finding.message,
+          findingFile: finding.file
+        };
+
+        scene.add(mesh);
+        findingNodes.push(mesh);
+
+        // Create connection line to repo
+        const lineGeom = new THREE.BufferGeometry().setFromPoints([
+          mesh.position.clone(),
+          repoPos.clone().add(new THREE.Vector3(0, 1, 0))
+        ]);
+        const lineMat = new THREE.LineBasicMaterial({
+          color: color,
+          transparent: true,
+          opacity: 0.5
+        });
+        const line = new THREE.Line(lineGeom, lineMat);
+        scene.add(line);
+        findingLines.push(line);
+      });
+
+      // Also create a glowing connection from repo to central node
+      const centralLineGeom = new THREE.BufferGeometry().setFromPoints([
+        repoPos.clone(),
+        centralNode.position.clone()
+      ]);
+      const centralLineMat = new THREE.LineBasicMaterial({
+        color: repo.secrets > 0 ? 0xf85149 : (repo.vulns > 0 ? 0xd29922 : 0x3fb950),
+        transparent: true,
+        opacity: 0.8,
+        linewidth: 2
+      });
+      const centralLine = new THREE.Line(centralLineGeom, centralLineMat);
+      scene.add(centralLine);
+      findingLines.push(centralLine);
+    }
+
     function animate() {
       requestAnimationFrame(animate);
 
@@ -818,6 +987,15 @@
       // Subtle float for repo nodes
       repoNodes.forEach((node, i) => {
         node.position.y = Math.sin(time * 0.5 + i) * 0.15;
+      });
+
+      // Animate finding nodes - gentle orbit and pulse
+      findingNodes.forEach((node, i) => {
+        node.rotation.y += 0.02;
+        node.rotation.x += 0.01;
+        // Pulse effect
+        const scale = 1 + Math.sin(time * 3 + i) * 0.1;
+        node.scale.setScalar(scale);
       });
 
       controls.update();
@@ -836,7 +1014,46 @@
 
       raycaster.setFromCamera(mouse, camera);
       const intersects = raycaster.intersectObjects(repoNodes, true);
-      document.body.style.cursor = intersects.length > 0 ? 'pointer' : 'default';
+
+      const tooltip = document.getElementById('tooltip3d');
+
+      if (intersects.length > 0) {
+        document.body.style.cursor = 'pointer';
+
+        // Find the repo node group
+        let target = intersects[0].object;
+        while (target.parent && !target.userData.repoId) {
+          target = target.parent;
+        }
+
+        if (target.userData.repoId && target !== hoveredNode) {
+          hoveredNode = target;
+          const repo = state.repos.find(r => r.id === target.userData.repoId);
+
+          if (repo) {
+            // Update tooltip content
+            tooltip.querySelector('.tooltip-name').textContent = repo.name;
+            tooltip.querySelector('.tooltip-stat.critical .count').textContent = repo.secrets;
+            tooltip.querySelector('.tooltip-stat.warning .count').textContent = repo.vulns;
+
+            // Update colors based on status
+            const critStat = tooltip.querySelector('.tooltip-stat.critical');
+            const warnStat = tooltip.querySelector('.tooltip-stat.warning');
+            critStat.style.color = repo.secrets > 0 ? 'var(--critical)' : 'var(--text-muted)';
+            warnStat.style.color = repo.vulns > 0 ? 'var(--warning)' : 'var(--text-muted)';
+          }
+        }
+
+        // Position tooltip near cursor
+        tooltip.style.left = (event.clientX + 15) + 'px';
+        tooltip.style.top = (event.clientY + 15) + 'px';
+        tooltip.classList.add('visible');
+
+      } else {
+        document.body.style.cursor = 'default';
+        tooltip.classList.remove('visible');
+        hoveredNode = null;
+      }
     }
 
     function onMouseClick(event) {
@@ -994,9 +1211,11 @@
       state.selectedRepo = repoId;
       updateUI();
 
+      let selectedNode = null;
       repoNodes.forEach(node => {
         const isSelected = node.userData.repoId === repoId;
         node.scale.setScalar(isSelected ? 1.15 : 1);
+        if (isSelected) selectedNode = node;
       });
 
       document.querySelectorAll('.repo-item').forEach(item => {
@@ -1009,6 +1228,19 @@
         document.getElementById('selectedRepoName').textContent = repo.name;
         document.getElementById('selectedRepoPath').textContent = repo.path;
         updateFindingsList(repo);
+
+        // Show findings in 3D view
+        if (selectedNode) {
+          showFindingsIn3D(repo, selectedNode);
+
+          // Smoothly move camera to focus on selected repo
+          const targetPos = selectedNode.position.clone();
+          targetPos.y += 10;
+          targetPos.z += 20;
+        }
+      } else {
+        // No repo selected, clear finding nodes
+        clearFindingNodes();
       }
     }
     window.selectRepo = selectRepo;
