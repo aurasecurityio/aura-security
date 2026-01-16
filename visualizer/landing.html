@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SLOP Auditor - Security Scanning Made Visual</title>
-  <meta name="description" content="A deterministic security auditing engine with 3D visualization. Scan code, find vulnerabilities, see everything in one place.">
+  <title>SLOP Auditor - Security Scanning Visualized</title>
+  <meta name="description" content="Unified security scanning with 3D visualization. One command, all your scanners, complete clarity.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <style>
     * {
@@ -17,69 +17,61 @@
     }
 
     :root {
-      --bg-dark: #08090c;
-      --bg-card: rgba(255, 255, 255, 0.03);
-      --bg-card-hover: rgba(255, 255, 255, 0.06);
-      --border: rgba(255, 255, 255, 0.08);
-      --text-primary: #ffffff;
-      --text-secondary: rgba(255, 255, 255, 0.7);
-      --text-muted: rgba(255, 255, 255, 0.5);
-      --accent: #f0a050;
-      --accent-glow: rgba(240, 160, 80, 0.3);
-      --green: #4ade80;
-      --green-bg: rgba(74, 222, 128, 0.1);
-      --cyan: #22d3ee;
-      --red: #f87171;
-      --purple: #a78bfa;
+      --bg: #030712;
+      --bg-elevated: #0f172a;
+      --bg-card: rgba(15, 23, 42, 0.6);
+      --border: rgba(148, 163, 184, 0.1);
+      --text: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --primary: #06b6d4;
+      --primary-glow: rgba(6, 182, 212, 0.4);
+      --secondary: #8b5cf6;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --success: #10b981;
     }
 
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-      background: var(--bg-dark);
-      color: var(--text-primary);
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
       line-height: 1.6;
       overflow-x: hidden;
     }
 
-    /* Gradient background */
-    .bg-gradient {
+    h1, h2, h3, h4 {
+      font-family: 'Space Grotesk', sans-serif;
+    }
+
+    /* Animated gradient mesh background */
+    .mesh-gradient {
       position: fixed;
       top: 0;
       left: 0;
       right: 0;
       bottom: 0;
+      z-index: -2;
       background:
-        radial-gradient(ellipse at 20% 20%, rgba(240, 160, 80, 0.08) 0%, transparent 50%),
-        radial-gradient(ellipse at 80% 80%, rgba(34, 211, 238, 0.05) 0%, transparent 50%),
-        linear-gradient(180deg, #08090c 0%, #0d0f14 50%, #08090c 100%);
-      pointer-events: none;
-      z-index: -1;
+        radial-gradient(at 0% 0%, rgba(6, 182, 212, 0.15) 0%, transparent 50%),
+        radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.1) 0%, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(6, 182, 212, 0.1) 0%, transparent 50%),
+        radial-gradient(at 0% 100%, rgba(139, 92, 246, 0.15) 0%, transparent 50%);
     }
 
-    /* Stars */
-    .stars {
+    /* Grid pattern overlay */
+    .grid-pattern {
       position: fixed;
       top: 0;
       left: 0;
       right: 0;
       bottom: 0;
-      pointer-events: none;
       z-index: -1;
-    }
-
-    .star {
-      position: absolute;
-      width: 2px;
-      height: 2px;
-      background: white;
-      border-radius: 50%;
-      opacity: 0.3;
-      animation: twinkle 3s infinite;
-    }
-
-    @keyframes twinkle {
-      0%, 100% { opacity: 0.3; }
-      50% { opacity: 0.8; }
+      background-image:
+        linear-gradient(rgba(148, 163, 184, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 163, 184, 0.03) 1px, transparent 1px);
+      background-size: 60px 60px;
+      mask-image: radial-gradient(ellipse at center, black 0%, transparent 70%);
     }
 
     /* Navigation */
@@ -89,361 +81,295 @@
       left: 0;
       right: 0;
       z-index: 100;
-      padding: 1.25rem 2rem;
-      background: rgba(8, 9, 12, 0.8);
-      backdrop-filter: blur(20px);
-      border-bottom: 1px solid var(--border);
+      padding: 1rem 2rem;
     }
 
-    .nav-container {
-      max-width: 1200px;
+    .nav-inner {
+      max-width: 1280px;
       margin: 0 auto;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      padding: 0.75rem 1.5rem;
+      background: rgba(3, 7, 18, 0.8);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      border-radius: 16px;
     }
 
     .logo {
-      font-family: 'DM Serif Display', serif;
-      font-size: 1.5rem;
-      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
       text-decoration: none;
+      color: var(--text);
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      font-size: 1.25rem;
+    }
+
+    .logo-mark {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+    }
+
+    .nav-links {
       display: flex;
       align-items: center;
       gap: 0.5rem;
     }
 
-    .logo-icon {
-      font-size: 1.75rem;
-    }
-
-    .nav-links {
-      display: flex;
-      gap: 2.5rem;
-      align-items: center;
-    }
-
-    .nav-links a {
+    .nav-link {
       color: var(--text-secondary);
       text-decoration: none;
-      font-size: 0.9rem;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-size: 0.875rem;
       font-weight: 500;
-      transition: color 0.2s;
+      transition: all 0.2s;
     }
 
-    .nav-links a:hover {
-      color: var(--text-primary);
+    .nav-link:hover {
+      color: var(--text);
+      background: rgba(148, 163, 184, 0.1);
     }
 
     .btn {
       display: inline-flex;
       align-items: center;
       gap: 0.5rem;
-      padding: 0.75rem 1.5rem;
-      border-radius: 8px;
-      font-size: 0.9rem;
+      padding: 0.625rem 1.25rem;
+      border-radius: 10px;
+      font-size: 0.875rem;
       font-weight: 600;
       text-decoration: none;
       transition: all 0.2s;
-      cursor: pointer;
       border: none;
+      cursor: pointer;
     }
 
     .btn-primary {
-      background: var(--text-primary);
-      color: var(--bg-dark);
+      background: linear-gradient(135deg, var(--primary), #0891b2);
+      color: white;
+      box-shadow: 0 0 20px var(--primary-glow);
     }
 
     .btn-primary:hover {
       transform: translateY(-2px);
-      box-shadow: 0 8px 30px rgba(255, 255, 255, 0.2);
+      box-shadow: 0 0 30px var(--primary-glow);
     }
 
-    .btn-secondary {
+    .btn-ghost {
       background: transparent;
-      color: var(--text-primary);
+      color: var(--text);
       border: 1px solid var(--border);
     }
 
-    .btn-secondary:hover {
-      background: var(--bg-card);
-      border-color: var(--text-muted);
-    }
-
-    .btn-accent {
-      background: linear-gradient(135deg, var(--accent), #e07830);
-      color: white;
-    }
-
-    .btn-accent:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 30px var(--accent-glow);
+    .btn-ghost:hover {
+      background: rgba(148, 163, 184, 0.1);
+      border-color: rgba(148, 163, 184, 0.2);
     }
 
     /* Hero Section */
     .hero {
       min-height: 100vh;
       display: flex;
-      flex-direction: column;
-      justify-content: center;
       align-items: center;
-      text-align: center;
       padding: 8rem 2rem 4rem;
       position: relative;
+    }
+
+    .hero-container {
+      max-width: 1280px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4rem;
+      align-items: center;
     }
 
     .hero-content {
       position: relative;
       z-index: 2;
-      max-width: 900px;
     }
 
-    .hero h1 {
-      font-family: 'DM Serif Display', serif;
-      font-size: clamp(2.5rem, 6vw, 4.5rem);
-      font-weight: 400;
-      line-height: 1.1;
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      background: rgba(6, 182, 212, 0.1);
+      border: 1px solid rgba(6, 182, 212, 0.2);
+      border-radius: 100px;
+      font-size: 0.8125rem;
+      color: var(--primary);
       margin-bottom: 1.5rem;
     }
 
-    .hero h1 .highlight {
-      color: var(--accent);
-      font-style: italic;
+    .hero-badge::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      background: var(--primary);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
     }
 
-    .hero .subtitle {
-      font-size: 1.25rem;
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.2); }
+    }
+
+    .hero h1 {
+      font-size: clamp(2.5rem, 5vw, 3.75rem);
+      font-weight: 700;
+      line-height: 1.1;
+      margin-bottom: 1.5rem;
+      letter-spacing: -0.02em;
+    }
+
+    .hero h1 .gradient-text {
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-description {
+      font-size: 1.125rem;
       color: var(--text-secondary);
-      margin-bottom: 2.5rem;
+      margin-bottom: 2rem;
+      max-width: 480px;
     }
 
-    .hero-buttons {
+    .hero-actions {
       display: flex;
       gap: 1rem;
-      justify-content: center;
       flex-wrap: wrap;
     }
 
-    .hero-buttons .btn {
-      padding: 1rem 2rem;
-      font-size: 1rem;
+    .hero-actions .btn {
+      padding: 0.875rem 1.75rem;
+      font-size: 0.9375rem;
     }
 
-    /* 3D Characters Container */
+    .hero-stats {
+      display: flex;
+      gap: 2.5rem;
+      margin-top: 3rem;
+      padding-top: 2rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .stat {
+      text-align: left;
+    }
+
+    .stat-value {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .stat-label {
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+    }
+
+    /* 3D Scene */
     .hero-3d {
+      position: relative;
+      height: 500px;
+    }
+
+    #hero-canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Bento Grid Features */
+    .features-section {
+      padding: 6rem 2rem;
+      position: relative;
+    }
+
+    .features-container {
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+
+    .section-header {
+      text-align: center;
+      margin-bottom: 4rem;
+    }
+
+    .section-header h2 {
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+    }
+
+    .section-header p {
+      color: var(--text-secondary);
+      font-size: 1.125rem;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .bento-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: auto auto;
+      gap: 1.5rem;
+    }
+
+    .bento-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 2rem;
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .bento-card::before {
+      content: '';
       position: absolute;
       top: 0;
       left: 0;
       right: 0;
-      bottom: 0;
-      pointer-events: none;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(6, 182, 212, 0.5), transparent);
+      opacity: 0;
+      transition: opacity 0.3s;
     }
 
-    .character-left, .character-right {
-      position: absolute;
-      bottom: 15%;
-      width: 280px;
-      height: 280px;
-    }
-
-    .character-left {
-      left: 5%;
-    }
-
-    .character-right {
-      right: 5%;
-    }
-
-    /* Scroll indicator */
-    .scroll-indicator {
-      position: absolute;
-      bottom: 2rem;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0.5rem;
-      color: var(--text-muted);
-      font-size: 0.8rem;
-      animation: bounce 2s infinite;
-    }
-
-    @keyframes bounce {
-      0%, 100% { transform: translateX(-50%) translateY(0); }
-      50% { transform: translateX(-50%) translateY(8px); }
-    }
-
-    /* Section Styles */
-    .section {
-      padding: 8rem 2rem;
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-
-    .section-badge {
-      display: inline-block;
-      padding: 0.5rem 1rem;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 100px;
-      font-size: 0.8rem;
-      font-weight: 600;
-      color: var(--text-secondary);
-      margin-bottom: 1.5rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
-    .section-title {
-      font-family: 'DM Serif Display', serif;
-      font-size: clamp(2rem, 4vw, 3rem);
-      font-weight: 400;
-      margin-bottom: 1rem;
-      line-height: 1.2;
-    }
-
-    .section-title .highlight {
-      color: var(--accent);
-      font-style: italic;
-    }
-
-    .section-title .highlight-green {
-      color: var(--green);
-      font-style: italic;
-    }
-
-    .section-subtitle {
-      font-size: 1.125rem;
-      color: var(--text-secondary);
-      max-width: 700px;
-      margin-bottom: 3rem;
-    }
-
-    /* Problem Section */
-    .problem-section {
-      text-align: center;
-    }
-
-    .terminal-mockup {
-      max-width: 600px;
-      margin: 3rem auto;
-      background: #0d0d0d;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      overflow: hidden;
-    }
-
-    .terminal-header {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.875rem 1rem;
-      background: rgba(255, 255, 255, 0.03);
-      border-bottom: 1px solid var(--border);
-    }
-
-    .terminal-dot {
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-    }
-    .terminal-dot.red { background: #ff5f57; }
-    .terminal-dot.yellow { background: #febc2e; }
-    .terminal-dot.green { background: #28c840; }
-
-    .terminal-body {
-      padding: 1.5rem;
-      font-family: 'SF Mono', 'Fira Code', monospace;
-      font-size: 0.8rem;
-      text-align: left;
-      color: var(--text-secondary);
-      line-height: 2;
-    }
-
-    .terminal-line {
-      opacity: 0.6;
-    }
-
-    .problem-points {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-      max-width: 500px;
-      margin: 2rem auto 0;
-      text-align: left;
-    }
-
-    .problem-point {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      color: var(--text-secondary);
-    }
-
-    .problem-point .icon {
-      color: var(--red);
-      font-size: 1.25rem;
-    }
-
-    .highlight-box {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.75rem 1.25rem;
-      background: rgba(248, 113, 113, 0.1);
-      border: 1px solid rgba(248, 113, 113, 0.2);
-      border-radius: 8px;
-      color: var(--red);
-      font-weight: 500;
-      margin-top: 2rem;
-    }
-
-    /* Solution Section */
-    .solution-section {
-      background: linear-gradient(180deg, rgba(74, 222, 128, 0.02) 0%, transparent 100%);
-      border-top: 1px solid rgba(74, 222, 128, 0.1);
-      padding: 8rem 2rem;
-    }
-
-    .solution-content {
-      max-width: 1200px;
-      margin: 0 auto;
-      text-align: center;
-    }
-
-    .solution-section .section-badge {
-      background: var(--green-bg);
-      border-color: rgba(74, 222, 128, 0.2);
-      color: var(--green);
-    }
-
-    .features-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 1.5rem;
-      margin-top: 3rem;
-    }
-
-    .feature-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 2rem;
-      text-align: left;
-      transition: all 0.3s;
-    }
-
-    .feature-card:hover {
-      background: var(--bg-card-hover);
-      border-color: rgba(255, 255, 255, 0.15);
+    .bento-card:hover {
+      border-color: rgba(6, 182, 212, 0.3);
       transform: translateY(-4px);
     }
 
-    .feature-icon {
+    .bento-card:hover::before {
+      opacity: 1;
+    }
+
+    .bento-card.featured {
+      grid-column: span 2;
+    }
+
+    .bento-icon {
       width: 48px;
       height: 48px;
-      background: linear-gradient(135deg, rgba(74, 222, 128, 0.2), rgba(34, 211, 238, 0.2));
+      background: linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(139, 92, 246, 0.2));
       border-radius: 12px;
       display: flex;
       align-items: center;
@@ -452,102 +378,50 @@
       margin-bottom: 1.25rem;
     }
 
-    .feature-card h3 {
-      font-size: 1.125rem;
-      font-weight: 600;
-      margin-bottom: 0.5rem;
-    }
-
-    .feature-card p {
-      color: var(--text-secondary);
-      font-size: 0.9375rem;
-    }
-
-    /* How It Works */
-    .steps-section {
-      text-align: center;
-    }
-
-    .steps-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 2rem;
-      margin-top: 4rem;
-    }
-
-    .step-card {
-      position: relative;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 2.5rem 2rem 2rem;
-      text-align: left;
-    }
-
-    .step-number {
-      position: absolute;
-      top: -16px;
-      left: 24px;
-      width: 40px;
-      height: 40px;
-      background: linear-gradient(135deg, var(--accent), #e07830);
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.125rem;
-      font-weight: 700;
-      color: white;
-    }
-
-    .step-card h3 {
-      font-family: 'DM Serif Display', serif;
+    .bento-card h3 {
       font-size: 1.25rem;
+      font-weight: 600;
       margin-bottom: 0.75rem;
-      margin-top: 0.5rem;
     }
 
-    .step-card p {
+    .bento-card p {
       color: var(--text-secondary);
       font-size: 0.9375rem;
-      margin-bottom: 1.25rem;
     }
 
-    .step-card code {
-      display: block;
-      padding: 0.875rem 1rem;
-      background: rgba(0, 0, 0, 0.3);
-      border-radius: 8px;
+    /* Code Preview */
+    .code-preview {
+      margin-top: 1.5rem;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
       font-family: 'SF Mono', 'Fira Code', monospace;
       font-size: 0.8125rem;
-      color: var(--green);
+      overflow-x: auto;
     }
 
-    .step-characters {
+    .code-line {
       display: flex;
-      gap: -8px;
-      margin-top: 1rem;
+      gap: 0.75rem;
     }
 
-    .step-avatar {
-      width: 36px;
-      height: 36px;
-      background: linear-gradient(135deg, var(--cyan), var(--purple));
-      border-radius: 50%;
-      border: 2px solid var(--bg-dark);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1rem;
-      margin-left: -8px;
+    .code-prompt {
+      color: var(--primary);
     }
 
-    .step-avatar:first-child {
-      margin-left: 0;
+    .code-command {
+      color: var(--text);
     }
 
     /* Tools Section */
     .tools-section {
+      padding: 6rem 2rem;
+      background: linear-gradient(180deg, transparent, rgba(6, 182, 212, 0.02), transparent);
+    }
+
+    .tools-container {
+      max-width: 1280px;
+      margin: 0 auto;
       text-align: center;
     }
 
@@ -559,61 +433,64 @@
       margin-top: 3rem;
     }
 
-    .tool-badge {
+    .tool-chip {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
-      padding: 1rem 1.5rem;
+      gap: 0.625rem;
+      padding: 0.75rem 1.25rem;
       background: var(--bg-card);
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: 100px;
+      font-size: 0.9375rem;
       font-weight: 500;
       transition: all 0.2s;
     }
 
-    .tool-badge:hover {
-      background: var(--bg-card-hover);
-      transform: translateY(-2px);
+    .tool-chip:hover {
+      border-color: var(--primary);
+      box-shadow: 0 0 20px rgba(6, 182, 212, 0.1);
     }
 
-    .tool-badge .icon {
-      font-size: 1.25rem;
+    .tool-chip .icon {
+      font-size: 1.125rem;
     }
 
     /* CTA Section */
     .cta-section {
-      text-align: center;
       padding: 8rem 2rem;
+      text-align: center;
       position: relative;
     }
 
     .cta-section::before {
       content: '';
       position: absolute;
-      top: 0;
+      top: 50%;
       left: 50%;
-      transform: translateX(-50%);
+      transform: translate(-50%, -50%);
       width: 600px;
-      height: 400px;
-      background: radial-gradient(ellipse at center, rgba(240, 160, 80, 0.1) 0%, transparent 70%);
+      height: 600px;
+      background: radial-gradient(circle, rgba(6, 182, 212, 0.1) 0%, transparent 70%);
       pointer-events: none;
     }
 
     .cta-content {
       position: relative;
       z-index: 2;
+      max-width: 600px;
+      margin: 0 auto;
     }
 
-    .cta-section h2 {
-      font-family: 'DM Serif Display', serif;
-      font-size: clamp(2rem, 4vw, 3rem);
+    .cta-content h2 {
+      font-size: 2.5rem;
+      font-weight: 700;
       margin-bottom: 1rem;
     }
 
-    .cta-section p {
+    .cta-content p {
       color: var(--text-secondary);
       font-size: 1.125rem;
-      margin-bottom: 2.5rem;
+      margin-bottom: 2rem;
     }
 
     .cta-buttons {
@@ -629,137 +506,121 @@
       border-top: 1px solid var(--border);
     }
 
-    .footer-content {
-      max-width: 1200px;
+    .footer-container {
+      max-width: 1280px;
       margin: 0 auto;
       display: flex;
       justify-content: space-between;
-      align-items: flex-start;
+      align-items: center;
       flex-wrap: wrap;
       gap: 2rem;
     }
 
-    .footer-brand {
-      max-width: 300px;
-    }
-
-    .footer-brand .logo {
-      margin-bottom: 1rem;
-    }
-
-    .footer-brand p {
-      color: var(--text-muted);
-      font-size: 0.875rem;
+    .footer-left {
+      display: flex;
+      align-items: center;
+      gap: 2rem;
     }
 
     .footer-links {
       display: flex;
-      gap: 4rem;
+      gap: 1.5rem;
     }
 
-    .footer-column h4 {
-      font-size: 0.875rem;
-      font-weight: 600;
-      margin-bottom: 1rem;
-      color: var(--text-secondary);
-    }
-
-    .footer-column a {
-      display: block;
+    .footer-links a {
       color: var(--text-muted);
       text-decoration: none;
       font-size: 0.875rem;
-      margin-bottom: 0.5rem;
       transition: color 0.2s;
     }
 
-    .footer-column a:hover {
-      color: var(--text-primary);
+    .footer-links a:hover {
+      color: var(--text);
     }
 
-    .footer-bottom {
-      max-width: 1200px;
-      margin: 3rem auto 0;
-      padding-top: 2rem;
-      border-top: 1px solid var(--border);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+    .footer-right {
       color: var(--text-muted);
       font-size: 0.8125rem;
     }
 
-    .footer-social {
-      display: flex;
-      gap: 1rem;
-    }
-
-    .footer-social a {
-      color: var(--text-muted);
-      font-size: 1.25rem;
-      transition: color 0.2s;
-    }
-
-    .footer-social a:hover {
-      color: var(--text-primary);
-    }
-
     /* Responsive */
-    @media (max-width: 968px) {
-      .features-grid, .steps-grid {
+    @media (max-width: 1024px) {
+      .hero-container {
+        grid-template-columns: 1fr;
+        text-align: center;
+      }
+
+      .hero-content {
+        order: 2;
+      }
+
+      .hero-3d {
+        order: 1;
+        height: 350px;
+      }
+
+      .hero-description {
+        margin: 0 auto 2rem;
+      }
+
+      .hero-actions {
+        justify-content: center;
+      }
+
+      .hero-stats {
+        justify-content: center;
+      }
+
+      .bento-grid {
         grid-template-columns: 1fr;
       }
 
-      .character-left, .character-right {
-        display: none;
-      }
-
-      .nav-links {
-        display: none;
-      }
-
-      .footer-links {
-        gap: 2rem;
+      .bento-card.featured {
+        grid-column: span 1;
       }
     }
 
     @media (max-width: 640px) {
+      .nav-links {
+        display: none;
+      }
+
       .hero h1 {
         font-size: 2rem;
       }
 
-      .section {
-        padding: 4rem 1.5rem;
+      .hero-stats {
+        flex-direction: column;
+        gap: 1.5rem;
+        align-items: center;
       }
 
-      .footer-content {
+      .footer-container {
         flex-direction: column;
-      }
-
-      .footer-bottom {
-        flex-direction: column;
-        gap: 1rem;
         text-align: center;
+      }
+
+      .footer-left {
+        flex-direction: column;
       }
     }
   </style>
 </head>
 <body>
-  <div class="bg-gradient"></div>
-  <div class="stars" id="stars"></div>
+  <div class="mesh-gradient"></div>
+  <div class="grid-pattern"></div>
 
   <!-- Navigation -->
   <nav>
-    <div class="nav-container">
+    <div class="nav-inner">
       <a href="/" class="logo">
-        <span class="logo-icon">🛡️</span>
+        <div class="logo-mark">🛡️</div>
         SLOP Auditor
       </a>
       <div class="nav-links">
-        <a href="#problem">Problem</a>
-        <a href="#solution">Solution</a>
-        <a href="#how-it-works">How It Works</a>
-        <a href="https://github.com/slopsecurityadmin/slop-security-auditor" target="_blank">GitHub</a>
+        <a href="#features" class="nav-link">Features</a>
+        <a href="#tools" class="nav-link">Integrations</a>
+        <a href="https://github.com/slopsecurityadmin/slop-security-auditor" target="_blank" class="nav-link">GitHub</a>
         <a href="/app" class="btn btn-primary">Open Dashboard</a>
       </div>
     </div>
@@ -767,425 +628,385 @@
 
   <!-- Hero Section -->
   <section class="hero">
-    <div class="hero-3d">
-      <div class="character-left" id="character-left"></div>
-      <div class="character-right" id="character-right"></div>
-    </div>
-
-    <div class="hero-content">
-      <h1>What if finding <span class="highlight">vulnerabilities</span> felt intuitive?</h1>
-      <p class="subtitle">One dashboard. All your scanners. Complete clarity.</p>
-      <div class="hero-buttons">
-        <a href="/app" class="btn btn-primary">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
-          </svg>
-          Launch Dashboard
-        </a>
-        <a href="https://github.com/slopsecurityadmin/slop-security-auditor" target="_blank" class="btn btn-secondary">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-          </svg>
-          View on GitHub
-        </a>
+    <div class="hero-container">
+      <div class="hero-content">
+        <div class="hero-badge">Open Source Security Scanner</div>
+        <h1>Security scanning,<br><span class="gradient-text">visualized in 3D</span></h1>
+        <p class="hero-description">
+          Unify Gitleaks, Trivy, Semgrep and more into a single command.
+          See vulnerabilities in an interactive 3D dashboard. Deterministic results, no AI guesswork.
+        </p>
+        <div class="hero-actions">
+          <a href="/app" class="btn btn-primary">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
+            Try Dashboard
+          </a>
+          <a href="https://github.com/slopsecurityadmin/slop-security-auditor" target="_blank" class="btn btn-ghost">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+            </svg>
+            View Source
+          </a>
+        </div>
+        <div class="hero-stats">
+          <div class="stat">
+            <div class="stat-value">8+</div>
+            <div class="stat-label">Security Scanners</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value">3D</div>
+            <div class="stat-label">Visualization</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value">100%</div>
+            <div class="stat-label">Deterministic</div>
+          </div>
+        </div>
       </div>
-    </div>
 
-    <div class="scroll-indicator">
-      <span>Scroll to explore</span>
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M12 5v14M5 12l7 7 7-7"/>
-      </svg>
-    </div>
-  </section>
-
-  <!-- Problem Section -->
-  <section class="section problem-section" id="problem">
-    <span class="section-badge">The Problem</span>
-    <h2 class="section-title">Too many <span class="highlight">scanners</span>.<br>Too many <span class="highlight">terminals</span>.<br>Zero clarity.</h2>
-
-    <div class="terminal-mockup">
-      <div class="terminal-header">
-        <span class="terminal-dot red"></span>
-        <span class="terminal-dot yellow"></span>
-        <span class="terminal-dot green"></span>
-      </div>
-      <div class="terminal-body">
-        <div class="terminal-line">$ gitleaks detect --source . -v</div>
-        <div class="terminal-line">$ trivy fs --scanners vuln .</div>
-        <div class="terminal-line">$ semgrep --config auto .</div>
-        <div class="terminal-line">$ npm audit --json</div>
-        <div class="terminal-line">$ pip-audit</div>
-        <div class="terminal-line">$ cargo audit</div>
-        <div class="terminal-line" style="color: var(--text-muted);">...</div>
-      </div>
-    </div>
-
-    <p class="section-subtitle" style="text-align: center; margin: 2rem auto;">
-      Security teams juggle 6+ different tools, each with its own output format,
-      false positive rate, and learning curve. Context gets lost. Findings get missed.
-    </p>
-
-    <div class="highlight-box" style="margin: 0 auto; display: inline-flex;">
-      <span>⚠️</span>
-      There has to be a better way.
-    </div>
-  </section>
-
-  <!-- Solution Section -->
-  <section class="solution-section" id="solution">
-    <div class="solution-content">
-      <span class="section-badge">The Solution</span>
-      <h2 class="section-title">One command. <span class="highlight-green">Complete visibility</span>.</h2>
-      <p class="section-subtitle" style="margin: 0 auto 3rem;">
-        SLOP Auditor unifies your security scanners into a single interface with
-        3D visualization. See everything at a glance. Act on what matters.
-      </p>
-
-      <div class="features-grid">
-        <div class="feature-card">
-          <div class="feature-icon">🔍</div>
-          <h3>Unified Scanning</h3>
-          <p>Run Gitleaks, Trivy, Semgrep, and npm audit with a single command. All results in one place.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🎮</div>
-          <h3>3D Command Center</h3>
-          <p>Interactive Three.js dashboard shows your security posture spatially. Like a game, but for security.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">⚡</div>
-          <h3>Real-time Updates</h3>
-          <p>WebSocket-powered live updates. See findings appear as scanners run. No refresh needed.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">☁️</div>
-          <h3>AWS Integration</h3>
-          <p>Scan IAM, S3, EC2, Lambda, and RDS for misconfigurations. Cloud security in the same view.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🔔</div>
-          <h3>Smart Notifications</h3>
-          <p>Slack, Discord, and webhook integrations. Get alerted on critical findings instantly.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🤖</div>
-          <h3>Deterministic Results</h3>
-          <p>No AI hallucinations. All findings come from real scanners with reproducible results.</p>
-        </div>
+      <div class="hero-3d">
+        <div id="hero-canvas"></div>
       </div>
     </div>
   </section>
 
-  <!-- How It Works -->
-  <section class="section steps-section" id="how-it-works">
-    <span class="section-badge">How It Works</span>
-    <h2 class="section-title">Three steps to <span class="highlight">complete clarity</span></h2>
-    <p class="section-subtitle" style="text-align: center; margin: 0 auto;">
-      Get from zero to full security visibility in under a minute.
-    </p>
+  <!-- Features Section -->
+  <section class="features-section" id="features">
+    <div class="features-container">
+      <div class="section-header">
+        <h2>Everything you need for security scanning</h2>
+        <p>One CLI to rule them all. Unified results, interactive visualization, real-time updates.</p>
+      </div>
 
-    <div class="steps-grid">
-      <div class="step-card">
-        <div class="step-number">1</div>
-        <h3>Install</h3>
-        <p>One command to install. Works with npm, pip, or Docker.</p>
-        <code>npm install -g slop-auditor</code>
-      </div>
-      <div class="step-card">
-        <div class="step-number">2</div>
-        <h3>Scan</h3>
-        <p>Point it at any repo or AWS account. All scanners run in parallel.</p>
-        <code>slop-auditor scan ./my-project</code>
-      </div>
-      <div class="step-card">
-        <div class="step-number">3</div>
-        <h3>Visualize</h3>
-        <p>Open the 3D dashboard. See every finding, prioritized and actionable.</p>
-        <code>slop-auditor serve && open /app</code>
+      <div class="bento-grid">
+        <div class="bento-card featured">
+          <div class="bento-icon">⚡</div>
+          <h3>Unified Command Interface</h3>
+          <p>Run multiple security scanners with a single command. No more juggling terminals and output formats. Results aggregated and normalized automatically.</p>
+          <div class="code-preview">
+            <div class="code-line">
+              <span class="code-prompt">$</span>
+              <span class="code-command">slop-auditor scan ./my-project</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="bento-card">
+          <div class="bento-icon">🎯</div>
+          <h3>3D Dashboard</h3>
+          <p>Interactive Three.js visualization shows your security posture spatially. Click nodes, filter findings, see the big picture.</p>
+        </div>
+
+        <div class="bento-card">
+          <div class="bento-icon">☁️</div>
+          <h3>AWS Scanning</h3>
+          <p>Audit IAM, S3, EC2, Lambda, and RDS for misconfigurations. Cloud security in the same unified view.</p>
+        </div>
+
+        <div class="bento-card">
+          <div class="bento-icon">📡</div>
+          <h3>Real-time WebSocket</h3>
+          <p>Live updates as scanners run. No polling, no refresh. Findings appear instantly in the dashboard.</p>
+        </div>
+
+        <div class="bento-card featured">
+          <div class="bento-icon">🔔</div>
+          <h3>Notifications & Integrations</h3>
+          <p>Slack, Discord, and custom webhooks. Get alerted on critical findings. Integrates with your existing workflow seamlessly.</p>
+          <div class="code-preview">
+            <div class="code-line">
+              <span class="code-prompt">$</span>
+              <span class="code-command">slop-auditor scan . --notify slack</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
 
   <!-- Tools Section -->
-  <section class="section tools-section">
-    <span class="section-badge">Integrations</span>
-    <h2 class="section-title">Powered by <span class="highlight">real scanners</span></h2>
-    <p class="section-subtitle" style="text-align: center; margin: 0 auto;">
-      Industry-standard security tools. All open source. All free.
-    </p>
+  <section class="tools-section" id="tools">
+    <div class="tools-container">
+      <div class="section-header">
+        <h2>Powered by real security tools</h2>
+        <p>Industry-standard scanners. All open source. All free. No AI hallucinations.</p>
+      </div>
 
-    <div class="tools-grid">
-      <div class="tool-badge"><span class="icon">🔐</span> Gitleaks</div>
-      <div class="tool-badge"><span class="icon">🛡️</span> Trivy</div>
-      <div class="tool-badge"><span class="icon">🔬</span> Semgrep</div>
-      <div class="tool-badge"><span class="icon">📦</span> npm audit</div>
-      <div class="tool-badge"><span class="icon">🐍</span> pip-audit</div>
-      <div class="tool-badge"><span class="icon">🦀</span> cargo-audit</div>
-      <div class="tool-badge"><span class="icon">🐹</span> govulncheck</div>
-      <div class="tool-badge"><span class="icon">🔎</span> Grype</div>
+      <div class="tools-grid">
+        <div class="tool-chip"><span class="icon">🔐</span> Gitleaks</div>
+        <div class="tool-chip"><span class="icon">🛡️</span> Trivy</div>
+        <div class="tool-chip"><span class="icon">🔬</span> Semgrep</div>
+        <div class="tool-chip"><span class="icon">📦</span> npm audit</div>
+        <div class="tool-chip"><span class="icon">🐍</span> pip-audit</div>
+        <div class="tool-chip"><span class="icon">🦀</span> cargo-audit</div>
+        <div class="tool-chip"><span class="icon">🐹</span> govulncheck</div>
+        <div class="tool-chip"><span class="icon">🔎</span> Grype</div>
+      </div>
     </div>
   </section>
 
   <!-- CTA Section -->
   <section class="cta-section">
     <div class="cta-content">
-      <h2>Ready to <span class="highlight">see everything</span>?</h2>
-      <p>Start scanning in under a minute. No signup required.</p>
+      <h2>Ready to see your security posture?</h2>
+      <p>Install in seconds. Scan any project. No account required.</p>
       <div class="cta-buttons">
-        <a href="/app" class="btn btn-accent">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
-          </svg>
-          Open Dashboard
-        </a>
-        <a href="https://www.npmjs.com/package/slop-auditor" target="_blank" class="btn btn-secondary">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M0 7.334v8h6.666v1.332H12v-1.332h12v-8H0zm6.666 6.664H5.334v-4H3.999v4H1.335V8.667h5.331v5.331zm4 0v1.336H8.001V8.667h5.334v5.332h-2.669v-.001zm12.001 0h-1.33v-4h-1.336v4h-1.335v-4h-1.33v4h-2.671V8.667h8.002v5.331z"/>
-          </svg>
-          npm install
-        </a>
-        <a href="https://github.com/slopsecurityadmin/slop-security-auditor" target="_blank" class="btn btn-secondary">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-          </svg>
-          GitHub
-        </a>
+        <a href="/app" class="btn btn-primary">Launch Dashboard</a>
+        <a href="https://www.npmjs.com/package/slop-auditor" target="_blank" class="btn btn-ghost">npm install</a>
       </div>
     </div>
   </section>
 
   <!-- Footer -->
   <footer>
-    <div class="footer-content">
-      <div class="footer-brand">
+    <div class="footer-container">
+      <div class="footer-left">
         <a href="/" class="logo">
-          <span class="logo-icon">🛡️</span>
+          <div class="logo-mark">🛡️</div>
           SLOP Auditor
         </a>
-        <p>Deterministic security auditing with 3D visualization. Open source and free.</p>
-      </div>
-      <div class="footer-links">
-        <div class="footer-column">
-          <h4>Product</h4>
-          <a href="/app">Dashboard</a>
-          <a href="#solution">Features</a>
-          <a href="#how-it-works">How It Works</a>
-        </div>
-        <div class="footer-column">
-          <h4>Resources</h4>
+        <div class="footer-links">
           <a href="https://github.com/slopsecurityadmin/slop-security-auditor" target="_blank">GitHub</a>
           <a href="https://www.npmjs.com/package/slop-auditor" target="_blank">npm</a>
           <a href="https://pypi.org/project/slop-auditor/" target="_blank">PyPI</a>
-        </div>
-        <div class="footer-column">
-          <h4>Community</h4>
-          <a href="https://github.com/slopsecurityadmin/slop-security-auditor/issues" target="_blank">Issues</a>
-          <a href="https://github.com/slopsecurityadmin/slop-security-auditor/discussions" target="_blank">Discussions</a>
+          <a href="/app">Dashboard</a>
         </div>
       </div>
-    </div>
-    <div class="footer-bottom">
-      <span>© 2026 SLOP Auditor. MIT License.</span>
-      <div class="footer-social">
-        <a href="https://github.com/slopsecurityadmin/slop-security-auditor" target="_blank">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-          </svg>
-        </a>
+      <div class="footer-right">
+        © 2026 SLOP Auditor · MIT License
       </div>
     </div>
   </footer>
 
   <script>
-    // Generate stars
-    const starsContainer = document.getElementById('stars');
-    for (let i = 0; i < 100; i++) {
-      const star = document.createElement('div');
-      star.className = 'star';
-      star.style.left = Math.random() * 100 + '%';
-      star.style.top = Math.random() * 100 + '%';
-      star.style.animationDelay = Math.random() * 3 + 's';
-      star.style.width = Math.random() * 2 + 1 + 'px';
-      star.style.height = star.style.width;
-      starsContainer.appendChild(star);
+    // Three.js Security Scene
+    const container = document.getElementById('hero-canvas');
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setClearColor(0x000000, 0);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    container.appendChild(renderer.domElement);
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+    scene.add(ambientLight);
+
+    const mainLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    mainLight.position.set(10, 20, 10);
+    scene.add(mainLight);
+
+    const cyanLight = new THREE.PointLight(0x06b6d4, 1, 20);
+    cyanLight.position.set(-5, 5, 5);
+    scene.add(cyanLight);
+
+    const purpleLight = new THREE.PointLight(0x8b5cf6, 0.8, 20);
+    purpleLight.position.set(5, -3, 5);
+    scene.add(purpleLight);
+
+    // Main group for all objects
+    const mainGroup = new THREE.Group();
+
+    // Central Shield/Core
+    const shieldGroup = new THREE.Group();
+
+    // Outer hexagonal shield
+    const shieldShape = new THREE.Shape();
+    const shieldRadius = 1.5;
+    for (let i = 0; i < 6; i++) {
+      const angle = (i / 6) * Math.PI * 2 - Math.PI / 2;
+      const x = Math.cos(angle) * shieldRadius;
+      const y = Math.sin(angle) * shieldRadius;
+      if (i === 0) shieldShape.moveTo(x, y);
+      else shieldShape.lineTo(x, y);
+    }
+    shieldShape.closePath();
+
+    const shieldExtrudeSettings = { depth: 0.3, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.05, bevelSegments: 3 };
+    const shieldGeo = new THREE.ExtrudeGeometry(shieldShape, shieldExtrudeSettings);
+    const shieldMat = new THREE.MeshStandardMaterial({
+      color: 0x06b6d4,
+      metalness: 0.8,
+      roughness: 0.2,
+      emissive: 0x06b6d4,
+      emissiveIntensity: 0.1
+    });
+    const shield = new THREE.Mesh(shieldGeo, shieldMat);
+    shield.rotation.x = Math.PI / 2;
+    shieldGroup.add(shield);
+
+    // Inner shield detail
+    const innerShieldGeo = new THREE.ExtrudeGeometry(shieldShape, { depth: 0.1, bevelEnabled: false });
+    const innerShieldMat = new THREE.MeshStandardMaterial({
+      color: 0x0f172a,
+      metalness: 0.9,
+      roughness: 0.1
+    });
+    const innerShield = new THREE.Mesh(innerShieldGeo, innerShieldMat);
+    innerShield.scale.set(0.7, 0.7, 1);
+    innerShield.rotation.x = Math.PI / 2;
+    innerShield.position.z = 0.2;
+    shieldGroup.add(innerShield);
+
+    // Lock icon in center
+    const lockBodyGeo = new THREE.BoxGeometry(0.4, 0.5, 0.15);
+    const lockMat = new THREE.MeshStandardMaterial({ color: 0x06b6d4, metalness: 0.7, roughness: 0.3 });
+    const lockBody = new THREE.Mesh(lockBodyGeo, lockMat);
+    lockBody.position.z = 0.3;
+    shieldGroup.add(lockBody);
+
+    const lockArcGeo = new THREE.TorusGeometry(0.2, 0.05, 8, 16, Math.PI);
+    const lockArc = new THREE.Mesh(lockArcGeo, lockMat);
+    lockArc.position.set(0, 0.25, 0.3);
+    lockArc.rotation.z = Math.PI;
+    shieldGroup.add(lockArc);
+
+    mainGroup.add(shieldGroup);
+
+    // Orbiting security nodes
+    const nodePositions = [
+      { radius: 3, speed: 0.5, offset: 0, color: 0x10b981, icon: 'check' },
+      { radius: 3, speed: 0.5, offset: Math.PI * 0.66, color: 0xf59e0b, icon: 'warning' },
+      { radius: 3, speed: 0.5, offset: Math.PI * 1.33, color: 0xef4444, icon: 'alert' },
+      { radius: 4.2, speed: 0.3, offset: Math.PI * 0.25, color: 0x8b5cf6, icon: 'scan' },
+      { radius: 4.2, speed: 0.3, offset: Math.PI * 0.75, color: 0x06b6d4, icon: 'scan' },
+      { radius: 4.2, speed: 0.3, offset: Math.PI * 1.25, color: 0x10b981, icon: 'scan' },
+      { radius: 4.2, speed: 0.3, offset: Math.PI * 1.75, color: 0x8b5cf6, icon: 'scan' },
+    ];
+
+    const nodes = [];
+    nodePositions.forEach((config, index) => {
+      const nodeGroup = new THREE.Group();
+
+      // Node body - rounded cube style
+      const nodeGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+      const nodeMat = new THREE.MeshStandardMaterial({
+        color: config.color,
+        metalness: 0.6,
+        roughness: 0.3,
+        emissive: config.color,
+        emissiveIntensity: 0.2
+      });
+      const node = new THREE.Mesh(nodeGeo, nodeMat);
+      node.rotation.set(Math.PI / 4, Math.PI / 4, 0);
+      nodeGroup.add(node);
+
+      // Glow ring
+      const ringGeo = new THREE.RingGeometry(0.35, 0.4, 32);
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: config.color,
+        transparent: true,
+        opacity: 0.3,
+        side: THREE.DoubleSide
+      });
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      nodeGroup.add(ring);
+
+      nodeGroup.userData = config;
+      nodes.push(nodeGroup);
+      mainGroup.add(nodeGroup);
+    });
+
+    // Orbital rings
+    const createOrbitRing = (radius, opacity) => {
+      const ringGeo = new THREE.RingGeometry(radius - 0.02, radius + 0.02, 64);
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: 0x06b6d4,
+        transparent: true,
+        opacity: opacity,
+        side: THREE.DoubleSide
+      });
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      ring.rotation.x = Math.PI / 2;
+      return ring;
+    };
+
+    mainGroup.add(createOrbitRing(3, 0.15));
+    mainGroup.add(createOrbitRing(4.2, 0.1));
+
+    // Data stream particles
+    const particleCount = 100;
+    const particleGeo = new THREE.BufferGeometry();
+    const particlePositions = new Float32Array(particleCount * 3);
+    const particleSpeeds = [];
+
+    for (let i = 0; i < particleCount; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 2 + Math.random() * 3;
+      particlePositions[i * 3] = Math.cos(angle) * radius;
+      particlePositions[i * 3 + 1] = (Math.random() - 0.5) * 2;
+      particlePositions[i * 3 + 2] = Math.sin(angle) * radius;
+      particleSpeeds.push(0.01 + Math.random() * 0.02);
     }
 
-    // 3D Characters using Three.js
-    function createCharacterScene(containerId, characterType) {
-      const container = document.getElementById(containerId);
-      if (!container) return;
+    particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+    const particleMat = new THREE.PointsMaterial({
+      color: 0x06b6d4,
+      size: 0.05,
+      transparent: true,
+      opacity: 0.6
+    });
+    const particles = new THREE.Points(particleGeo, particleMat);
+    mainGroup.add(particles);
 
-      const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
-      const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    // Tilt the whole scene
+    mainGroup.rotation.x = 0.3;
+    scene.add(mainGroup);
 
-      renderer.setSize(280, 280);
-      renderer.setClearColor(0x000000, 0);
-      container.appendChild(renderer.domElement);
+    camera.position.set(0, 2, 8);
+    camera.lookAt(0, 0, 0);
 
-      // Lighting
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-      scene.add(ambientLight);
+    // Animation
+    let time = 0;
+    function animate() {
+      requestAnimationFrame(animate);
+      time += 0.01;
 
-      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-      directionalLight.position.set(5, 10, 7);
-      scene.add(directionalLight);
+      // Rotate shield slowly
+      shieldGroup.rotation.z = Math.sin(time * 0.5) * 0.1;
 
-      const pointLight = new THREE.PointLight(characterType === 'shield' ? 0x4ade80 : 0x22d3ee, 0.5);
-      pointLight.position.set(-3, 3, 3);
-      scene.add(pointLight);
+      // Animate orbiting nodes
+      nodes.forEach((node, i) => {
+        const config = node.userData;
+        const angle = time * config.speed + config.offset;
+        node.position.x = Math.cos(angle) * config.radius;
+        node.position.z = Math.sin(angle) * config.radius;
+        node.position.y = Math.sin(time * 2 + i) * 0.2;
+        node.rotation.y = time;
+      });
 
-      // Create character group
-      const character = new THREE.Group();
-
-      if (characterType === 'shield') {
-        // Shield Guardian Character
-        // Body
-        const bodyGeo = new THREE.CylinderGeometry(0.6, 0.8, 1.4, 8);
-        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x4a5568, metalness: 0.3, roughness: 0.7 });
-        const body = new THREE.Mesh(bodyGeo, bodyMat);
-        body.position.y = 0.7;
-        character.add(body);
-
-        // Head
-        const headGeo = new THREE.SphereGeometry(0.5, 16, 16);
-        const headMat = new THREE.MeshStandardMaterial({ color: 0xfcd9b6, metalness: 0.1, roughness: 0.8 });
-        const head = new THREE.Mesh(headGeo, headMat);
-        head.position.y = 1.8;
-        character.add(head);
-
-        // Helmet
-        const helmetGeo = new THREE.SphereGeometry(0.55, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
-        const helmetMat = new THREE.MeshStandardMaterial({ color: 0x4ade80, metalness: 0.6, roughness: 0.3 });
-        const helmet = new THREE.Mesh(helmetGeo, helmetMat);
-        helmet.position.y = 1.9;
-        character.add(helmet);
-
-        // Visor
-        const visorGeo = new THREE.BoxGeometry(0.6, 0.15, 0.3);
-        const visorMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2e, metalness: 0.8, roughness: 0.2 });
-        const visor = new THREE.Mesh(visorGeo, visorMat);
-        visor.position.set(0, 1.75, 0.35);
-        character.add(visor);
-
-        // Shield
-        const shieldGeo = new THREE.CylinderGeometry(0.8, 0.8, 0.1, 6);
-        const shieldMat = new THREE.MeshStandardMaterial({ color: 0x4ade80, metalness: 0.7, roughness: 0.3 });
-        const shield = new THREE.Mesh(shieldGeo, shieldMat);
-        shield.rotation.x = Math.PI / 2;
-        shield.rotation.z = Math.PI / 6;
-        shield.position.set(-0.9, 1, 0.3);
-        character.add(shield);
-
-        // Shield emblem
-        const emblemGeo = new THREE.TorusGeometry(0.25, 0.05, 8, 6);
-        const emblemMat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.5 });
-        const emblem = new THREE.Mesh(emblemGeo, emblemMat);
-        emblem.rotation.x = Math.PI / 2;
-        emblem.rotation.z = Math.PI / 6;
-        emblem.position.set(-0.9, 1, 0.4);
-        character.add(emblem);
-
-        // Platform
-        const platformGeo = new THREE.CylinderGeometry(1.2, 1.4, 0.2, 8);
-        const platformMat = new THREE.MeshStandardMaterial({ color: 0x2d3748, metalness: 0.2, roughness: 0.8 });
-        const platform = new THREE.Mesh(platformGeo, platformMat);
-        platform.position.y = -0.1;
-        character.add(platform);
-
-      } else {
-        // Scanner/Detective Character
-        // Body
-        const bodyGeo = new THREE.CylinderGeometry(0.5, 0.7, 1.2, 8);
-        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1e3a5f, metalness: 0.3, roughness: 0.7 });
-        const body = new THREE.Mesh(bodyGeo, bodyMat);
-        body.position.y = 0.6;
-        character.add(body);
-
-        // Head (robot style)
-        const headGeo = new THREE.BoxGeometry(0.7, 0.7, 0.7);
-        const headMat = new THREE.MeshStandardMaterial({ color: 0x22d3ee, metalness: 0.6, roughness: 0.3 });
-        const head = new THREE.Mesh(headGeo, headMat);
-        head.position.y = 1.6;
-        character.add(head);
-
-        // Eyes (screen)
-        const eyeGeo = new THREE.PlaneGeometry(0.5, 0.25);
-        const eyeMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, emissive: 0x22d3ee, emissiveIntensity: 0.3 });
-        const eye = new THREE.Mesh(eyeGeo, eyeMat);
-        eye.position.set(0, 1.6, 0.36);
-        character.add(eye);
-
-        // Antenna
-        const antennaGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.4, 8);
-        const antennaMat = new THREE.MeshStandardMaterial({ color: 0x22d3ee, metalness: 0.8 });
-        const antenna = new THREE.Mesh(antennaGeo, antennaMat);
-        antenna.position.set(0, 2.1, 0);
-        character.add(antenna);
-
-        const antennaBallGeo = new THREE.SphereGeometry(0.08, 8, 8);
-        const antennaBall = new THREE.Mesh(antennaBallGeo, antennaMat);
-        antennaBall.position.set(0, 2.35, 0);
-        character.add(antennaBall);
-
-        // Magnifying glass arm
-        const armGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.8, 8);
-        const armMat = new THREE.MeshStandardMaterial({ color: 0x4a5568 });
-        const arm = new THREE.Mesh(armGeo, armMat);
-        arm.rotation.z = -Math.PI / 4;
-        arm.position.set(0.7, 1.2, 0.3);
-        character.add(arm);
-
-        // Magnifying glass
-        const glassRingGeo = new THREE.TorusGeometry(0.3, 0.05, 8, 16);
-        const glassRingMat = new THREE.MeshStandardMaterial({ color: 0xf0a050, metalness: 0.7 });
-        const glassRing = new THREE.Mesh(glassRingGeo, glassRingMat);
-        glassRing.position.set(1.1, 1.5, 0.3);
-        character.add(glassRing);
-
-        const glassGeo = new THREE.CircleGeometry(0.25, 16);
-        const glassMat = new THREE.MeshStandardMaterial({
-          color: 0x87ceeb,
-          transparent: true,
-          opacity: 0.4,
-          metalness: 0.1
-        });
-        const glass = new THREE.Mesh(glassGeo, glassMat);
-        glass.position.set(1.1, 1.5, 0.31);
-        character.add(glass);
-
-        // Platform
-        const platformGeo = new THREE.CylinderGeometry(1, 1.2, 0.2, 8);
-        const platformMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.2, roughness: 0.8 });
-        const platform = new THREE.Mesh(platformGeo, platformMat);
-        platform.position.y = -0.1;
-        character.add(platform);
+      // Animate particles
+      const positions = particles.geometry.attributes.position.array;
+      for (let i = 0; i < particleCount; i++) {
+        const idx = i * 3;
+        const x = positions[idx];
+        const z = positions[idx + 2];
+        const angle = Math.atan2(z, x) + particleSpeeds[i];
+        const radius = Math.sqrt(x * x + z * z);
+        positions[idx] = Math.cos(angle) * radius;
+        positions[idx + 2] = Math.sin(angle) * radius;
+        positions[idx + 1] += 0.01;
+        if (positions[idx + 1] > 1) positions[idx + 1] = -1;
       }
+      particles.geometry.attributes.position.needsUpdate = true;
 
-      scene.add(character);
-      camera.position.set(3, 2, 3);
-      camera.lookAt(0, 1, 0);
+      // Gentle scene rotation
+      mainGroup.rotation.y = time * 0.1;
 
-      // Animation
-      let time = 0;
-      function animate() {
-        requestAnimationFrame(animate);
-        time += 0.01;
-
-        // Gentle floating
-        character.position.y = Math.sin(time) * 0.05;
-        // Slow rotation
-        character.rotation.y = Math.sin(time * 0.5) * 0.2 + (characterType === 'shield' ? 0.3 : -0.3);
-
-        renderer.render(scene, camera);
-      }
-      animate();
+      renderer.render(scene, camera);
     }
+    animate();
 
-    // Initialize 3D characters
-    createCharacterScene('character-left', 'shield');
-    createCharacterScene('character-right', 'scanner');
+    // Handle resize
+    window.addEventListener('resize', () => {
+      camera.aspect = container.clientWidth / container.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(container.clientWidth, container.clientHeight);
+    });
 
     // Smooth scroll
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
