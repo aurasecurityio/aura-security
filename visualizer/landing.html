@@ -3,11 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SLOP Auditor - Deterministic Security Auditing Engine</title>
-  <meta name="description" content="A deterministic security auditing engine with optional AI advisory layer. Run as CLI, CI step, or service. All findings come from reproducible scanners.">
+  <title>SLOP Auditor - Security Scanning Made Visual</title>
+  <meta name="description" content="A deterministic security auditing engine with 3D visualization. Scan code, find vulnerabilities, see everything in one place.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <style>
     * {
       margin: 0;
@@ -16,28 +17,69 @@
     }
 
     :root {
-      --bg-primary: #0a0a0b;
-      --bg-secondary: #111113;
-      --bg-tertiary: #18181b;
-      --bg-card: #1c1c1f;
-      --border: #27272a;
-      --text-primary: #fafafa;
-      --text-secondary: #a1a1aa;
-      --text-muted: #71717a;
-      --accent: #3b82f6;
-      --accent-hover: #2563eb;
-      --critical: #ef4444;
-      --warning: #f59e0b;
-      --success: #22c55e;
-      --purple: #8b5cf6;
+      --bg-dark: #08090c;
+      --bg-card: rgba(255, 255, 255, 0.03);
+      --bg-card-hover: rgba(255, 255, 255, 0.06);
+      --border: rgba(255, 255, 255, 0.08);
+      --text-primary: #ffffff;
+      --text-secondary: rgba(255, 255, 255, 0.7);
+      --text-muted: rgba(255, 255, 255, 0.5);
+      --accent: #f0a050;
+      --accent-glow: rgba(240, 160, 80, 0.3);
+      --green: #4ade80;
+      --green-bg: rgba(74, 222, 128, 0.1);
+      --cyan: #22d3ee;
+      --red: #f87171;
+      --purple: #a78bfa;
     }
 
     body {
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-      background: var(--bg-primary);
+      background: var(--bg-dark);
       color: var(--text-primary);
       line-height: 1.6;
       overflow-x: hidden;
+    }
+
+    /* Gradient background */
+    .bg-gradient {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background:
+        radial-gradient(ellipse at 20% 20%, rgba(240, 160, 80, 0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 80%, rgba(34, 211, 238, 0.05) 0%, transparent 50%),
+        linear-gradient(180deg, #08090c 0%, #0d0f14 50%, #08090c 100%);
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    /* Stars */
+    .stars {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    .star {
+      position: absolute;
+      width: 2px;
+      height: 2px;
+      background: white;
+      border-radius: 50%;
+      opacity: 0.3;
+      animation: twinkle 3s infinite;
+    }
+
+    @keyframes twinkle {
+      0%, 100% { opacity: 0.3; }
+      50% { opacity: 0.8; }
     }
 
     /* Navigation */
@@ -47,9 +89,9 @@
       left: 0;
       right: 0;
       z-index: 100;
-      padding: 1rem 2rem;
-      background: rgba(10, 10, 11, 0.8);
-      backdrop-filter: blur(12px);
+      padding: 1.25rem 2rem;
+      background: rgba(8, 9, 12, 0.8);
+      backdrop-filter: blur(20px);
       border-bottom: 1px solid var(--border);
     }
 
@@ -62,8 +104,8 @@
     }
 
     .logo {
-      font-size: 1.25rem;
-      font-weight: 700;
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.5rem;
       color: var(--text-primary);
       text-decoration: none;
       display: flex;
@@ -72,26 +114,19 @@
     }
 
     .logo-icon {
-      width: 32px;
-      height: 32px;
-      background: linear-gradient(135deg, var(--accent), var(--purple));
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1rem;
+      font-size: 1.75rem;
     }
 
     .nav-links {
       display: flex;
-      gap: 2rem;
+      gap: 2.5rem;
       align-items: center;
     }
 
     .nav-links a {
       color: var(--text-secondary);
       text-decoration: none;
-      font-size: 0.875rem;
+      font-size: 0.9rem;
       font-weight: 500;
       transition: color 0.2s;
     }
@@ -104,10 +139,10 @@
       display: inline-flex;
       align-items: center;
       gap: 0.5rem;
-      padding: 0.625rem 1.25rem;
+      padding: 0.75rem 1.5rem;
       border-radius: 8px;
-      font-size: 0.875rem;
-      font-weight: 500;
+      font-size: 0.9rem;
+      font-weight: 600;
       text-decoration: none;
       transition: all 0.2s;
       cursor: pointer;
@@ -115,16 +150,17 @@
     }
 
     .btn-primary {
-      background: var(--accent);
-      color: white;
+      background: var(--text-primary);
+      color: var(--bg-dark);
     }
 
     .btn-primary:hover {
-      background: var(--accent-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(255, 255, 255, 0.2);
     }
 
     .btn-secondary {
-      background: var(--bg-tertiary);
+      background: transparent;
       color: var(--text-primary);
       border: 1px solid var(--border);
     }
@@ -132,6 +168,16 @@
     .btn-secondary:hover {
       background: var(--bg-card);
       border-color: var(--text-muted);
+    }
+
+    .btn-accent {
+      background: linear-gradient(135deg, var(--accent), #e07830);
+      color: white;
+    }
+
+    .btn-accent:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px var(--accent-glow);
     }
 
     /* Hero Section */
@@ -146,96 +192,154 @@
       position: relative;
     }
 
-    .hero::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 800px;
-      height: 600px;
-      background: radial-gradient(ellipse at center, rgba(59, 130, 246, 0.15) 0%, transparent 70%);
-      pointer-events: none;
-    }
-
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.5rem 1rem;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border);
-      border-radius: 100px;
-      font-size: 0.8125rem;
-      color: var(--text-secondary);
-      margin-bottom: 2rem;
-    }
-
-    .badge-dot {
-      width: 8px;
-      height: 8px;
-      background: var(--success);
-      border-radius: 50%;
-      animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
+    .hero-content {
+      position: relative;
+      z-index: 2;
+      max-width: 900px;
     }
 
     .hero h1 {
-      font-size: clamp(2.5rem, 6vw, 4rem);
-      font-weight: 700;
+      font-family: 'DM Serif Display', serif;
+      font-size: clamp(2.5rem, 6vw, 4.5rem);
+      font-weight: 400;
       line-height: 1.1;
       margin-bottom: 1.5rem;
-      max-width: 800px;
     }
 
-    .hero h1 span {
-      background: linear-gradient(135deg, var(--accent), var(--purple));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+    .hero h1 .highlight {
+      color: var(--accent);
+      font-style: italic;
     }
 
-    .hero p {
+    .hero .subtitle {
       font-size: 1.25rem;
       color: var(--text-secondary);
-      max-width: 600px;
       margin-bottom: 2.5rem;
     }
 
     .hero-buttons {
       display: flex;
       gap: 1rem;
-      flex-wrap: wrap;
       justify-content: center;
+      flex-wrap: wrap;
     }
 
     .hero-buttons .btn {
-      padding: 0.875rem 1.75rem;
+      padding: 1rem 2rem;
       font-size: 1rem;
     }
 
-    /* Terminal Preview */
-    .terminal-preview {
-      margin-top: 4rem;
-      width: 100%;
+    /* 3D Characters Container */
+    .hero-3d {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+    }
+
+    .character-left, .character-right {
+      position: absolute;
+      bottom: 15%;
+      width: 280px;
+      height: 280px;
+    }
+
+    .character-left {
+      left: 5%;
+    }
+
+    .character-right {
+      right: 5%;
+    }
+
+    /* Scroll indicator */
+    .scroll-indicator {
+      position: absolute;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      animation: bounce 2s infinite;
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateX(-50%) translateY(0); }
+      50% { transform: translateX(-50%) translateY(8px); }
+    }
+
+    /* Section Styles */
+    .section {
+      padding: 8rem 2rem;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .section-badge {
+      display: inline-block;
+      padding: 0.5rem 1rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 1.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .section-title {
+      font-family: 'DM Serif Display', serif;
+      font-size: clamp(2rem, 4vw, 3rem);
+      font-weight: 400;
+      margin-bottom: 1rem;
+      line-height: 1.2;
+    }
+
+    .section-title .highlight {
+      color: var(--accent);
+      font-style: italic;
+    }
+
+    .section-title .highlight-green {
+      color: var(--green);
+      font-style: italic;
+    }
+
+    .section-subtitle {
+      font-size: 1.125rem;
+      color: var(--text-secondary);
       max-width: 700px;
-      background: var(--bg-secondary);
+      margin-bottom: 3rem;
+    }
+
+    /* Problem Section */
+    .problem-section {
+      text-align: center;
+    }
+
+    .terminal-mockup {
+      max-width: 600px;
+      margin: 3rem auto;
+      background: #0d0d0d;
       border: 1px solid var(--border);
       border-radius: 12px;
       overflow: hidden;
-      text-align: left;
     }
 
     .terminal-header {
       display: flex;
       align-items: center;
       gap: 0.5rem;
-      padding: 0.75rem 1rem;
-      background: var(--bg-tertiary);
+      padding: 0.875rem 1rem;
+      background: rgba(255, 255, 255, 0.03);
       border-bottom: 1px solid var(--border);
     }
 
@@ -244,106 +348,108 @@
       height: 12px;
       border-radius: 50%;
     }
-
     .terminal-dot.red { background: #ff5f57; }
     .terminal-dot.yellow { background: #febc2e; }
     .terminal-dot.green { background: #28c840; }
 
     .terminal-body {
-      padding: 1.25rem;
+      padding: 1.5rem;
       font-family: 'SF Mono', 'Fira Code', monospace;
-      font-size: 0.875rem;
-      line-height: 1.8;
+      font-size: 0.8rem;
+      text-align: left;
+      color: var(--text-secondary);
+      line-height: 2;
     }
 
     .terminal-line {
+      opacity: 0.6;
+    }
+
+    .problem-points {
       display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      max-width: 500px;
+      margin: 2rem auto 0;
+      text-align: left;
+    }
+
+    .problem-point {
+      display: flex;
+      align-items: center;
       gap: 0.75rem;
-    }
-
-    .terminal-prompt {
-      color: var(--success);
-    }
-
-    .terminal-command {
-      color: var(--text-primary);
-    }
-
-    .terminal-output {
       color: var(--text-secondary);
-      padding-left: 1.5rem;
     }
 
-    .terminal-output.critical {
-      color: var(--critical);
+    .problem-point .icon {
+      color: var(--red);
+      font-size: 1.25rem;
     }
 
-    .terminal-output.warning {
-      color: var(--warning);
+    .highlight-box {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.25rem;
+      background: rgba(248, 113, 113, 0.1);
+      border: 1px solid rgba(248, 113, 113, 0.2);
+      border-radius: 8px;
+      color: var(--red);
+      font-weight: 500;
+      margin-top: 2rem;
     }
 
-    .terminal-output.success {
-      color: var(--success);
+    /* Solution Section */
+    .solution-section {
+      background: linear-gradient(180deg, rgba(74, 222, 128, 0.02) 0%, transparent 100%);
+      border-top: 1px solid rgba(74, 222, 128, 0.1);
+      padding: 8rem 2rem;
     }
 
-    /* Features Section */
-    .section {
-      padding: 6rem 2rem;
+    .solution-content {
       max-width: 1200px;
       margin: 0 auto;
+      text-align: center;
     }
 
-    .section-label {
-      font-size: 0.875rem;
-      font-weight: 600;
-      color: var(--accent);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: 1rem;
-    }
-
-    .section-title {
-      font-size: 2.5rem;
-      font-weight: 700;
-      margin-bottom: 1rem;
-    }
-
-    .section-subtitle {
-      font-size: 1.125rem;
-      color: var(--text-secondary);
-      max-width: 600px;
-      margin-bottom: 3rem;
+    .solution-section .section-badge {
+      background: var(--green-bg);
+      border-color: rgba(74, 222, 128, 0.2);
+      color: var(--green);
     }
 
     .features-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      grid-template-columns: repeat(3, 1fr);
       gap: 1.5rem;
+      margin-top: 3rem;
     }
 
     .feature-card {
-      background: var(--bg-secondary);
+      background: var(--bg-card);
       border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.75rem;
-      transition: border-color 0.2s, transform 0.2s;
+      border-radius: 16px;
+      padding: 2rem;
+      text-align: left;
+      transition: all 0.3s;
     }
 
     .feature-card:hover {
-      border-color: var(--text-muted);
-      transform: translateY(-2px);
+      background: var(--bg-card-hover);
+      border-color: rgba(255, 255, 255, 0.15);
+      transform: translateY(-4px);
     }
 
     .feature-icon {
       width: 48px;
       height: 48px;
-      background: var(--bg-tertiary);
-      border-radius: 10px;
+      background: linear-gradient(135deg, rgba(74, 222, 128, 0.2), rgba(34, 211, 238, 0.2));
+      border-radius: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 1.5rem;
-      margin-bottom: 1rem;
+      margin-bottom: 1.25rem;
     }
 
     .feature-card h3 {
@@ -357,102 +463,157 @@
       font-size: 0.9375rem;
     }
 
-    /* Tools Section */
-    .tools-grid {
+    /* How It Works */
+    .steps-section {
+      text-align: center;
+    }
+
+    .steps-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      grid-template-columns: repeat(3, 1fr);
+      gap: 2rem;
+      margin-top: 4rem;
+    }
+
+    .step-card {
+      position: relative;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 2.5rem 2rem 2rem;
+      text-align: left;
+    }
+
+    .step-number {
+      position: absolute;
+      top: -16px;
+      left: 24px;
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, var(--accent), #e07830);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.125rem;
+      font-weight: 700;
+      color: white;
+    }
+
+    .step-card h3 {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.25rem;
+      margin-bottom: 0.75rem;
+      margin-top: 0.5rem;
+    }
+
+    .step-card p {
+      color: var(--text-secondary);
+      font-size: 0.9375rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .step-card code {
+      display: block;
+      padding: 0.875rem 1rem;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 8px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.8125rem;
+      color: var(--green);
+    }
+
+    .step-characters {
+      display: flex;
+      gap: -8px;
+      margin-top: 1rem;
+    }
+
+    .step-avatar {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--cyan), var(--purple));
+      border-radius: 50%;
+      border: 2px solid var(--bg-dark);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      margin-left: -8px;
+    }
+
+    .step-avatar:first-child {
+      margin-left: 0;
+    }
+
+    /* Tools Section */
+    .tools-section {
+      text-align: center;
+    }
+
+    .tools-grid {
+      display: flex;
+      flex-wrap: wrap;
       gap: 1rem;
-      margin-top: 2rem;
+      justify-content: center;
+      margin-top: 3rem;
     }
 
     .tool-badge {
       display: flex;
       align-items: center;
       gap: 0.75rem;
-      padding: 1rem 1.25rem;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      font-size: 0.9375rem;
-      font-weight: 500;
-    }
-
-    .tool-badge img {
-      width: 24px;
-      height: 24px;
-    }
-
-    /* How It Works */
-    .steps {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 2rem;
-      margin-top: 3rem;
-    }
-
-    .step {
-      position: relative;
-      padding: 2rem;
-      background: var(--bg-secondary);
+      padding: 1rem 1.5rem;
+      background: var(--bg-card);
       border: 1px solid var(--border);
       border-radius: 12px;
+      font-weight: 500;
+      transition: all 0.2s;
     }
 
-    .step-number {
-      position: absolute;
-      top: -12px;
-      left: 24px;
-      width: 32px;
-      height: 32px;
-      background: var(--accent);
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 0.875rem;
-      font-weight: 700;
+    .tool-badge:hover {
+      background: var(--bg-card-hover);
+      transform: translateY(-2px);
     }
 
-    .step h3 {
-      font-size: 1.125rem;
-      font-weight: 600;
-      margin-bottom: 0.75rem;
-      margin-top: 0.5rem;
-    }
-
-    .step p {
-      color: var(--text-secondary);
-      font-size: 0.9375rem;
-    }
-
-    .step code {
-      display: block;
-      margin-top: 1rem;
-      padding: 0.75rem 1rem;
-      background: var(--bg-primary);
-      border-radius: 6px;
-      font-family: 'SF Mono', 'Fira Code', monospace;
-      font-size: 0.8125rem;
-      color: var(--success);
+    .tool-badge .icon {
+      font-size: 1.25rem;
     }
 
     /* CTA Section */
     .cta-section {
       text-align: center;
-      padding: 6rem 2rem;
-      background: linear-gradient(180deg, transparent, rgba(59, 130, 246, 0.05));
+      padding: 8rem 2rem;
+      position: relative;
+    }
+
+    .cta-section::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 600px;
+      height: 400px;
+      background: radial-gradient(ellipse at center, rgba(240, 160, 80, 0.1) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .cta-content {
+      position: relative;
+      z-index: 2;
     }
 
     .cta-section h2 {
-      font-size: 2.5rem;
-      font-weight: 700;
+      font-family: 'DM Serif Display', serif;
+      font-size: clamp(2rem, 4vw, 3rem);
       margin-bottom: 1rem;
     }
 
     .cta-section p {
       color: var(--text-secondary);
       font-size: 1.125rem;
-      margin-bottom: 2rem;
+      margin-bottom: 2.5rem;
     }
 
     .cta-buttons {
@@ -464,45 +625,105 @@
 
     /* Footer */
     footer {
-      padding: 3rem 2rem;
+      padding: 4rem 2rem 2rem;
       border-top: 1px solid var(--border);
-      text-align: center;
+    }
+
+    .footer-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 2rem;
+    }
+
+    .footer-brand {
+      max-width: 300px;
+    }
+
+    .footer-brand .logo {
+      margin-bottom: 1rem;
+    }
+
+    .footer-brand p {
+      color: var(--text-muted);
+      font-size: 0.875rem;
     }
 
     .footer-links {
       display: flex;
-      gap: 2rem;
-      justify-content: center;
-      margin-bottom: 1.5rem;
-      flex-wrap: wrap;
+      gap: 4rem;
     }
 
-    .footer-links a {
+    .footer-column h4 {
+      font-size: 0.875rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
       color: var(--text-secondary);
+    }
+
+    .footer-column a {
+      display: block;
+      color: var(--text-muted);
       text-decoration: none;
       font-size: 0.875rem;
+      margin-bottom: 0.5rem;
       transition: color 0.2s;
     }
 
-    .footer-links a:hover {
+    .footer-column a:hover {
       color: var(--text-primary);
     }
 
-    .footer-copy {
+    .footer-bottom {
+      max-width: 1200px;
+      margin: 3rem auto 0;
+      padding-top: 2rem;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       color: var(--text-muted);
       font-size: 0.8125rem;
     }
 
+    .footer-social {
+      display: flex;
+      gap: 1rem;
+    }
+
+    .footer-social a {
+      color: var(--text-muted);
+      font-size: 1.25rem;
+      transition: color 0.2s;
+    }
+
+    .footer-social a:hover {
+      color: var(--text-primary);
+    }
+
     /* Responsive */
-    @media (max-width: 768px) {
+    @media (max-width: 968px) {
+      .features-grid, .steps-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .character-left, .character-right {
+        display: none;
+      }
+
       .nav-links {
         display: none;
       }
 
-      .hero {
-        padding: 6rem 1.5rem 3rem;
+      .footer-links {
+        gap: 2rem;
       }
+    }
 
+    @media (max-width: 640px) {
       .hero h1 {
         font-size: 2rem;
       }
@@ -511,23 +732,32 @@
         padding: 4rem 1.5rem;
       }
 
-      .section-title {
-        font-size: 1.75rem;
+      .footer-content {
+        flex-direction: column;
+      }
+
+      .footer-bottom {
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
       }
     }
   </style>
 </head>
 <body>
+  <div class="bg-gradient"></div>
+  <div class="stars" id="stars"></div>
+
   <!-- Navigation -->
   <nav>
     <div class="nav-container">
       <a href="/" class="logo">
-        <div class="logo-icon">S</div>
+        <span class="logo-icon">🛡️</span>
         SLOP Auditor
       </a>
       <div class="nav-links">
-        <a href="#features">Features</a>
-        <a href="#tools">Tools</a>
+        <a href="#problem">Problem</a>
+        <a href="#solution">Solution</a>
         <a href="#how-it-works">How It Works</a>
         <a href="https://github.com/slopsecurityadmin/slop-security-auditor" target="_blank">GitHub</a>
         <a href="/app" class="btn btn-primary">Open Dashboard</a>
@@ -537,189 +767,436 @@
 
   <!-- Hero Section -->
   <section class="hero">
-    <div class="badge">
-      <span class="badge-dot"></span>
-      v0.4.0 — Open Source
-    </div>
-    <h1>Deterministic <span>Security Auditing</span> for Modern Teams</h1>
-    <p>A security auditing engine with an optional AI advisory layer. All findings come from reproducible scanners—no hallucinations, no guesswork.</p>
-    <div class="hero-buttons">
-      <a href="/app" class="btn btn-primary">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
-        </svg>
-        Launch Dashboard
-      </a>
-      <a href="https://github.com/slopsecurityadmin/slop-security-auditor" target="_blank" class="btn btn-secondary">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-        </svg>
-        View on GitHub
-      </a>
+    <div class="hero-3d">
+      <div class="character-left" id="character-left"></div>
+      <div class="character-right" id="character-right"></div>
     </div>
 
-    <!-- Terminal Preview -->
-    <div class="terminal-preview">
+    <div class="hero-content">
+      <h1>What if finding <span class="highlight">vulnerabilities</span> felt intuitive?</h1>
+      <p class="subtitle">One dashboard. All your scanners. Complete clarity.</p>
+      <div class="hero-buttons">
+        <a href="/app" class="btn btn-primary">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+          </svg>
+          Launch Dashboard
+        </a>
+        <a href="https://github.com/slopsecurityadmin/slop-security-auditor" target="_blank" class="btn btn-secondary">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+          </svg>
+          View on GitHub
+        </a>
+      </div>
+    </div>
+
+    <div class="scroll-indicator">
+      <span>Scroll to explore</span>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 5v14M5 12l7 7 7-7"/>
+      </svg>
+    </div>
+  </section>
+
+  <!-- Problem Section -->
+  <section class="section problem-section" id="problem">
+    <span class="section-badge">The Problem</span>
+    <h2 class="section-title">Too many <span class="highlight">scanners</span>.<br>Too many <span class="highlight">terminals</span>.<br>Zero clarity.</h2>
+
+    <div class="terminal-mockup">
       <div class="terminal-header">
         <span class="terminal-dot red"></span>
         <span class="terminal-dot yellow"></span>
         <span class="terminal-dot green"></span>
       </div>
       <div class="terminal-body">
-        <div class="terminal-line">
-          <span class="terminal-prompt">$</span>
-          <span class="terminal-command">slop-auditor scan ./my-project</span>
+        <div class="terminal-line">$ gitleaks detect --source . -v</div>
+        <div class="terminal-line">$ trivy fs --scanners vuln .</div>
+        <div class="terminal-line">$ semgrep --config auto .</div>
+        <div class="terminal-line">$ npm audit --json</div>
+        <div class="terminal-line">$ pip-audit</div>
+        <div class="terminal-line">$ cargo audit</div>
+        <div class="terminal-line" style="color: var(--text-muted);">...</div>
+      </div>
+    </div>
+
+    <p class="section-subtitle" style="text-align: center; margin: 2rem auto;">
+      Security teams juggle 6+ different tools, each with its own output format,
+      false positive rate, and learning curve. Context gets lost. Findings get missed.
+    </p>
+
+    <div class="highlight-box" style="margin: 0 auto; display: inline-flex;">
+      <span>⚠️</span>
+      There has to be a better way.
+    </div>
+  </section>
+
+  <!-- Solution Section -->
+  <section class="solution-section" id="solution">
+    <div class="solution-content">
+      <span class="section-badge">The Solution</span>
+      <h2 class="section-title">One command. <span class="highlight-green">Complete visibility</span>.</h2>
+      <p class="section-subtitle" style="margin: 0 auto 3rem;">
+        SLOP Auditor unifies your security scanners into a single interface with
+        3D visualization. See everything at a glance. Act on what matters.
+      </p>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">🔍</div>
+          <h3>Unified Scanning</h3>
+          <p>Run Gitleaks, Trivy, Semgrep, and npm audit with a single command. All results in one place.</p>
         </div>
-        <div class="terminal-output">Scanning with: gitleaks, trivy, semgrep, npm-audit</div>
-        <div class="terminal-output">&nbsp;</div>
-        <div class="terminal-output critical">CRITICAL  AWS Access Key exposed in config.js:42</div>
-        <div class="terminal-output critical">CRITICAL  SQL Injection in api/users.js:156</div>
-        <div class="terminal-output warning">HIGH      lodash@4.17.20 has prototype pollution (CVE-2021-23337)</div>
-        <div class="terminal-output warning">MEDIUM    Hardcoded password in test/fixtures.js:8</div>
-        <div class="terminal-output">&nbsp;</div>
-        <div class="terminal-output success">Scan complete: 2 critical, 1 high, 1 medium findings</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Features Section -->
-  <section class="section" id="features">
-    <div class="section-label">Features</div>
-    <h2 class="section-title">Security scanning that just works</h2>
-    <p class="section-subtitle">Run as a CLI, CI step, or long-running service. Get the same results every time.</p>
-
-    <div class="features-grid">
-      <div class="feature-card">
-        <div class="feature-icon">🔍</div>
-        <h3>Multi-Scanner Integration</h3>
-        <p>Unified interface for Gitleaks, Trivy, Semgrep, and npm audit. One command, all the tools.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">☁️</div>
-        <h3>AWS Infrastructure Scanning</h3>
-        <p>Audit IAM policies, S3 buckets, EC2 security groups, Lambda functions, and RDS configurations.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">📊</div>
-        <h3>3D Visualization</h3>
-        <p>Interactive Three.js control plane to visualize your security posture in real-time.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🔔</div>
-        <h3>Notifications</h3>
-        <p>Get alerts via Slack, Discord, or custom webhooks when scans complete.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🗄️</div>
-        <h3>Persistent History</h3>
-        <p>SQLite database stores all audit results. Track trends and compare over time.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🐳</div>
-        <h3>Docker Ready</h3>
-        <p>Full containerization with all security tools pre-installed. Deploy anywhere.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- Tools Section -->
-  <section class="section" id="tools">
-    <div class="section-label">Integrations</div>
-    <h2 class="section-title">Powered by industry-standard tools</h2>
-    <p class="section-subtitle">All open source. All free. Real security scanners—not regex patterns.</p>
-
-    <div class="tools-grid">
-      <div class="tool-badge">
-        <span>🔐</span> Gitleaks
-      </div>
-      <div class="tool-badge">
-        <span>🛡️</span> Trivy
-      </div>
-      <div class="tool-badge">
-        <span>🔬</span> Semgrep
-      </div>
-      <div class="tool-badge">
-        <span>📦</span> npm audit
-      </div>
-      <div class="tool-badge">
-        <span>🐍</span> pip-audit
-      </div>
-      <div class="tool-badge">
-        <span>🦀</span> cargo-audit
-      </div>
-      <div class="tool-badge">
-        <span>🐹</span> govulncheck
-      </div>
-      <div class="tool-badge">
-        <span>🔎</span> Grype
+        <div class="feature-card">
+          <div class="feature-icon">🎮</div>
+          <h3>3D Command Center</h3>
+          <p>Interactive Three.js dashboard shows your security posture spatially. Like a game, but for security.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">⚡</div>
+          <h3>Real-time Updates</h3>
+          <p>WebSocket-powered live updates. See findings appear as scanners run. No refresh needed.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">☁️</div>
+          <h3>AWS Integration</h3>
+          <p>Scan IAM, S3, EC2, Lambda, and RDS for misconfigurations. Cloud security in the same view.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔔</div>
+          <h3>Smart Notifications</h3>
+          <p>Slack, Discord, and webhook integrations. Get alerted on critical findings instantly.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🤖</div>
+          <h3>Deterministic Results</h3>
+          <p>No AI hallucinations. All findings come from real scanners with reproducible results.</p>
+        </div>
       </div>
     </div>
   </section>
 
   <!-- How It Works -->
-  <section class="section" id="how-it-works">
-    <div class="section-label">How It Works</div>
-    <h2 class="section-title">Three ways to run</h2>
-    <p class="section-subtitle">CLI for quick scans, CI for automation, or service mode for real-time monitoring.</p>
+  <section class="section steps-section" id="how-it-works">
+    <span class="section-badge">How It Works</span>
+    <h2 class="section-title">Three steps to <span class="highlight">complete clarity</span></h2>
+    <p class="section-subtitle" style="text-align: center; margin: 0 auto;">
+      Get from zero to full security visibility in under a minute.
+    </p>
 
-    <div class="steps">
-      <div class="step">
+    <div class="steps-grid">
+      <div class="step-card">
         <div class="step-number">1</div>
         <h3>Install</h3>
-        <p>Install globally via npm or pip, or run with Docker.</p>
+        <p>One command to install. Works with npm, pip, or Docker.</p>
         <code>npm install -g slop-auditor</code>
       </div>
-      <div class="step">
+      <div class="step-card">
         <div class="step-number">2</div>
         <h3>Scan</h3>
-        <p>Point it at any directory or AWS account. Results in seconds.</p>
+        <p>Point it at any repo or AWS account. All scanners run in parallel.</p>
         <code>slop-auditor scan ./my-project</code>
       </div>
-      <div class="step">
+      <div class="step-card">
         <div class="step-number">3</div>
         <h3>Visualize</h3>
-        <p>Open the 3D dashboard for an interactive view of findings.</p>
+        <p>Open the 3D dashboard. See every finding, prioritized and actionable.</p>
         <code>slop-auditor serve && open /app</code>
       </div>
     </div>
   </section>
 
+  <!-- Tools Section -->
+  <section class="section tools-section">
+    <span class="section-badge">Integrations</span>
+    <h2 class="section-title">Powered by <span class="highlight">real scanners</span></h2>
+    <p class="section-subtitle" style="text-align: center; margin: 0 auto;">
+      Industry-standard security tools. All open source. All free.
+    </p>
+
+    <div class="tools-grid">
+      <div class="tool-badge"><span class="icon">🔐</span> Gitleaks</div>
+      <div class="tool-badge"><span class="icon">🛡️</span> Trivy</div>
+      <div class="tool-badge"><span class="icon">🔬</span> Semgrep</div>
+      <div class="tool-badge"><span class="icon">📦</span> npm audit</div>
+      <div class="tool-badge"><span class="icon">🐍</span> pip-audit</div>
+      <div class="tool-badge"><span class="icon">🦀</span> cargo-audit</div>
+      <div class="tool-badge"><span class="icon">🐹</span> govulncheck</div>
+      <div class="tool-badge"><span class="icon">🔎</span> Grype</div>
+    </div>
+  </section>
+
   <!-- CTA Section -->
   <section class="cta-section">
-    <h2>Ready to secure your codebase?</h2>
-    <p>Start scanning in under a minute. No signup required.</p>
-    <div class="cta-buttons">
-      <a href="https://www.npmjs.com/package/slop-auditor" target="_blank" class="btn btn-primary">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M0 7.334v8h6.666v1.332H12v-1.332h12v-8H0zm6.666 6.664H5.334v-4H3.999v4H1.335V8.667h5.331v5.331zm4 0v1.336H8.001V8.667h5.334v5.332h-2.669v-.001zm12.001 0h-1.33v-4h-1.336v4h-1.335v-4h-1.33v4h-2.671V8.667h8.002v5.331z"/>
-        </svg>
-        npm install
-      </a>
-      <a href="https://pypi.org/project/slop-auditor/" target="_blank" class="btn btn-secondary">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M14.25.18l.9.2.73.26.59.3.45.32.34.34.25.34.16.33.1.3.04.26.02.2-.01.13V8.5l-.05.63-.13.55-.21.46-.26.38-.3.31-.33.25-.35.19-.35.14-.33.1-.3.07-.26.04-.21.02H8.77l-.69.05-.59.14-.5.22-.41.27-.33.32-.27.35-.2.36-.15.37-.1.35-.07.32-.04.27-.02.21v3.06H3.17l-.21-.03-.28-.07-.32-.12-.35-.18-.36-.26-.36-.36-.35-.46-.32-.59-.28-.73-.21-.88-.14-1.05-.05-1.23.06-1.22.16-1.04.24-.87.32-.71.36-.57.4-.44.42-.33.42-.24.4-.16.36-.1.32-.05.24-.01h.16l.06.01h8.16v-.83H6.18l-.01-2.75-.02-.37.05-.34.11-.31.17-.28.25-.26.31-.23.38-.2.44-.18.51-.15.58-.12.64-.1.71-.06.77-.04.84-.02 1.27.05zm-6.3 1.98l-.23.33-.08.41.08.41.23.34.33.22.41.09.41-.09.33-.22.23-.34.08-.41-.08-.41-.23-.33-.33-.22-.41-.09-.41.09zm13.09 3.95l.28.06.32.12.35.18.36.27.36.35.35.47.32.59.28.73.21.88.14 1.04.05 1.23-.06 1.23-.16 1.04-.24.86-.32.71-.36.57-.4.45-.42.33-.42.24-.4.16-.36.09-.32.05-.24.02-.16-.01h-8.22v.82h5.84l.01 2.76.02.36-.05.34-.11.31-.17.29-.25.25-.31.24-.38.2-.44.17-.51.15-.58.13-.64.09-.71.07-.77.04-.84.01-1.27-.04-1.07-.14-.9-.2-.73-.25-.59-.3-.45-.33-.34-.34-.25-.34-.16-.33-.1-.3-.04-.25-.02-.2.01-.13v-5.34l.05-.64.13-.54.21-.46.26-.38.3-.32.33-.24.35-.2.35-.14.33-.1.3-.06.26-.04.21-.02.13-.01h5.84l.69-.05.59-.14.5-.21.41-.28.33-.32.27-.35.2-.36.15-.36.1-.35.07-.32.04-.28.02-.21V6.07h2.09l.14.01zm-6.47 14.25l-.23.33-.08.41.08.41.23.33.33.23.41.08.41-.08.33-.23.23-.33.08-.41-.08-.41-.23-.33-.33-.23-.41-.08-.41.08z"/>
-        </svg>
-        pip install
-      </a>
-      <a href="https://github.com/slopsecurityadmin/slop-security-auditor" target="_blank" class="btn btn-secondary">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-        </svg>
-        GitHub
-      </a>
+    <div class="cta-content">
+      <h2>Ready to <span class="highlight">see everything</span>?</h2>
+      <p>Start scanning in under a minute. No signup required.</p>
+      <div class="cta-buttons">
+        <a href="/app" class="btn btn-accent">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+          </svg>
+          Open Dashboard
+        </a>
+        <a href="https://www.npmjs.com/package/slop-auditor" target="_blank" class="btn btn-secondary">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M0 7.334v8h6.666v1.332H12v-1.332h12v-8H0zm6.666 6.664H5.334v-4H3.999v4H1.335V8.667h5.331v5.331zm4 0v1.336H8.001V8.667h5.334v5.332h-2.669v-.001zm12.001 0h-1.33v-4h-1.336v4h-1.335v-4h-1.33v4h-2.671V8.667h8.002v5.331z"/>
+          </svg>
+          npm install
+        </a>
+        <a href="https://github.com/slopsecurityadmin/slop-security-auditor" target="_blank" class="btn btn-secondary">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+          </svg>
+          GitHub
+        </a>
+      </div>
     </div>
   </section>
 
   <!-- Footer -->
   <footer>
-    <div class="footer-links">
-      <a href="https://github.com/slopsecurityadmin/slop-security-auditor" target="_blank">GitHub</a>
-      <a href="https://www.npmjs.com/package/slop-auditor" target="_blank">npm</a>
-      <a href="https://pypi.org/project/slop-auditor/" target="_blank">PyPI</a>
-      <a href="https://github.com/slopsecurityadmin/slop-security-auditor/issues" target="_blank">Issues</a>
-      <a href="https://github.com/slopsecurityadmin/slop-security-auditor/blob/main/LICENSE" target="_blank">MIT License</a>
+    <div class="footer-content">
+      <div class="footer-brand">
+        <a href="/" class="logo">
+          <span class="logo-icon">🛡️</span>
+          SLOP Auditor
+        </a>
+        <p>Deterministic security auditing with 3D visualization. Open source and free.</p>
+      </div>
+      <div class="footer-links">
+        <div class="footer-column">
+          <h4>Product</h4>
+          <a href="/app">Dashboard</a>
+          <a href="#solution">Features</a>
+          <a href="#how-it-works">How It Works</a>
+        </div>
+        <div class="footer-column">
+          <h4>Resources</h4>
+          <a href="https://github.com/slopsecurityadmin/slop-security-auditor" target="_blank">GitHub</a>
+          <a href="https://www.npmjs.com/package/slop-auditor" target="_blank">npm</a>
+          <a href="https://pypi.org/project/slop-auditor/" target="_blank">PyPI</a>
+        </div>
+        <div class="footer-column">
+          <h4>Community</h4>
+          <a href="https://github.com/slopsecurityadmin/slop-security-auditor/issues" target="_blank">Issues</a>
+          <a href="https://github.com/slopsecurityadmin/slop-security-auditor/discussions" target="_blank">Discussions</a>
+        </div>
+      </div>
     </div>
-    <p class="footer-copy">© 2026 SLOP Auditor. Open source security auditing.</p>
+    <div class="footer-bottom">
+      <span>© 2026 SLOP Auditor. MIT License.</span>
+      <div class="footer-social">
+        <a href="https://github.com/slopsecurityadmin/slop-security-auditor" target="_blank">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+          </svg>
+        </a>
+      </div>
+    </div>
   </footer>
+
+  <script>
+    // Generate stars
+    const starsContainer = document.getElementById('stars');
+    for (let i = 0; i < 100; i++) {
+      const star = document.createElement('div');
+      star.className = 'star';
+      star.style.left = Math.random() * 100 + '%';
+      star.style.top = Math.random() * 100 + '%';
+      star.style.animationDelay = Math.random() * 3 + 's';
+      star.style.width = Math.random() * 2 + 1 + 'px';
+      star.style.height = star.style.width;
+      starsContainer.appendChild(star);
+    }
+
+    // 3D Characters using Three.js
+    function createCharacterScene(containerId, characterType) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
+      const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+
+      renderer.setSize(280, 280);
+      renderer.setClearColor(0x000000, 0);
+      container.appendChild(renderer.domElement);
+
+      // Lighting
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+      scene.add(ambientLight);
+
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      directionalLight.position.set(5, 10, 7);
+      scene.add(directionalLight);
+
+      const pointLight = new THREE.PointLight(characterType === 'shield' ? 0x4ade80 : 0x22d3ee, 0.5);
+      pointLight.position.set(-3, 3, 3);
+      scene.add(pointLight);
+
+      // Create character group
+      const character = new THREE.Group();
+
+      if (characterType === 'shield') {
+        // Shield Guardian Character
+        // Body
+        const bodyGeo = new THREE.CylinderGeometry(0.6, 0.8, 1.4, 8);
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x4a5568, metalness: 0.3, roughness: 0.7 });
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.position.y = 0.7;
+        character.add(body);
+
+        // Head
+        const headGeo = new THREE.SphereGeometry(0.5, 16, 16);
+        const headMat = new THREE.MeshStandardMaterial({ color: 0xfcd9b6, metalness: 0.1, roughness: 0.8 });
+        const head = new THREE.Mesh(headGeo, headMat);
+        head.position.y = 1.8;
+        character.add(head);
+
+        // Helmet
+        const helmetGeo = new THREE.SphereGeometry(0.55, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+        const helmetMat = new THREE.MeshStandardMaterial({ color: 0x4ade80, metalness: 0.6, roughness: 0.3 });
+        const helmet = new THREE.Mesh(helmetGeo, helmetMat);
+        helmet.position.y = 1.9;
+        character.add(helmet);
+
+        // Visor
+        const visorGeo = new THREE.BoxGeometry(0.6, 0.15, 0.3);
+        const visorMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2e, metalness: 0.8, roughness: 0.2 });
+        const visor = new THREE.Mesh(visorGeo, visorMat);
+        visor.position.set(0, 1.75, 0.35);
+        character.add(visor);
+
+        // Shield
+        const shieldGeo = new THREE.CylinderGeometry(0.8, 0.8, 0.1, 6);
+        const shieldMat = new THREE.MeshStandardMaterial({ color: 0x4ade80, metalness: 0.7, roughness: 0.3 });
+        const shield = new THREE.Mesh(shieldGeo, shieldMat);
+        shield.rotation.x = Math.PI / 2;
+        shield.rotation.z = Math.PI / 6;
+        shield.position.set(-0.9, 1, 0.3);
+        character.add(shield);
+
+        // Shield emblem
+        const emblemGeo = new THREE.TorusGeometry(0.25, 0.05, 8, 6);
+        const emblemMat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.5 });
+        const emblem = new THREE.Mesh(emblemGeo, emblemMat);
+        emblem.rotation.x = Math.PI / 2;
+        emblem.rotation.z = Math.PI / 6;
+        emblem.position.set(-0.9, 1, 0.4);
+        character.add(emblem);
+
+        // Platform
+        const platformGeo = new THREE.CylinderGeometry(1.2, 1.4, 0.2, 8);
+        const platformMat = new THREE.MeshStandardMaterial({ color: 0x2d3748, metalness: 0.2, roughness: 0.8 });
+        const platform = new THREE.Mesh(platformGeo, platformMat);
+        platform.position.y = -0.1;
+        character.add(platform);
+
+      } else {
+        // Scanner/Detective Character
+        // Body
+        const bodyGeo = new THREE.CylinderGeometry(0.5, 0.7, 1.2, 8);
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1e3a5f, metalness: 0.3, roughness: 0.7 });
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.position.y = 0.6;
+        character.add(body);
+
+        // Head (robot style)
+        const headGeo = new THREE.BoxGeometry(0.7, 0.7, 0.7);
+        const headMat = new THREE.MeshStandardMaterial({ color: 0x22d3ee, metalness: 0.6, roughness: 0.3 });
+        const head = new THREE.Mesh(headGeo, headMat);
+        head.position.y = 1.6;
+        character.add(head);
+
+        // Eyes (screen)
+        const eyeGeo = new THREE.PlaneGeometry(0.5, 0.25);
+        const eyeMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, emissive: 0x22d3ee, emissiveIntensity: 0.3 });
+        const eye = new THREE.Mesh(eyeGeo, eyeMat);
+        eye.position.set(0, 1.6, 0.36);
+        character.add(eye);
+
+        // Antenna
+        const antennaGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.4, 8);
+        const antennaMat = new THREE.MeshStandardMaterial({ color: 0x22d3ee, metalness: 0.8 });
+        const antenna = new THREE.Mesh(antennaGeo, antennaMat);
+        antenna.position.set(0, 2.1, 0);
+        character.add(antenna);
+
+        const antennaBallGeo = new THREE.SphereGeometry(0.08, 8, 8);
+        const antennaBall = new THREE.Mesh(antennaBallGeo, antennaMat);
+        antennaBall.position.set(0, 2.35, 0);
+        character.add(antennaBall);
+
+        // Magnifying glass arm
+        const armGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.8, 8);
+        const armMat = new THREE.MeshStandardMaterial({ color: 0x4a5568 });
+        const arm = new THREE.Mesh(armGeo, armMat);
+        arm.rotation.z = -Math.PI / 4;
+        arm.position.set(0.7, 1.2, 0.3);
+        character.add(arm);
+
+        // Magnifying glass
+        const glassRingGeo = new THREE.TorusGeometry(0.3, 0.05, 8, 16);
+        const glassRingMat = new THREE.MeshStandardMaterial({ color: 0xf0a050, metalness: 0.7 });
+        const glassRing = new THREE.Mesh(glassRingGeo, glassRingMat);
+        glassRing.position.set(1.1, 1.5, 0.3);
+        character.add(glassRing);
+
+        const glassGeo = new THREE.CircleGeometry(0.25, 16);
+        const glassMat = new THREE.MeshStandardMaterial({
+          color: 0x87ceeb,
+          transparent: true,
+          opacity: 0.4,
+          metalness: 0.1
+        });
+        const glass = new THREE.Mesh(glassGeo, glassMat);
+        glass.position.set(1.1, 1.5, 0.31);
+        character.add(glass);
+
+        // Platform
+        const platformGeo = new THREE.CylinderGeometry(1, 1.2, 0.2, 8);
+        const platformMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.2, roughness: 0.8 });
+        const platform = new THREE.Mesh(platformGeo, platformMat);
+        platform.position.y = -0.1;
+        character.add(platform);
+      }
+
+      scene.add(character);
+      camera.position.set(3, 2, 3);
+      camera.lookAt(0, 1, 0);
+
+      // Animation
+      let time = 0;
+      function animate() {
+        requestAnimationFrame(animate);
+        time += 0.01;
+
+        // Gentle floating
+        character.position.y = Math.sin(time) * 0.05;
+        // Slow rotation
+        character.rotation.y = Math.sin(time * 0.5) * 0.2 + (characterType === 'shield' ? 0.3 : -0.3);
+
+        renderer.render(scene, camera);
+      }
+      animate();
+    }
+
+    // Initialize 3D characters
+    createCharacterScene('character-left', 'shield');
+    createCharacterScene('character-right', 'scanner');
+
+    // Smooth scroll
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function(e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth' });
+        }
+      });
+    });
+  </script>
 </body>
 </html>
