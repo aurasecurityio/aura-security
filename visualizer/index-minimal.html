@@ -618,7 +618,9 @@
       currentView: 'scan'
     };
 
-    const SLOP = 'http://127.0.0.1:3000';
+    // Auto-detect API URL: use localhost for local dev, same origin for deployed
+    const isLocal = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+    const SLOP = isLocal ? 'http://127.0.0.1:3000' : window.location.origin;
 
     // ========== THREE.JS SETUP ==========
     let scene, camera, renderer, controls;
