@@ -72,6 +72,51 @@ function isToolAvailable(tool: string): boolean {
   }
 }
 
+// Files to exclude from secret scanning (lock files, compiled outputs, etc.)
+const SECRET_SCAN_EXCLUDE_FILES = [
+  'package-lock.json',
+  'yarn.lock',
+  'pnpm-lock.yaml',
+  'composer.lock',
+  'Gemfile.lock',
+  'Cargo.lock',
+  'poetry.lock',
+  'go.sum',
+  '.min.js',
+  '.min.css',
+  '.bundle.js',
+  '.chunk.js',
+  'dist/',
+  'build/',
+  '.next/',
+  'coverage/'
+];
+
+// Directories that often contain false positives (test data, scripts, examples)
+const FALSE_POSITIVE_DIRS = [
+  'node_modules',
+  '__tests__',
+  '__mocks__',
+  'test/',
+  'tests/',
+  'spec/',
+  'fixtures/',
+  'examples/',
+  'scripts/'
+];
+
+// Rules to completely skip - too many false positives to be useful
+// aws-secret-access-key matches any 40-char base64 string which catches SHA hashes,
+// base64 content, UUIDs, etc. Real AWS detection uses AKIA prefix pattern instead.
+const SKIP_RULES_ENTIRELY = [
+  'aws-secret-access-key'
+];
+
+// Rules that are somewhat prone to false positives
+const FALSE_POSITIVE_RULES = [
+  'generic-api-key'
+];
+
 // Run gitleaks for secrets detection
 function runGitleaks(targetPath: string): SecretFinding[] {
   const findings: SecretFinding[] = [];
@@ -97,19 +142,53 @@ function runGitleaks(targetPath: string): SecretFinding[] {
 
     if (existsSync(reportPath)) {
       const report = JSON.parse(readFileSync(reportPath, 'utf-8')) as GitleaksResult[];
+      let filteredCount = 0;
 
       for (const finding of report) {
+        const ruleId = finding.RuleID?.toLowerCase() || '';
+        const filePath = finding.File.toLowerCase();
+        const fileName = basename(finding.File);
+
+        // Completely skip rules that have too many false positives
+        if (SKIP_RULES_ENTIRELY.includes(ruleId)) {
+          filteredCount++;
+          continue;
+        }
+
+        // Filter out false positives from lock files and generated files
+        const isExcludedFile = SECRET_SCAN_EXCLUDE_FILES.some(pattern =>
+          fileName === pattern || filePath.includes(pattern.toLowerCase())
+        );
+
+        // Filter out findings from known false positive directories
+        const isInFalsePositiveDir = FALSE_POSITIVE_DIRS.some(dir =>
+          filePath.includes(dir.toLowerCase())
+        );
+
+        // Filter out known false positive rules in certain file types
+        const isFalsePositiveRule = FALSE_POSITIVE_RULES.includes(ruleId) &&
+          (isExcludedFile || isInFalsePositiveDir);
+
+        if (isExcludedFile || isFalsePositiveRule) {
+          filteredCount++;
+          continue;
+        }
+
         findings.push({
           file: finding.File,
           line: finding.StartLine,
           type: finding.RuleID || finding.Description,
           snippet: `[REDACTED - ${finding.Description}]`,
-          severity: finding.Entropy > 4 ? 'critical' : 'high'
+          severity: finding.Entropy > 4.5 ? 'critical' : 'high'
         });
       }
 
       // Cleanup
       try { rmSync(reportPath); } catch {}
+
+      if (filteredCount > 0) {
+        console.log(`[SCANNER] Filtered ${filteredCount} false positives from lock/generated files`);
+      }
     }
 
     console.log(`[SCANNER] gitleaks found ${findings.length} secrets`);
