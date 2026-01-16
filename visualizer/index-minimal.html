@@ -1442,11 +1442,16 @@
         }
 
         const scanData = data.result?.scan_details || data.result || data;
+        const repoPath = gitUrl || localPath;
+
+        // Check if this repo was already scanned (update instead of duplicate)
+        const existingRepo = state.repos.find(r => r.path === repoPath);
+        const existingReportIdx = state.reports.findIndex(r => r.path === repoPath);
 
         const repo = {
-          id: Date.now().toString(),
+          id: existingRepo?.id || Date.now().toString(),
           name: targetName,
-          path: gitUrl || localPath,
+          path: repoPath,
           type: targetType,
           secrets: scanData.secrets_found || 0,
           vulns: scanData.package_vulns || 0,
@@ -1522,12 +1527,30 @@
           });
         }
 
-        state.repos.push(repo);
-        state.reports.push(repo);
+        // Update or add repo to state
+        if (existingRepo) {
+          // Update existing repo
+          const idx = state.repos.findIndex(r => r.id === existingRepo.id);
+          if (idx !== -1) state.repos[idx] = repo;
 
-        addRepoNode(repo);
+          // Update existing report
+          if (existingReportIdx !== -1) state.reports[existingReportIdx] = repo;
 
-        log(`Complete: ${repo.secrets} secrets, ${repo.vulns} vulnerabilities`, repo.secrets > 0 ? 'error' : 'success');
+          // Update existing 3D node
+          const existingNode = repoNodes.find(n => n.userData.repoId === repo.id);
+          if (existingNode) {
+            updateNodeColor(existingNode, repo);
+          }
+
+          log(`Updated: ${repo.secrets} secrets, ${repo.vulns} vulnerabilities`, repo.secrets > 0 ? 'error' : 'success');
+        } else {
+          // Add new repo
+          state.repos.push(repo);
+          state.reports.push(repo);
+          addRepoNode(repo);
+
+          log(`Complete: ${repo.secrets} secrets, ${repo.vulns} vulnerabilities`, repo.secrets > 0 ? 'error' : 'success');
+        }
         updateUI();
         selectRepo(repo.id);
 
