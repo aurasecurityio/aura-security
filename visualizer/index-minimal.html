@@ -97,6 +97,71 @@
       padding-top: 6px;
     }
 
+    /* 3D Navigation Breadcrumb */
+    #nav3d {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 150;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+    }
+
+    #nav3d.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    #nav3d .nav-item {
+      color: var(--text-secondary);
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: all 0.15s;
+    }
+
+    #nav3d .nav-item:hover {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+
+    #nav3d .nav-item.active {
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    #nav3d .nav-sep {
+      color: var(--text-muted);
+    }
+
+    #nav3d .back-btn {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 12px;
+      margin-right: 8px;
+      transition: all 0.15s;
+    }
+
+    #nav3d .back-btn:hover {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
     /* Panels */
     .panel {
       position: fixed;
@@ -544,6 +609,16 @@
     <div class="tooltip-hint">Click to view findings in 3D</div>
   </div>
 
+  <!-- 3D Navigation Breadcrumb -->
+  <div id="nav3d">
+    <button class="back-btn" onclick="navigateBack()">← Back</button>
+    <span class="nav-item" onclick="navigateToLevel(0)">All Repos</span>
+    <span class="nav-sep">/</span>
+    <span class="nav-item nav-repo"></span>
+    <span class="nav-sep nav-sev-sep" style="display:none">/</span>
+    <span class="nav-item nav-severity" style="display:none"></span>
+  </div>
+
   <!-- Header -->
   <header id="header" class="panel">
     <div class="logo">
@@ -675,7 +750,9 @@
       repos: [],
       selectedRepo: null,
       reports: [],
-      currentView: 'scan'
+      currentView: 'scan',
+      drillLevel: 0,        // 0=repos, 1=severities, 2=findings
+      selectedSeverity: null // 'critical', 'high', 'medium', 'low'
     };
 
     // Auto-detect API URL: use localhost for local dev, same origin for deployed
@@ -867,6 +944,14 @@
       node.userData.color = color;
     }
 
+    // Severity colors and labels
+    const SEVERITY_CONFIG = {
+      critical: { color: 0xf85149, label: 'Critical', icon: 'octahedron' },
+      high: { color: 0xdb6d28, label: 'High', icon: 'box' },
+      medium: { color: 0xd29922, label: 'Medium', icon: 'sphere' },
+      low: { color: 0x58a6ff, label: 'Low', icon: 'cone' }
+    };
+
     // Clear all finding nodes from the scene
     function clearFindingNodes() {
       findingNodes.forEach(node => {
@@ -884,48 +969,221 @@
       findingLines = [];
     }
 
-    // Create 3D nodes for findings around a repo
-    function showFindingsIn3D(repo, repoNode) {
+    // Update navigation breadcrumb
+    function updateNav3D() {
+      const nav = document.getElementById('nav3d');
+      const repoName = document.querySelector('#nav3d .nav-repo');
+      const sevSep = document.querySelector('#nav3d .nav-sev-sep');
+      const sevName = document.querySelector('#nav3d .nav-severity');
+
+      if (state.drillLevel === 0) {
+        nav.classList.remove('visible');
+      } else {
+        nav.classList.add('visible');
+        const repo = state.repos.find(r => r.id === state.selectedRepo);
+        repoName.textContent = repo?.name || '';
+        repoName.classList.toggle('active', state.drillLevel === 1);
+
+        if (state.drillLevel === 2 && state.selectedSeverity) {
+          sevSep.style.display = 'inline';
+          sevName.style.display = 'inline';
+          sevName.textContent = SEVERITY_CONFIG[state.selectedSeverity]?.label || state.selectedSeverity;
+          sevName.classList.add('active');
+          repoName.classList.remove('active');
+        } else {
+          sevSep.style.display = 'none';
+          sevName.style.display = 'none';
+        }
+      }
+    }
+
+    // Navigate back one level
+    function navigateBack() {
+      if (state.drillLevel === 2) {
+        // Go back to severity view
+        state.drillLevel = 1;
+        state.selectedSeverity = null;
+        const repo = state.repos.find(r => r.id === state.selectedRepo);
+        const repoNode = repoNodes.find(n => n.userData.repoId === state.selectedRepo);
+        if (repo && repoNode) {
+          showSeverityNodes(repo, repoNode);
+        }
+      } else if (state.drillLevel === 1) {
+        // Go back to repo view
+        state.drillLevel = 0;
+        state.selectedRepo = null;
+        clearFindingNodes();
+        document.getElementById('selectedRepoInfo').classList.remove('visible');
+        repoNodes.forEach(node => node.scale.setScalar(1));
+      }
+      updateNav3D();
+    }
+    window.navigateBack = navigateBack;
+
+    // Navigate to specific level
+    function navigateToLevel(level) {
+      if (level === 0) {
+        state.drillLevel = 0;
+        state.selectedRepo = null;
+        state.selectedSeverity = null;
+        clearFindingNodes();
+        document.getElementById('selectedRepoInfo').classList.remove('visible');
+        repoNodes.forEach(node => node.scale.setScalar(1));
+      } else if (level === 1 && state.selectedRepo) {
+        state.drillLevel = 1;
+        state.selectedSeverity = null;
+        const repo = state.repos.find(r => r.id === state.selectedRepo);
+        const repoNode = repoNodes.find(n => n.userData.repoId === state.selectedRepo);
+        if (repo && repoNode) {
+          showSeverityNodes(repo, repoNode);
+        }
+      }
+      updateNav3D();
+    }
+    window.navigateToLevel = navigateToLevel;
+
+    // LEVEL 1: Show severity category nodes around a repo
+    function showSeverityNodes(repo, repoNode) {
       clearFindingNodes();
+      state.drillLevel = 1;
+      updateNav3D();
 
       if (!repo.findings || repo.findings.length === 0) return;
 
       const repoPos = repoNode.position.clone();
-      repoPos.y += 2; // Offset above the repo block
+      repoPos.y += 2;
 
-      // Limit to 20 findings for performance
-      const findings = repo.findings.slice(0, 20);
-      const radius = 4;
+      // Count findings by severity
+      const counts = { critical: 0, high: 0, medium: 0, low: 0 };
+      repo.findings.forEach(f => {
+        const sev = f.type === 'SECRET' ? 'critical' : (f.severity?.toLowerCase() || 'medium');
+        if (counts[sev] !== undefined) counts[sev]++;
+        else counts.medium++;
+      });
 
-      findings.forEach((finding, i) => {
-        // Determine color by severity/type
-        let color;
-        if (finding.type === 'SECRET' || finding.severity === 'critical') {
-          color = 0xf85149; // red
-        } else if (finding.severity === 'high') {
-          color = 0xdb6d28; // orange
-        } else if (finding.severity === 'medium' || finding.type === 'VULN') {
-          color = 0xd29922; // yellow
-        } else {
-          color = 0x58a6ff; // blue
+      // Create severity nodes
+      const severities = ['critical', 'high', 'medium', 'low'];
+      const radius = 6;
+
+      severities.forEach((sev, i) => {
+        const count = counts[sev];
+        if (count === 0) return; // Skip empty severities
+
+        const config = SEVERITY_CONFIG[sev];
+        const angle = (i / 4) * Math.PI * 2 - Math.PI / 2;
+
+        // Create severity node based on icon type
+        let geom;
+        const size = 0.8 + Math.min(count / 10, 1) * 0.5; // Scale by count
+        switch (config.icon) {
+          case 'octahedron':
+            geom = new THREE.OctahedronGeometry(size, 0);
+            break;
+          case 'box':
+            geom = new THREE.BoxGeometry(size * 1.5, size * 1.5, size * 1.5);
+            break;
+          case 'cone':
+            geom = new THREE.ConeGeometry(size, size * 1.5, 6);
+            break;
+          default:
+            geom = new THREE.SphereGeometry(size, 12, 12);
         }
 
-        // Create finding node (small sphere)
-        const size = finding.type === 'SECRET' ? 0.4 : 0.3;
+        const mat = new THREE.MeshPhongMaterial({
+          color: config.color,
+          emissive: config.color,
+          emissiveIntensity: 0.3,
+          flatShading: true
+        });
+
+        const mesh = new THREE.Mesh(geom, mat);
+        mesh.position.set(
+          repoPos.x + Math.cos(angle) * radius,
+          repoPos.y + 2,
+          repoPos.z + Math.sin(angle) * radius
+        );
+
+        mesh.userData = {
+          isSeverityNode: true,
+          severity: sev,
+          count: count,
+          label: `${config.label} (${count})`
+        };
+
+        scene.add(mesh);
+        findingNodes.push(mesh);
+
+        // Create connection line
+        const lineGeom = new THREE.BufferGeometry().setFromPoints([
+          mesh.position.clone(),
+          repoPos.clone().add(new THREE.Vector3(0, 1, 0))
+        ]);
+        const lineMat = new THREE.LineBasicMaterial({
+          color: config.color,
+          transparent: true,
+          opacity: 0.6
+        });
+        const line = new THREE.Line(lineGeom, lineMat);
+        scene.add(line);
+        findingLines.push(line);
+
+        // Add count label as sprite
+        const canvas = document.createElement('canvas');
+        canvas.width = 128;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#' + config.color.toString(16).padStart(6, '0');
+        ctx.font = 'bold 32px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(count.toString(), 64, 40);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true });
+        const sprite = new THREE.Sprite(spriteMat);
+        sprite.position.copy(mesh.position);
+        sprite.position.y += 1.5;
+        sprite.scale.set(2, 1, 1);
+        scene.add(sprite);
+        findingNodes.push(sprite);
+      });
+    }
+
+    // LEVEL 2: Show individual findings for a severity
+    function showFindingsForSeverity(repo, repoNode, severity) {
+      clearFindingNodes();
+      state.drillLevel = 2;
+      state.selectedSeverity = severity;
+      updateNav3D();
+
+      const repoPos = repoNode.position.clone();
+      repoPos.y += 2;
+
+      // Filter findings by severity
+      const findings = repo.findings.filter(f => {
+        const fSev = f.type === 'SECRET' ? 'critical' : (f.severity?.toLowerCase() || 'medium');
+        return fSev === severity;
+      }).slice(0, 25); // Limit for performance
+
+      const config = SEVERITY_CONFIG[severity];
+      const radius = 5;
+
+      findings.forEach((finding, i) => {
+        const angle = (i / findings.length) * Math.PI * 2;
+        const yOffset = Math.sin(i * 0.5) * 2;
+
+        // Create finding node
+        const size = 0.35;
         const geom = finding.type === 'SECRET'
           ? new THREE.OctahedronGeometry(size, 0)
           : new THREE.SphereGeometry(size, 8, 8);
         const mat = new THREE.MeshPhongMaterial({
-          color: color,
-          emissive: color,
-          emissiveIntensity: 0.4,
+          color: config.color,
+          emissive: config.color,
+          emissiveIntensity: 0.5,
           flatShading: true
         });
-        const mesh = new THREE.Mesh(geom, mat);
 
-        // Position in a spiral around the repo
-        const angle = (i / findings.length) * Math.PI * 2;
-        const yOffset = (i / findings.length) * 3 - 1.5;
+        const mesh = new THREE.Mesh(geom, mat);
         mesh.position.set(
           repoPos.x + Math.cos(angle) * radius,
           repoPos.y + yOffset + 2,
@@ -933,44 +1191,41 @@
         );
 
         mesh.userData = {
-          findingType: finding.type,
-          findingSeverity: finding.severity,
-          findingMessage: finding.message,
-          findingFile: finding.file
+          isFindingNode: true,
+          finding: finding
         };
 
         scene.add(mesh);
         findingNodes.push(mesh);
 
-        // Create connection line to repo
+        // Create connection line
         const lineGeom = new THREE.BufferGeometry().setFromPoints([
           mesh.position.clone(),
-          repoPos.clone().add(new THREE.Vector3(0, 1, 0))
+          repoPos.clone().add(new THREE.Vector3(0, 1.5, 0))
         ]);
         const lineMat = new THREE.LineBasicMaterial({
-          color: color,
+          color: config.color,
           transparent: true,
-          opacity: 0.5
+          opacity: 0.4
         });
         const line = new THREE.Line(lineGeom, lineMat);
         scene.add(line);
         findingLines.push(line);
       });
 
-      // Also create a glowing connection from repo to central node
-      const centralLineGeom = new THREE.BufferGeometry().setFromPoints([
-        repoPos.clone(),
-        centralNode.position.clone()
-      ]);
-      const centralLineMat = new THREE.LineBasicMaterial({
-        color: repo.secrets > 0 ? 0xf85149 : (repo.vulns > 0 ? 0xd29922 : 0x3fb950),
-        transparent: true,
-        opacity: 0.8,
-        linewidth: 2
+      // Create central severity indicator
+      const centralGeom = new THREE.TorusGeometry(2, 0.2, 8, 24);
+      const centralMat = new THREE.MeshPhongMaterial({
+        color: config.color,
+        emissive: config.color,
+        emissiveIntensity: 0.3
       });
-      const centralLine = new THREE.Line(centralLineGeom, centralLineMat);
-      scene.add(centralLine);
-      findingLines.push(centralLine);
+      const centralRing = new THREE.Mesh(centralGeom, centralMat);
+      centralRing.position.copy(repoPos);
+      centralRing.position.y += 2;
+      centralRing.rotation.x = Math.PI / 2;
+      scene.add(centralRing);
+      findingNodes.push(centralRing);
     }
 
     function animate() {
@@ -1013,15 +1268,45 @@
       mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
       raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObjects(repoNodes, true);
+
+      // Check for intersections with finding nodes first, then repo nodes
+      const allClickables = [...findingNodes.filter(n => n.userData.isSeverityNode || n.userData.isFindingNode), ...repoNodes];
+      const intersects = raycaster.intersectObjects(allClickables, true);
 
       const tooltip = document.getElementById('tooltip3d');
 
       if (intersects.length > 0) {
         document.body.style.cursor = 'pointer';
+        let target = intersects[0].object;
+
+        // Check if it's a severity node
+        if (target.userData.isSeverityNode) {
+          tooltip.querySelector('.tooltip-name').textContent = target.userData.label;
+          tooltip.querySelector('.tooltip-stats').innerHTML = `
+            <span class="tooltip-stat">Click to view findings</span>
+          `;
+          tooltip.querySelector('.tooltip-hint').textContent = 'Drill down into ' + target.userData.label;
+          tooltip.style.left = (event.clientX + 15) + 'px';
+          tooltip.style.top = (event.clientY + 15) + 'px';
+          tooltip.classList.add('visible');
+          return;
+        }
+
+        // Check if it's a finding node
+        if (target.userData.isFindingNode) {
+          const f = target.userData.finding;
+          tooltip.querySelector('.tooltip-name').textContent = f.message || f.type;
+          tooltip.querySelector('.tooltip-stats').innerHTML = `
+            <span class="tooltip-stat">${f.type}</span>
+          `;
+          tooltip.querySelector('.tooltip-hint').textContent = f.file ? f.file + (f.line ? ':' + f.line : '') : '';
+          tooltip.style.left = (event.clientX + 15) + 'px';
+          tooltip.style.top = (event.clientY + 15) + 'px';
+          tooltip.classList.add('visible');
+          return;
+        }
 
         // Find the repo node group
-        let target = intersects[0].object;
         while (target.parent && !target.userData.repoId) {
           target = target.parent;
         }
@@ -1033,14 +1318,17 @@
           if (repo) {
             // Update tooltip content
             tooltip.querySelector('.tooltip-name').textContent = repo.name;
-            tooltip.querySelector('.tooltip-stat.critical .count').textContent = repo.secrets;
-            tooltip.querySelector('.tooltip-stat.warning .count').textContent = repo.vulns;
+            tooltip.querySelector('.tooltip-stats').innerHTML = `
+              <span class="tooltip-stat critical"><span class="count">${repo.secrets}</span> Secrets</span>
+              <span class="tooltip-stat warning"><span class="count">${repo.vulns}</span> Vulns</span>
+            `;
+            tooltip.querySelector('.tooltip-hint').textContent = 'Click to view severity breakdown';
 
             // Update colors based on status
             const critStat = tooltip.querySelector('.tooltip-stat.critical');
             const warnStat = tooltip.querySelector('.tooltip-stat.warning');
-            critStat.style.color = repo.secrets > 0 ? 'var(--critical)' : 'var(--text-muted)';
-            warnStat.style.color = repo.vulns > 0 ? 'var(--warning)' : 'var(--text-muted)';
+            if (critStat) critStat.style.color = repo.secrets > 0 ? 'var(--critical)' : 'var(--text-muted)';
+            if (warnStat) warnStat.style.color = repo.vulns > 0 ? 'var(--warning)' : 'var(--text-muted)';
           }
         }
 
@@ -1058,10 +1346,25 @@
 
     function onMouseClick(event) {
       raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObjects(repoNodes, true);
+
+      // Check for intersections with finding nodes first, then repo nodes
+      const allClickables = [...findingNodes.filter(n => n.userData.isSeverityNode), ...repoNodes];
+      const intersects = raycaster.intersectObjects(allClickables, true);
 
       if (intersects.length > 0) {
         let target = intersects[0].object;
+
+        // Check if clicking a severity node (drill down to findings)
+        if (target.userData.isSeverityNode) {
+          const repo = state.repos.find(r => r.id === state.selectedRepo);
+          const repoNode = repoNodes.find(n => n.userData.repoId === state.selectedRepo);
+          if (repo && repoNode) {
+            showFindingsForSeverity(repo, repoNode, target.userData.severity);
+          }
+          return;
+        }
+
+        // Otherwise, find the repo node group
         while (target.parent && !target.userData.repoId) {
           target = target.parent;
         }
@@ -1229,18 +1532,15 @@
         document.getElementById('selectedRepoPath').textContent = repo.path;
         updateFindingsList(repo);
 
-        // Show findings in 3D view
+        // Show severity breakdown in 3D view (Level 1)
         if (selectedNode) {
-          showFindingsIn3D(repo, selectedNode);
-
-          // Smoothly move camera to focus on selected repo
-          const targetPos = selectedNode.position.clone();
-          targetPos.y += 10;
-          targetPos.z += 20;
+          showSeverityNodes(repo, selectedNode);
         }
       } else {
         // No repo selected, clear finding nodes
+        state.drillLevel = 0;
         clearFindingNodes();
+        updateNav3D();
       }
     }
     window.selectRepo = selectRepo;
