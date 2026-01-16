@@ -1061,16 +1061,17 @@
         else counts.medium++;
       });
 
-      // Create severity nodes
+      // Filter to only severities with findings
       const severities = ['critical', 'high', 'medium', 'low'];
+      const activeSeverities = severities.filter(sev => counts[sev] > 0);
       const radius = 6;
 
-      severities.forEach((sev, i) => {
+      // Position nodes evenly based on how many we actually have
+      activeSeverities.forEach((sev, i) => {
         const count = counts[sev];
-        if (count === 0) return; // Skip empty severities
-
         const config = SEVERITY_CONFIG[sev];
-        const angle = (i / 4) * Math.PI * 2 - Math.PI / 2;
+        // Distribute evenly around the circle based on active count
+        const angle = (i / activeSeverities.length) * Math.PI * 2 - Math.PI / 2;
 
         // Create severity node based on icon type
         let geom;
