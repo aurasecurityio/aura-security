@@ -12,7 +12,7 @@
         "src/billing/payment.ts",
         "config/database.yml"
       ],
-      "diff": "--- a/src/auth/login.ts\n+++ b/src/auth/login.ts\n@@ -10,6 +10,7 @@\n function authenticate(user) {\n+  const api_key = 'sk-test-1234567890';\n   return validateCredentials(user);\n }"
+      "diff": "--- a/src/auth/login.ts\n+++ b/src/auth/login.ts\n@@ -10,6 +10,7 @@\n function authenticate(user) {\n+  const apiKey = process.env.API_KEY;\n   return validateCredentials(user);\n }"
     },
     "evidence_bundle": {
       "sbom": "component:lodash@4.17.21\ncomponent:express@4.18.2",
