@@ -38,3 +38,12 @@ python/build/
 python/*.egg-info/
 __pycache__/
 *.pyc
+
+# Marketing/website (hosted separately)
+visualizer/landing.html
+docs/pitch-deck.html
+
+# Deployment secrets (keep examples only)
+deploy/terraform/terraform.tfvars
+*.pem
+*.key
