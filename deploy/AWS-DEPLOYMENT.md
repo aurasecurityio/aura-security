@@ -1,6 +1,6 @@
 # AWS Deployment Guide
 
-This guide covers deploying SLOP Auditor to AWS with a professional setup including:
+This guide covers deploying aurasecurity to AWS with a professional setup including:
 - EC2 instance running the application
 - nginx reverse proxy with SSL
 - Domain setup with Route 53
@@ -72,19 +72,19 @@ node --version   # Should show v20.x
 nginx -v         # Should show nginx version
 ```
 
-### Step 3: Deploy SLOP Auditor
+### Step 3: Deploy aurasecurity
 
 ```bash
 # Create app directory
-sudo mkdir -p /var/www/slop-auditor
-sudo chown ubuntu:ubuntu /var/www/slop-auditor
+sudo mkdir -p /var/www/aura-security
+sudo chown ubuntu:ubuntu /var/www/aura-security
 
-# Install SLOP Auditor
-cd /var/www/slop-auditor
-npm install slop-auditor
+# Install aurasecurity
+cd /var/www/aura-security
+npm install aura-security
 
 # Or clone from GitHub for latest
-git clone https://github.com/slopsecurityadmin/slop-security-auditor.git .
+git clone https://github.com/aurasecurity/aura-security.git .
 npm install
 npm run build
 ```
@@ -94,20 +94,20 @@ npm run build
 Create the API service:
 
 ```bash
-sudo tee /etc/systemd/system/slop-api.service << 'EOF'
+sudo tee /etc/systemd/system/aura-api.service << 'EOF'
 [Unit]
-Description=SLOP Auditor API Server
+Description=aurasecurity API Server
 After=network.target
 
 [Service]
 Type=simple
 User=ubuntu
-WorkingDirectory=/var/www/slop-auditor
+WorkingDirectory=/var/www/aura-security
 ExecStart=/usr/bin/node dist/index.js
 Restart=on-failure
 RestartSec=10
 Environment=NODE_ENV=production
-Environment=SLOP_PORT=3000
+Environment=AURA_PORT=3000
 Environment=WS_PORT=3001
 
 [Install]
@@ -118,15 +118,15 @@ EOF
 Create the visualizer service:
 
 ```bash
-sudo tee /etc/systemd/system/slop-visualizer.service << 'EOF'
+sudo tee /etc/systemd/system/aura-visualizer.service << 'EOF'
 [Unit]
-Description=SLOP Auditor Visualizer
+Description=aurasecurity Visualizer
 After=network.target
 
 [Service]
 Type=simple
 User=ubuntu
-WorkingDirectory=/var/www/slop-auditor
+WorkingDirectory=/var/www/aura-security
 ExecStart=/usr/bin/node dist/serve-visualizer.js
 Restart=on-failure
 RestartSec=10
@@ -142,18 +142,18 @@ Enable and start services:
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable slop-api slop-visualizer
-sudo systemctl start slop-api slop-visualizer
+sudo systemctl enable aura-api aura-visualizer
+sudo systemctl start aura-api aura-visualizer
 
 # Check status
-sudo systemctl status slop-api
-sudo systemctl status slop-visualizer
+sudo systemctl status aura-api
+sudo systemctl status aura-visualizer
 ```
 
 ### Step 5: Configure nginx
 
 ```bash
-sudo tee /etc/nginx/sites-available/slop-auditor << 'EOF'
+sudo tee /etc/nginx/sites-available/aura-security << 'EOF'
 server {
     listen 80;
     server_name your-domain.com www.your-domain.com;
@@ -179,7 +179,7 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # Direct SLOP endpoints (info, tools, memory, etc.)
+    # Direct Aura endpoints (info, tools, memory, etc.)
     location ~ ^/(info|tools|memory|settings|audits|stats|notifications)(/.*)?$ {
         proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
@@ -200,7 +200,7 @@ server {
 EOF
 
 # Enable site
-sudo ln -sf /etc/nginx/sites-available/slop-auditor /etc/nginx/sites-enabled/
+sudo ln -sf /etc/nginx/sites-available/aura-security /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
 
 # Test and reload
@@ -244,14 +244,14 @@ curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker ubuntu
 
 # Pull and run
-docker pull slopsecurityadmin/slop-auditor:latest
+docker pull aurasecurity/aura-security:latest
 docker run -d \
-  --name slop-auditor \
+  --name aura-security \
   -p 3000:3000 \
   -p 3001:3001 \
   -p 8080:8080 \
-  -v slop-data:/app/.slop-auditor \
-  slopsecurityadmin/slop-auditor:latest
+  -v aura-data:/app/.aura-security \
+  aurasecurity/aura-security:latest
 ```
 
 Then configure nginx as shown above.
@@ -264,7 +264,7 @@ Set these in your systemd service or `.env` file:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SLOP_PORT` | 3000 | API server port |
+| `AURA_PORT` | 3000 | API server port |
 | `WS_PORT` | 3001 | WebSocket port |
 | `VISUALIZER_PORT` | 8080 | Web UI port |
 | `AWS_ACCESS_KEY_ID` | - | For AWS scanning |
@@ -338,16 +338,16 @@ For higher traffic, consider t3.medium (~$30/month) or add a load balancer.
 
 ```bash
 # Check logs
-sudo journalctl -u slop-api -f
-sudo journalctl -u slop-visualizer -f
+sudo journalctl -u aura-api -f
+sudo journalctl -u aura-visualizer -f
 ```
 
 ### 502 Bad Gateway
 
 ```bash
 # Check if services are running
-sudo systemctl status slop-api
-sudo systemctl status slop-visualizer
+sudo systemctl status aura-api
+sudo systemctl status aura-visualizer
 
 # Check ports
 sudo netstat -tlnp | grep -E '3000|3001|8080'

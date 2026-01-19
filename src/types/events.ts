@@ -1,4 +1,4 @@
-// SLOP Event Types - Strict schema definitions
+// Aura Event Types - Strict schema definitions
 
 export type ChangeEventType = 'pull_request' | 'deploy' | 'infra_change';
 export type Environment = 'dev' | 'staging' | 'prod';

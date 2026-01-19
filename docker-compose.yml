@@ -1,21 +1,21 @@
 version: '3.8'
 
 services:
-  slop-auditor:
+  aura-security:
     build: .
-    container_name: slop-auditor
+    container_name: aura-security
     ports:
-      - "3000:3000"   # SLOP API server
+      - "3000:3000"   # Aura API server
       - "3001:3001"   # WebSocket server
       - "8080:8080"   # 3D Visualizer
     volumes:
       # Persist database and settings
-      - slop-data:/data/.slop-auditor
+      - aura-data:/data/.aura-security
       # Mount local projects for scanning (optional)
       - ./test-repos:/projects:ro
     environment:
       - NODE_ENV=production
-      - SLOP_PORT=3000
+      - AURA_PORT=3000
       - WS_PORT=3001
       - VISUALIZER_PORT=8080
       # AWS credentials (optional - for AWS scanning)
@@ -33,7 +33,7 @@ services:
   # Optional: Nginx reverse proxy with SSL
   # nginx:
   #   image: nginx:alpine
-  #   container_name: slop-nginx
+  #   container_name: aura-nginx
   #   ports:
   #     - "443:443"
   #     - "80:80"
@@ -41,12 +41,12 @@ services:
   #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
   #     - ./certs:/etc/nginx/certs:ro
   #   depends_on:
-  #     - slop-auditor
+  #     - aura-security
 
 volumes:
-  slop-data:
+  aura-data:
     driver: local
 
 networks:
   default:
-    name: slop-network
+    name: aura-network

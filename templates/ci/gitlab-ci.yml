@@ -1,6 +1,6 @@
-# SlopAuditor Security Scan - GitLab CI Pipeline
+# AuraSecurity Security Scan - GitLab CI Pipeline
 #
-# This pipeline runs SlopAuditor security scans on your codebase.
+# This pipeline runs AuraSecurity security scans on your codebase.
 # Copy this file to .gitlab-ci.yml in your repository, or include it.
 #
 # Features:
@@ -46,8 +46,8 @@ variables:
     - pip3 install semgrep checkov pip-licenses --break-system-packages
     # Hadolint
     - curl -sSfL https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64 -o /usr/local/bin/hadolint && chmod +x /usr/local/bin/hadolint
-    # Install SlopAuditor
-    - npm install -g @slop/auditor
+    # Install AuraSecurity
+    - npm install -g @aura/security
 
 # ============ Security Scanning Jobs ============
 
@@ -59,7 +59,7 @@ security-scan:
   script:
     - npm ci --ignore-scripts || npm install --ignore-scripts || true
     - |
-      slop-auditor scan . \
+      aura-security scan . \
         --format json \
         --output security-results.json \
         --fail-on ${FAIL_ON_SEVERITY} || echo "SCAN_FAILED=true" >> scan.env
@@ -80,7 +80,7 @@ sast:
   <<: *node-cache
   script:
     - npm ci --ignore-scripts || npm install --ignore-scripts || true
-    - slop-auditor scan . --format gitlab-sast --output gl-sast-report.json --no-fail
+    - aura-security scan . --format gitlab-sast --output gl-sast-report.json --no-fail
   artifacts:
     paths:
       - gl-sast-report.json
@@ -98,7 +98,7 @@ dependency_scanning:
   <<: *node-cache
   script:
     - npm ci --ignore-scripts || npm install --ignore-scripts || true
-    - slop-auditor scan . --format gitlab-deps --output gl-dependency-scanning-report.json --no-fail
+    - aura-security scan . --format gitlab-deps --output gl-dependency-scanning-report.json --no-fail
   artifacts:
     paths:
       - gl-dependency-scanning-report.json
@@ -115,7 +115,7 @@ secret_detection:
   stage: security
   script:
     - |
-      slop-auditor scan . \
+      aura-security scan . \
         --scanners gitleaks \
         --format json \
         --output secrets-report.json \
@@ -133,11 +133,11 @@ secret_detection:
               name: s.type,
               message: s.type + ' detected',
               severity: s.severity === 'critical' ? 'Critical' : s.severity === 'high' ? 'High' : s.severity === 'medium' ? 'Medium' : 'Low',
-              scanner: { id: 'slop-auditor', name: 'SlopAuditor' },
+              scanner: { id: 'aura-security', name: 'AuraSecurity' },
               location: { file: s.file, start_line: s.line },
-              identifiers: [{ type: 'slop_secret', name: s.type, value: s.type }]
+              identifiers: [{ type: 'aura_secret', name: s.type, value: s.type }]
             })),
-            scan: { analyzer: { id: 'slop-auditor', name: 'SlopAuditor', version: '0.2.0', vendor: { name: 'SlopAuditor' } }, scanner: { id: 'slop-auditor', name: 'SlopAuditor', version: '0.2.0', vendor: { name: 'SlopAuditor' } }, type: 'secret_detection', start_time: new Date().toISOString(), end_time: new Date().toISOString(), status: 'success' }
+            scan: { analyzer: { id: 'aura-security', name: 'AuraSecurity', version: '0.2.0', vendor: { name: 'AuraSecurity' } }, scanner: { id: 'aura-security', name: 'AuraSecurity', version: '0.2.0', vendor: { name: 'AuraSecurity' } }, type: 'secret_detection', start_time: new Date().toISOString(), end_time: new Date().toISOString(), status: 'success' }
           };
           require('fs').writeFileSync('gl-secret-detection-report.json', JSON.stringify(report, null, 2));
         "
@@ -161,7 +161,7 @@ license-compliance:
   script:
     - npm ci --ignore-scripts || npm install --ignore-scripts || true
     - |
-      slop-auditor license-check . \
+      aura-security license-check . \
         --policy ${LICENSE_POLICY} \
         --output licenses.json \
         --json
@@ -183,7 +183,7 @@ sbom-cyclonedx:
   script:
     - npm ci --ignore-scripts || npm install --ignore-scripts || true
     - |
-      slop-auditor sbom . \
+      aura-security sbom . \
         --format cyclonedx \
         --output sbom-cyclonedx.json \
         --include-vulns \
@@ -202,7 +202,7 @@ sbom-spdx:
   script:
     - npm ci --ignore-scripts || npm install --ignore-scripts || true
     - |
-      slop-auditor sbom . \
+      aura-security sbom . \
         --format spdx \
         --output sbom-spdx.json \
         --name "${CI_PROJECT_NAME}" || true
@@ -261,7 +261,7 @@ mr-comment:
       [ "$CRITICAL" -gt 0 ] && EMOJI="🚨"
       [ "$HIGH" -gt 0 ] && EMOJI="⚠️"
 
-      BODY="## $EMOJI Security Scan Results\n\n| Severity | Count |\n|----------|-------|\n| Critical | $CRITICAL |\n| High | $HIGH |\n| Medium | $MEDIUM |\n| Low | $LOW |\n\n---\n*Scanned by [SlopAuditor](https://github.com/slopsecurityadmin/slop-security-auditor)*"
+      BODY="## $EMOJI Security Scan Results\n\n| Severity | Count |\n|----------|-------|\n| Critical | $CRITICAL |\n| High | $HIGH |\n| Medium | $MEDIUM |\n| Low | $LOW |\n\n---\n*Scanned by [AuraSecurity](https://github.com/aurasecurity/aura-security)*"
 
       curl --request POST \
         --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \

@@ -1,4 +1,4 @@
-# SLOP Auditor - AWS Infrastructure
+# aurasecurity - AWS Infrastructure
 # Deploy with: terraform init && terraform apply
 
 terraform {
@@ -62,7 +62,7 @@ resource "aws_vpc" "main" {
   enable_dns_support   = true
 
   tags = {
-    Name = "slop-auditor-vpc"
+    Name = "aura-security-vpc"
   }
 }
 
@@ -73,7 +73,7 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true
 
   tags = {
-    Name = "slop-auditor-public"
+    Name = "aura-security-public"
   }
 }
 
@@ -81,7 +81,7 @@ resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
   tags = {
-    Name = "slop-auditor-igw"
+    Name = "aura-security-igw"
   }
 }
 
@@ -94,7 +94,7 @@ resource "aws_route_table" "public" {
   }
 
   tags = {
-    Name = "slop-auditor-public-rt"
+    Name = "aura-security-public-rt"
   }
 }
 
@@ -104,9 +104,9 @@ resource "aws_route_table_association" "public" {
 }
 
 # Security Group
-resource "aws_security_group" "slop_auditor" {
-  name        = "slop-auditor-sg"
-  description = "Security group for SLOP Auditor"
+resource "aws_security_group" "aura_security" {
+  name        = "aura-security-sg"
+  description = "Security group for aurasecurity"
   vpc_id      = aws_vpc.main.id
 
   # SSH
@@ -145,13 +145,13 @@ resource "aws_security_group" "slop_auditor" {
   }
 
   tags = {
-    Name = "slop-auditor-sg"
+    Name = "aura-security-sg"
   }
 }
 
 # IAM Role for EC2 (for AWS scanning)
-resource "aws_iam_role" "slop_auditor" {
-  name = "slop-auditor-ec2-role"
+resource "aws_iam_role" "aura_security" {
+  name = "aura-security-ec2-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -168,9 +168,9 @@ resource "aws_iam_role" "slop_auditor" {
 }
 
 # IAM Policy for security scanning (read-only)
-resource "aws_iam_role_policy" "slop_auditor_scan" {
-  name = "slop-auditor-scan-policy"
-  role = aws_iam_role.slop_auditor.id
+resource "aws_iam_role_policy" "aura_security_scan" {
+  name = "aura-security-scan-policy"
+  role = aws_iam_role.aura_security.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -194,19 +194,19 @@ resource "aws_iam_role_policy" "slop_auditor_scan" {
   })
 }
 
-resource "aws_iam_instance_profile" "slop_auditor" {
-  name = "slop-auditor-instance-profile"
-  role = aws_iam_role.slop_auditor.name
+resource "aws_iam_instance_profile" "aura_security" {
+  name = "aura-security-instance-profile"
+  role = aws_iam_role.aura_security.name
 }
 
 # EC2 Instance
-resource "aws_instance" "slop_auditor" {
+resource "aws_instance" "aura_security" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
   key_name               = var.key_name
   subnet_id              = aws_subnet.public.id
-  vpc_security_group_ids = [aws_security_group.slop_auditor.id]
-  iam_instance_profile   = aws_iam_instance_profile.slop_auditor.name
+  vpc_security_group_ids = [aws_security_group.aura_security.id]
+  iam_instance_profile   = aws_iam_instance_profile.aura_security.name
 
   root_block_device {
     volume_size = 20
@@ -234,23 +234,23 @@ resource "aws_instance" "slop_auditor" {
     pip3 install semgrep
 
     # Create app directory
-    mkdir -p /var/www/slop-auditor
-    cd /var/www/slop-auditor
+    mkdir -p /var/www/aura-security
+    cd /var/www/aura-security
 
-    # Install SLOP Auditor
-    npm install slop-auditor
+    # Install aurasecurity
+    npm install aura-security
 
     # Create systemd services
     cat > /etc/systemd/system/slop-api.service << 'SVCEOF'
     [Unit]
-    Description=SLOP Auditor API Server
+    Description=aurasecurity API Server
     After=network.target
 
     [Service]
     Type=simple
     User=root
-    WorkingDirectory=/var/www/slop-auditor
-    ExecStart=/usr/bin/npx slop-auditor serve
+    WorkingDirectory=/var/www/aura-security
+    ExecStart=/usr/bin/npx aura-security serve
     Restart=on-failure
     RestartSec=10
     Environment=NODE_ENV=production
@@ -261,14 +261,14 @@ resource "aws_instance" "slop_auditor" {
 
     cat > /etc/systemd/system/slop-visualizer.service << 'SVCEOF'
     [Unit]
-    Description=SLOP Auditor Visualizer
+    Description=aurasecurity Visualizer
     After=network.target
 
     [Service]
     Type=simple
     User=root
-    WorkingDirectory=/var/www/slop-auditor
-    ExecStart=/usr/bin/npx slop-auditor visualizer
+    WorkingDirectory=/var/www/aura-security
+    ExecStart=/usr/bin/npx aura-security visualizer
     Restart=on-failure
     RestartSec=10
     Environment=NODE_ENV=production
@@ -283,7 +283,7 @@ resource "aws_instance" "slop_auditor" {
     systemctl start slop-api slop-visualizer
 
     # Configure nginx
-    cat > /etc/nginx/sites-available/slop-auditor << 'NGINXEOF'
+    cat > /etc/nginx/sites-available/aura-security << 'NGINXEOF'
     server {
         listen 80;
         server_name _;
@@ -315,48 +315,48 @@ resource "aws_instance" "slop_auditor" {
     }
     NGINXEOF
 
-    ln -sf /etc/nginx/sites-available/slop-auditor /etc/nginx/sites-enabled/
+    ln -sf /etc/nginx/sites-available/aura-security /etc/nginx/sites-enabled/
     rm -f /etc/nginx/sites-enabled/default
     nginx -t && systemctl reload nginx
   EOF
 
   tags = {
-    Name = "slop-auditor"
+    Name = "aura-security"
   }
 }
 
 # Elastic IP (optional, for stable IP)
-resource "aws_eip" "slop_auditor" {
-  instance = aws_instance.slop_auditor.id
+resource "aws_eip" "aura_security" {
+  instance = aws_instance.aura_security.id
   domain   = "vpc"
 
   tags = {
-    Name = "slop-auditor-eip"
+    Name = "aura-security-eip"
   }
 }
 
 # Outputs
 output "public_ip" {
   description = "Public IP address"
-  value       = aws_eip.slop_auditor.public_ip
+  value       = aws_eip.aura_security.public_ip
 }
 
 output "public_dns" {
   description = "Public DNS name"
-  value       = aws_instance.slop_auditor.public_dns
+  value       = aws_instance.aura_security.public_dns
 }
 
 output "landing_url" {
   description = "Landing page URL"
-  value       = "http://${aws_eip.slop_auditor.public_ip}"
+  value       = "http://${aws_eip.aura_security.public_ip}"
 }
 
 output "dashboard_url" {
   description = "Dashboard URL"
-  value       = "http://${aws_eip.slop_auditor.public_ip}/app"
+  value       = "http://${aws_eip.aura_security.public_ip}/app"
 }
 
 output "ssh_command" {
   description = "SSH command to connect"
-  value       = "ssh -i ${var.key_name}.pem ubuntu@${aws_eip.slop_auditor.public_ip}"
+  value       = "ssh -i ${var.key_name}.pem ubuntu@${aws_eip.aura_security.public_ip}"
 }

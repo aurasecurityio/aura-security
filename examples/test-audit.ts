@@ -1,20 +1,20 @@
 // Test script - demonstrates auditor pipeline usage
 
-import { SlopClient } from '../src/slop/client.js';
+import { AuraClient } from '../src/aura/client.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SLOP_URL = process.env.SLOP_URL ?? 'http://127.0.0.1:3000';
+const AURA_URL = process.env.AURA_URL ?? 'http://127.0.0.1:3000';
 
 async function testAudit(): Promise<void> {
-  const client = new SlopClient({ baseUrl: SLOP_URL });
+  const client = new AuraClient({ baseUrl: AURA_URL });
 
-  // Connect to SLOP server
+  // Connect to Aura server
   try {
     await client.connect();
-    console.log('Connected to SLOP server');
+    console.log('Connected to Aura server');
   } catch (err) {
     console.error('Failed to connect:', err);
     process.exit(1);

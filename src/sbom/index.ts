@@ -305,8 +305,8 @@ export function generateCycloneDX(
     metadata: {
       timestamp: new Date().toISOString(),
       tools: [{
-        vendor: 'SlopAuditor',
-        name: 'slop-auditor',
+        vendor: 'AuraSecurity',
+        name: 'aura-security',
         version: '0.2.0'
       }],
       component: {
@@ -422,7 +422,7 @@ export function generateSPDX(
     documentNamespace: namespace,
     creationInfo: {
       created: new Date().toISOString(),
-      creators: ['Tool: slop-auditor-0.2.0'],
+      creators: ['Tool: aura-security-0.2.0'],
       licenseListVersion: '3.19'
     },
     packages,

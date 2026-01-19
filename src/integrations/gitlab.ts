@@ -123,9 +123,9 @@ export class GitLabIntegration {
       method: 'POST',
       body: JSON.stringify({
         state,
-        name: 'SLOP Security Audit',
+        name: 'aurasecurity Audit',
         description: `${output.agent_state.toUpperCase()} - ${criticalCount} critical, ${highCount} high`,
-        context: 'security/slop-audit'
+        context: 'security/aura-audit'
       })
     });
   }
@@ -141,7 +141,7 @@ export class GitLabIntegration {
       low: output.events.filter(e => e.payload.severity === 'low').length
     };
 
-    let body = `## ${emoji} SLOP Security Audit
+    let body = `## ${emoji} aurasecurity Audit
 
 **Status:** \`${output.agent_state.toUpperCase()}\`
 

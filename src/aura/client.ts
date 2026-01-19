@@ -1,35 +1,35 @@
-// SLOP Client - Publish-only client for auditor pipeline
-// Implements: /tools, /memory endpoints per SLOP spec
+// Aura Client - Publish-only client for auditor pipeline
+// Implements: /tools, /memory endpoints per Aura spec
 
-export interface SlopClientConfig {
+export interface AuraClientConfig {
   baseUrl: string;
   apiKey?: string;
   timeout?: number;
 }
 
-export interface SlopToolCall {
+export interface AuraToolCall {
   tool: string;
   arguments: Record<string, unknown>;
 }
 
-export interface SlopMemoryEntry {
+export interface AuraMemoryEntry {
   key: string;
   value: unknown;
   metadata?: Record<string, unknown>;
 }
 
-export class SlopConnectionError extends Error {
+export class AuraConnectionError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'SlopConnectionError';
+    this.name = 'AuraConnectionError';
   }
 }
 
-export class SlopClient {
-  private config: Required<SlopClientConfig>;
+export class AuraClient {
+  private config: Required<AuraClientConfig>;
   private _connected = false;
 
-  constructor(config: SlopClientConfig) {
+  constructor(config: AuraClientConfig) {
     this.config = {
       baseUrl: config.baseUrl.replace(/\/$/, ''),
       apiKey: config.apiKey ?? '',
@@ -52,7 +52,7 @@ export class SlopClient {
   }
 
   async connect(): Promise<void> {
-    // Verify SLOP server is available via /info
+    // Verify Aura server is available via /info
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
 
@@ -66,14 +66,14 @@ export class SlopClient {
       clearTimeout(timeoutId);
 
       if (!res.ok) {
-        throw new SlopConnectionError(`SLOP server returned ${res.status}`);
+        throw new AuraConnectionError(`Aura server returned ${res.status}`);
       }
 
       this._connected = true;
     } catch (err) {
       clearTimeout(timeoutId);
-      if (err instanceof SlopConnectionError) throw err;
-      throw new SlopConnectionError(`Failed to connect to SLOP server: ${err}`);
+      if (err instanceof AuraConnectionError) throw err;
+      throw new AuraConnectionError(`Failed to connect to Aura server: ${err}`);
     }
   }
 
@@ -82,9 +82,9 @@ export class SlopClient {
   }
 
   // Fail-closed: throws on any error
-  async publishToMemory(entry: SlopMemoryEntry): Promise<void> {
+  async publishToMemory(entry: AuraMemoryEntry): Promise<void> {
     if (!this._connected) {
-      throw new SlopConnectionError('Not connected to SLOP server');
+      throw new AuraConnectionError('Not connected to Aura server');
     }
 
     const controller = new AbortController();
@@ -101,18 +101,18 @@ export class SlopClient {
       clearTimeout(timeoutId);
 
       if (!res.ok) {
-        throw new SlopConnectionError(`Memory publish failed: ${res.status}`);
+        throw new AuraConnectionError(`Memory publish failed: ${res.status}`);
       }
     } catch (err) {
       clearTimeout(timeoutId);
-      if (err instanceof SlopConnectionError) throw err;
-      throw new SlopConnectionError(`Memory publish error: ${err}`);
+      if (err instanceof AuraConnectionError) throw err;
+      throw new AuraConnectionError(`Memory publish error: ${err}`);
     }
   }
 
-  async callTool(call: SlopToolCall): Promise<unknown> {
+  async callTool(call: AuraToolCall): Promise<unknown> {
     if (!this._connected) {
-      throw new SlopConnectionError('Not connected to SLOP server');
+      throw new AuraConnectionError('Not connected to Aura server');
     }
 
     const controller = new AbortController();
@@ -129,14 +129,14 @@ export class SlopClient {
       clearTimeout(timeoutId);
 
       if (!res.ok) {
-        throw new SlopConnectionError(`Tool call failed: ${res.status}`);
+        throw new AuraConnectionError(`Tool call failed: ${res.status}`);
       }
 
       return await res.json();
     } catch (err) {
       clearTimeout(timeoutId);
-      if (err instanceof SlopConnectionError) throw err;
-      throw new SlopConnectionError(`Tool call error: ${err}`);
+      if (err instanceof AuraConnectionError) throw err;
+      throw new AuraConnectionError(`Tool call error: ${err}`);
     }
   }
 

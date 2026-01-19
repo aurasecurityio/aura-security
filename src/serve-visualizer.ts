@@ -21,7 +21,7 @@ const MIME_TYPES: Record<string, string> = {
 };
 
 const server = createServer((req, res) => {
-  // CORS headers for SLOP API access
+  // CORS headers for Aura API access
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -70,11 +70,11 @@ const server = createServer((req, res) => {
 server.listen(PORT, () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║              SLOP AUDITOR - WEB SERVER                    ║
+║              AURASECURITY - WEB SERVER                    ║
 ╠═══════════════════════════════════════════════════════════╣
 ║  Landing:    http://127.0.0.1:${PORT}                        ║
 ║  Dashboard:  http://127.0.0.1:${PORT}/app                    ║
-║  SLOP API:   http://127.0.0.1:3000                        ║
+║  Aura API:   http://127.0.0.1:3000                        ║
 ╚═══════════════════════════════════════════════════════════╝
 
 Routes:

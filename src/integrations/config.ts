@@ -142,11 +142,11 @@ export class ConfigLoader {
   loadFromEnv(): AuditorConfig {
     const env = process.env;
 
-    if (env.SLOP_PORT) {
-      this.config.server.port = parseInt(env.SLOP_PORT, 10);
+    if (env.AURA_PORT) {
+      this.config.server.port = parseInt(env.AURA_PORT, 10);
     }
-    if (env.SLOP_HOST) {
-      this.config.server.host = env.SLOP_HOST;
+    if (env.AURA_HOST) {
+      this.config.server.host = env.AURA_HOST;
     }
     if (env.WEBHOOK_PORT) {
       this.config.webhook = { ...this.config.webhook!, enabled: true, port: parseInt(env.WEBHOOK_PORT, 10) };
@@ -179,11 +179,11 @@ export class ConfigLoader {
   // Auto-detect and load config
   autoLoad(basePath: string = process.cwd()): AuditorConfig {
     const configFiles = [
-      'slop.config.json',
-      'slop.config.yaml',
-      'slop.config.yml',
-      '.sloprc.json',
-      '.sloprc'
+      'aura.config.json',
+      'aura.config.yaml',
+      'aura.config.yml',
+      '.aurarc.json',
+      '.aurarc'
     ];
 
     for (const file of configFiles) {

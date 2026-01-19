@@ -1,6 +1,6 @@
-# SlopAuditor Security Scan - GitHub Actions Workflow
+# AuraSecurity Security Scan - GitHub Actions Workflow
 #
-# This workflow runs SlopAuditor security scans on your codebase.
+# This workflow runs AuraSecurity security scans on your codebase.
 # Copy this file to .github/workflows/security.yml in your repository.
 #
 # Features:
@@ -74,21 +74,21 @@ jobs:
           curl -sSfL https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64 -o /usr/local/bin/hadolint
           chmod +x /usr/local/bin/hadolint
 
-      - name: Install SlopAuditor
-        run: npm install -g @slop/auditor
+      - name: Install AuraSecurity
+        run: npm install -g @aura/security
         # Or install from local: npm install && npm run build
 
       - name: Run security scan
         id: scan
         run: |
           # Run scan and generate SARIF output
-          slop-auditor scan . \
+          aura-security scan . \
             --format sarif \
             --output results.sarif \
             --fail-on ${{ github.event.inputs.fail_on || 'critical' }} || echo "::set-output name=has_findings::true"
 
           # Also generate JSON summary for PR comment
-          slop-auditor scan . --format summary --output summary.json || true
+          aura-security scan . --format summary --output summary.json || true
         continue-on-error: true
 
       - name: Upload SARIF to GitHub
@@ -96,7 +96,7 @@ jobs:
         if: always()
         with:
           sarif_file: results.sarif
-          category: slop-auditor
+          category: aura-security
 
       - name: Comment on PR
         if: github.event_name == 'pull_request'
@@ -137,7 +137,7 @@ jobs:
             **Languages Detected:** ${scan.languages.join(', ') || 'none'}
 
             ---
-            *Scanned by [SlopAuditor](https://github.com/slopsecurityadmin/slop-security-auditor)*`;
+            *Scanned by [AuraSecurity](https://github.com/aurasecurity/aura-security)*`;
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
@@ -168,15 +168,15 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install SlopAuditor
-        run: npm install -g @slop/auditor
+      - name: Install AuraSecurity
+        run: npm install -g @aura/security
 
       - name: Install dependencies
         run: npm ci --ignore-scripts || npm install --ignore-scripts
 
       - name: Check licenses
         run: |
-          slop-auditor license-check . \
+          aura-security license-check . \
             --policy permissive \
             --output licenses.json \
             --json
@@ -203,22 +203,22 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install SlopAuditor
-        run: npm install -g @slop/auditor
+      - name: Install AuraSecurity
+        run: npm install -g @aura/security
 
       - name: Install dependencies
         run: npm ci --ignore-scripts || npm install --ignore-scripts
 
       - name: Generate CycloneDX SBOM
         run: |
-          slop-auditor sbom . \
+          aura-security sbom . \
             --format cyclonedx \
             --output sbom-cyclonedx.json \
             --include-vulns
 
       - name: Generate SPDX SBOM
         run: |
-          slop-auditor sbom . \
+          aura-security sbom . \
             --format spdx \
             --output sbom-spdx.json
 

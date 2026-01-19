@@ -1,5 +1,5 @@
 /**
- * WebSocket Server for SLOP Auditor
+ * WebSocket Server for aurasecurity
  *
  * Provides real-time updates to connected clients:
  * - Audit started/completed events

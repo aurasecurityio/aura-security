@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SLOP Control Plane - Security Auditor</title>
+  <title>Aura Control Plane - Security Auditor</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -488,7 +488,7 @@
 
   <!-- Header -->
   <header id="header" class="ui-layer">
-    <h1>SLOP CONTROL PLANE</h1>
+    <h1>AURA CONTROL PLANE</h1>
     <div class="status-badge">
       <div class="status-dot" id="statusDot"></div>
       <span id="statusText">Connecting...</span>
@@ -804,7 +804,7 @@
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
     // ========== CONFIGURATION ==========
-    const SLOP_URL = 'http://127.0.0.1:3000';
+    const AURA_URL = 'http://127.0.0.1:3000';
     const WS_URL = 'ws://127.0.0.1:3001';
     const POLL_INTERVAL = 5000; // Slower polling as WebSocket handles real-time
     let wsConnected = false;
@@ -1431,9 +1431,9 @@
     }
 
     // ========== API INTEGRATION ==========
-    async function pollSlop() {
+    async function pollAura() {
       try {
-        const infoRes = await fetch(`${SLOP_URL}/info`);
+        const infoRes = await fetch(`${AURA_URL}/info`);
         if (!infoRes.ok) throw new Error('Not connected');
 
         if (!connected) {
@@ -1443,7 +1443,7 @@
         }
 
         // Use the real /stats endpoint for database-backed statistics
-        const statsRes = await fetch(`${SLOP_URL}/stats`);
+        const statsRes = await fetch(`${AURA_URL}/stats`);
         const stats = await statsRes.json();
 
         document.getElementById('auditCount').textContent = `${stats.totalAudits || 0} Audits`;
@@ -1565,7 +1565,7 @@
       preset.change_event.id = `preset-${presetName}-${Date.now()}`;
 
       try {
-        const res = await fetch(`${SLOP_URL}/tools`, {
+        const res = await fetch(`${AURA_URL}/tools`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tool: 'audit', arguments: preset })
@@ -1594,7 +1594,7 @@
     async function refreshAuditHistory() {
       try {
         // Use the new /audits database endpoint for real data
-        const res = await fetch(`${SLOP_URL}/audits?limit=20`);
+        const res = await fetch(`${AURA_URL}/audits?limit=20`);
         const data = await res.json();
         auditHistoryCache = data.audits || [];
 
@@ -1653,7 +1653,7 @@
 
       try {
         // Use the new /audits/:id endpoint for real database data
-        const res = await fetch(`${SLOP_URL}/audits/${encodeURIComponent(auditId)}`);
+        const res = await fetch(`${AURA_URL}/audits/${encodeURIComponent(auditId)}`);
         const audit = await res.json();
 
         if (audit && !audit.error) {
@@ -1747,7 +1747,7 @@
 
       // Load current settings from server
       try {
-        const res = await fetch(`${SLOP_URL}/settings`);
+        const res = await fetch(`${AURA_URL}/settings`);
         if (res.ok) {
           const data = await res.json();
           populateSettings(data.settings);
@@ -1844,7 +1844,7 @@
       };
 
       try {
-        const res = await fetch(`${SLOP_URL}/settings`, {
+        const res = await fetch(`${AURA_URL}/settings`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ settings })
@@ -1876,7 +1876,7 @@
     async function testNotification(channel) {
       showLoading(true);
       try {
-        const res = await fetch(`${SLOP_URL}/notifications/test`, {
+        const res = await fetch(`${AURA_URL}/notifications/test`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ channel })
@@ -1909,7 +1909,7 @@
         if (document.getElementById('aws-lambda').checked) services.push('lambda');
         if (document.getElementById('aws-rds').checked) services.push('rds');
 
-        const res = await fetch(`${SLOP_URL}/tools`, {
+        const res = await fetch(`${AURA_URL}/tools`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2374,7 +2374,7 @@
 
       try {
         // Call backend to scan via API (no clone)
-        const res = await fetch(`${SLOP_URL}/tools`, {
+        const res = await fetch(`${AURA_URL}/tools`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2419,7 +2419,7 @@
       try {
         console.log('Starting scan of:', targetPath);
 
-        const res = await fetch(`${SLOP_URL}/tools`, {
+        const res = await fetch(`${AURA_URL}/tools`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2915,16 +2915,16 @@
 
     initScene();
     animate();
-    pollSlop();
+    pollAura();
     refreshAuditHistory();
     connectWebSocket(); // Connect to WebSocket for real-time updates
-    setInterval(pollSlop, POLL_INTERVAL);
+    setInterval(pollAura, POLL_INTERVAL);
     setInterval(refreshAuditHistory, POLL_INTERVAL * 2); // Refresh history less frequently
 
     // Add click handler for module selection
     window.addEventListener('click', onMouseClick);
 
-    console.log('SLOP Control Plane initialized');
+    console.log('Aura Control Plane initialized');
     console.log('WebSocket: ws://127.0.0.1:3001 (real-time updates)');
     console.log('Enter a directory path and click "Scan Directory" to map your project.');
     console.log('Use "+ Add" to scan multiple projects and switch between them.');

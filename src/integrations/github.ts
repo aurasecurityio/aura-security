@@ -136,7 +136,7 @@ export class GitHubIntegration {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: 'SLOP Security Audit',
+        name: 'aurasecurity Audit',
         head_sha: headSha,
         status: 'completed',
         conclusion,
@@ -248,7 +248,7 @@ ${e.payload.attack_path.map(p => `  1. ${p}`).join('\n')}
       low: output.events.filter(e => e.payload.severity === 'low').length
     };
 
-    let body = `## ${emoji} SLOP Security Audit
+    let body = `## ${emoji} aurasecurity Audit
 
 **Status:** ${output.agent_state.toUpperCase()}
 
@@ -283,7 +283,7 @@ ${event.payload.attack_path.map((p, i) => `${i + 1}. ${p}`).join('\n')}
       }
     }
 
-    body += `\n---\n*Powered by SLOP Auditor*`;
+    body += `\n---\n*Powered by aurasecurity*`;
 
     return body;
   }

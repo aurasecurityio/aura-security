@@ -1,5 +1,5 @@
 /**
- * SQLite Database for SLOP Auditor
+ * SQLite Database for aurasecurity
  *
  * Provides persistent storage for:
  * - Audit history
@@ -103,10 +103,10 @@ export class AuditorDatabase {
   private dbPath: string;
 
   constructor(dbPath?: string) {
-    // Default to .slop-auditor directory in user home
+    // Default to .aura-security directory in user home
     const dataDir = dbPath
-      ? join(dbPath, '.slop-auditor')
-      : join(process.env.HOME || process.env.USERPROFILE || '.', '.slop-auditor');
+      ? join(dbPath, '.aura-security')
+      : join(process.env.HOME || process.env.USERPROFILE || '.', '.aura-security');
 
     if (!existsSync(dataDir)) {
       mkdirSync(dataDir, { recursive: true });
