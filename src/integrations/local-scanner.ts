@@ -65,7 +65,9 @@ interface NpmAuditResult {
 // Check if a tool is available
 function isToolAvailable(tool: string): boolean {
   try {
-    const result = spawnSync(tool, ['--version'], { encoding: 'utf-8', timeout: 5000 });
+    // gitleaks uses 'version' subcommand, not '--version' flag
+    const args = tool === 'gitleaks' ? ['version'] : ['--version'];
+    const result = spawnSync(tool, args, { encoding: 'utf-8', timeout: 5000 });
     return result.status === 0;
   } catch {
     return false;
@@ -2066,7 +2068,7 @@ export async function scanRemoteGit(config: RemoteScanConfig): Promise<RemoteSca
   console.log(`[SCANNER] Cloning remote repo: ${gitUrl}`);
 
   // Create temp directory
-  const tempDir = mkdtempSync(join(tmpdir(), 'slop-scan-'));
+  const tempDir = mkdtempSync(join(tmpdir(), 'aura-scan-'));
 
   const cloneStart = Date.now();
 

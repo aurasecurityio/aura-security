@@ -1,5 +1,5 @@
-// SLOP Visualizer - Renders audit findings to console/terminal
-// Slopcraft-style visualization
+// Aura Visualizer - Renders audit findings to console/terminal
+// Auracraft-style visualization
 
 import type { AuditorOutput, AuditEvent, Severity, AgentState } from '../types/events.js';
 
@@ -49,7 +49,7 @@ export function visualize(output: AuditorOutput): string {
   // Header
   lines.push('');
   lines.push(`${COLORS.bright}╔══════════════════════════════════════════════════════════════╗${COLORS.reset}`);
-  lines.push(`${COLORS.bright}║           SLOP AUDITOR - SECURITY ANALYSIS REPORT            ║${COLORS.reset}`);
+  lines.push(`${COLORS.bright}║           AURASECURITY - SECURITY ANALYSIS REPORT            ║${COLORS.reset}`);
   lines.push(`${COLORS.bright}╚══════════════════════════════════════════════════════════════╝${COLORS.reset}`);
   lines.push('');
 

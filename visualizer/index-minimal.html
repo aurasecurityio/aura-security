@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SLOP Auditor</title>
+  <title>aurasecurity</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
@@ -623,7 +623,7 @@
   <header id="header" class="panel">
     <div class="logo">
       <div class="logo-icon">S</div>
-      <span>SLOP Auditor</span>
+      <span>aurasecurity</span>
     </div>
 
     <div class="nav-tabs">
@@ -757,7 +757,8 @@
 
     // Auto-detect API URL: use localhost for local dev, same origin for deployed
     const isLocal = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
-    const SLOP = isLocal ? 'http://127.0.0.1:3000' : window.location.origin;
+    // Local: direct to port 3000, AWS: use nginx proxy on same origin
+    const AURA_URL = isLocal ? 'http://127.0.0.1:3000' : window.location.origin;
 
     // ========== THREE.JS SETUP ==========
     let scene, camera, renderer, controls;
@@ -1429,19 +1430,25 @@
       }
 
       try {
-        const res = await fetch(`${SLOP}/tools`, {
+        const res = await fetch(`${AURA_URL}/tools`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tool: 'scan-local', arguments: args })
         });
 
         const data = await res.json();
+        console.log('API Response:', JSON.stringify(data, null, 2));
 
         if (data.result?.error) {
           throw new Error(data.result.error);
         }
 
         const scanData = data.result?.scan_details || data.result || data;
+        console.log('scanData:', JSON.stringify({
+          secrets_found: scanData.secrets_found,
+          package_vulns: scanData.package_vulns,
+          raw_findings_keys: Object.keys(scanData.raw_findings || {})
+        }, null, 2));
         const repoPath = gitUrl || localPath;
 
         // Check if this repo was already scanned (update instead of duplicate)
@@ -1705,7 +1712,7 @@
 
       if (format === 'json') {
         content = JSON.stringify(state.reports, null, 2);
-        filename = `slop-audit-${Date.now()}.json`;
+        filename = `aura-audit-${Date.now()}.json`;
         type = 'application/json';
       } else {
         const headers = ['Timestamp', 'Name', 'Path', 'Type', 'Secrets', 'Vulns', 'Status'];
@@ -1713,7 +1720,7 @@
           [r.timestamp, r.name, r.path, r.type, r.secrets, r.vulns, r.status].join(',')
         );
         content = [headers.join(','), ...rows].join('\n');
-        filename = `slop-audit-${Date.now()}.csv`;
+        filename = `aura-audit-${Date.now()}.csv`;
         type = 'text/csv';
       }
 

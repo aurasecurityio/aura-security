@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to SLOP Auditor will be documented in this file.
+All notable changes to aurasecurity will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -10,8 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 #### Core Features
-- **SLOP Server** - HTTP API server on port 3000 with `/info`, `/tools`, `/memory`, `/settings`, `/audits`, `/stats`, `/notifications` endpoints
-- **SQLite Database** - Persistent audit history stored in `.slop-auditor/auditor.db`
+- **Aura Server** - HTTP API server on port 3000 with `/info`, `/tools`, `/memory`, `/settings`, `/audits`, `/stats`, `/notifications` endpoints
+- **SQLite Database** - Persistent audit history stored in `.aura-security/auditor.db`
 - **WebSocket Server** - Real-time updates on port 3001 for live audit notifications
 - **CLI Tool** - Command-line interface with `init`, `scan`, `aws`, `serve`, `visualizer` commands
 
@@ -39,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Deployment
 - **Docker Support** - Multi-stage Dockerfile with security tools included
 - **Docker Compose** - Easy deployment with volume persistence
-- **npm Package** - Published as `@slop/auditor` for easy installation
+- **npm Package** - Published as `@aura/security` for easy installation
 - **Python Wrapper** - PyPI package available in `python/` directory
 
 #### Developer Experience
@@ -71,10 +71,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SLOP_PORT` | 3000 | SLOP HTTP server port |
+| `AURA_PORT` | 3000 | Aura HTTP server port |
 | `WS_PORT` | 3001 | WebSocket server port |
 | `VISUALIZER_PORT` | 8080 | 3D visualizer web server port |
-| `SLOP_BUS_URL` | - | External SLOP bus URL (optional) |
+| `AURA_BUS_URL` | - | External Aura bus URL (optional) |
 | `AWS_DEFAULT_REGION` | us-east-1 | AWS region for scanning |
 
 ### Security Tools Supported
@@ -92,7 +92,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Initial project structure
-- Basic SLOP server implementation
+- Basic Aura server implementation
 - Auditor pipeline with rule-based analysis
 - Console visualization
 - GitHub/GitLab webhook integration
@@ -103,7 +103,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Future Roadmap
 
 ### Planned for v1.1.0
-- [ ] JWT/API key authentication for SLOP server
+- [ ] JWT/API key authentication for Aura server
 - [ ] More scanner parsers (Grype, Clair, Checkov)
 - [ ] Report generation (PDF, HTML)
 - [ ] Custom rule definition support

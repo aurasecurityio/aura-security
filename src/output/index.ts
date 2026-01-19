@@ -271,8 +271,8 @@ export function toSARIF(result: LocalScanResult, targetPath?: string): SARIFRepo
     runs: [{
       tool: {
         driver: {
-          name: 'SlopAuditor',
-          informationUri: 'https://github.com/slopsecurityadmin/slop-security-auditor',
+          name: 'AuraSecurity',
+          informationUri: 'https://github.com/aurasecurity/aura-security',
           version: '0.2.0',
           rules
         }
@@ -299,7 +299,7 @@ export function toJUnit(result: LocalScanResult): string {
                    result.dockerfileFindings.filter(d => d.severity === 'critical' || d.severity === 'high').length;
 
   let xml = `<?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="SlopAuditor Security Scan" tests="${totalTests}" failures="${failures}" time="0">
+<testsuites name="AuraSecurity Security Scan" tests="${totalTests}" failures="${failures}" time="0">
   <testsuite name="Secrets" tests="${result.secrets.length}" failures="${result.secrets.filter(s => s.severity === 'critical' || s.severity === 'high').length}">
 `;
 
@@ -433,8 +433,8 @@ export function toGitLabReport(result: LocalScanResult, reportType: 'sast' | 'de
         severity: toGitLabSeverity(secret.severity),
         confidence: 'High',
         scanner: {
-          id: 'slop-auditor-secrets',
-          name: 'SlopAuditor Secret Detection'
+          id: 'aura-security-secrets',
+          name: 'AuraSecurity Secret Detection'
         },
         location: {
           file: secret.file,
@@ -442,7 +442,7 @@ export function toGitLabReport(result: LocalScanResult, reportType: 'sast' | 'de
           end_line: secret.line
         },
         identifiers: [{
-          type: 'slop_auditor_secret',
+          type: 'aura_security_secret',
           name: secret.type,
           value: secret.type
         }]
@@ -460,8 +460,8 @@ export function toGitLabReport(result: LocalScanResult, reportType: 'sast' | 'de
         description: `${pkg.name}@${pkg.version} has a known vulnerability`,
         severity: toGitLabSeverity(pkg.severity),
         scanner: {
-          id: 'slop-auditor-deps',
-          name: 'SlopAuditor Dependency Scanning'
+          id: 'aura-security-deps',
+          name: 'AuraSecurity Dependency Scanning'
         },
         location: {
           dependency: {
@@ -492,8 +492,8 @@ export function toGitLabReport(result: LocalScanResult, reportType: 'sast' | 'de
         description: sast.message,
         severity: toGitLabSeverity(sast.severity),
         scanner: {
-          id: 'slop-auditor-sast',
-          name: 'SlopAuditor SAST'
+          id: 'aura-security-sast',
+          name: 'AuraSecurity SAST'
         },
         location: {
           file: sast.file,
@@ -517,8 +517,8 @@ export function toGitLabReport(result: LocalScanResult, reportType: 'sast' | 'de
         description: iac.guideline || iac.title,
         severity: toGitLabSeverity(iac.severity),
         scanner: {
-          id: 'slop-auditor-iac',
-          name: 'SlopAuditor IaC'
+          id: 'aura-security-iac',
+          name: 'AuraSecurity IaC'
         },
         location: {
           file: iac.file
@@ -538,16 +538,16 @@ export function toGitLabReport(result: LocalScanResult, reportType: 'sast' | 'de
     vulnerabilities,
     scan: {
       analyzer: {
-        id: 'slop-auditor',
-        name: 'SlopAuditor',
+        id: 'aura-security',
+        name: 'AuraSecurity',
         version: '0.2.0',
-        vendor: { name: 'SlopAuditor' }
+        vendor: { name: 'AuraSecurity' }
       },
       scanner: {
-        id: 'slop-auditor',
-        name: 'SlopAuditor',
+        id: 'aura-security',
+        name: 'AuraSecurity',
         version: '0.2.0',
-        vendor: { name: 'SlopAuditor' }
+        vendor: { name: 'AuraSecurity' }
       },
       type: reportType,
       start_time: startTime,

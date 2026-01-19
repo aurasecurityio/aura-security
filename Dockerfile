@@ -1,4 +1,4 @@
-# SLOP Auditor - Security Scanner with 3D Visualization
+# aurasecurity - Security Scanner with 3D Visualization
 # Multi-stage build for optimized image size
 
 # Build stage
@@ -52,11 +52,11 @@ COPY --from=builder /app/visualizer ./visualizer
 COPY --from=builder /app/schemas ./schemas
 
 # Create directory for database
-RUN mkdir -p /data/.slop-auditor
+RUN mkdir -p /data/.aura-security
 
 # Environment variables
 ENV NODE_ENV=production
-ENV SLOP_PORT=3000
+ENV AURA_PORT=3000
 ENV WS_PORT=3001
 ENV VISUALIZER_PORT=8080
 
@@ -68,7 +68,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:3000/info || exit 1
 
 # Run as non-root user
-RUN addgroup -g 1001 -S slop && \
+RUN addgroup -g 1001 -S aura && \
     adduser -S slop -u 1001 -G slop && \
     chown -R slop:slop /app /data
 

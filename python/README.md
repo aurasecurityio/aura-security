@@ -1,89 +1,71 @@
-# SLOP Auditor - Python Wrapper
+# aurasecurity - Python Wrapper
 
-Security auditor with 3D visualization - Python wrapper for the `@slop/auditor` npm package.
-
-Scan code repositories and AWS infrastructure for security issues including:
-- Secrets and credentials (API keys, passwords, tokens)
-- Package vulnerabilities (npm, pip)
-- SAST findings (code quality issues)
-- AWS misconfigurations (IAM, S3, EC2, Lambda, RDS)
-
-## Requirements
-
-- Python 3.8+
-- Node.js 18+ (required for the underlying scanner)
+Security auditor with 3D visualization - Python wrapper for the `aura-security` npm package.
 
 ## Installation
 
 ```bash
-pip install slop-auditor
+pip install aurasecurity
 ```
 
-## Quick Start
+## Requirements
 
-### Command Line
+- Python 3.8+
+- Node.js 18+ (for the underlying scanner)
+
+## CLI Usage
 
 ```bash
 # Scan current directory
-slop-auditor scan .
+aurasecurity scan .
 
-# Scan a specific repo
-slop-auditor scan /path/to/repo
+# Scan specific directory
+aurasecurity scan /path/to/repo
 
 # Scan AWS infrastructure
-slop-auditor aws --region us-west-2
+aurasecurity aws --region us-west-2
 
-# Initialize config in a project
-slop-auditor init
+# Initialize configuration
+aurasecurity init
 
-# Start the 3D visualizer
-slop-auditor serve &
-slop-auditor visualizer
+# Start server and visualizer
+aurasecurity serve &
+aurasecurity visualizer
 ```
 
-### Python API
+## Python API
 
 ```python
-from slop_auditor import scan, scan_aws, SlopAuditor
+from aurasecurity import scan, scan_aws, AuraSecurity
 
 # Quick scan
-result = scan("./my-project")
-print(f"Found {len(result['secrets'])} secrets")
-print(f"Found {len(result['packages'])} package vulnerabilities")
+results = scan("./my-project")
+print(f"Found {len(results['secrets'])} secrets")
 
 # AWS scan
-aws_result = scan_aws(region="us-west-2", services=["iam", "s3"])
-print(f"Found {aws_result['summary']['critical']} critical issues")
+aws_results = scan_aws(region="us-west-2", services=["s3", "iam"])
 
-# Using the class interface
-auditor = SlopAuditor()
-auditor.init("./my-project")  # Initialize config
-result = auditor.scan("./my-project")
+# Full API
+auditor = AuraSecurity()
+results = auditor.scan("./project", output_json=True)
 ```
 
 ## Features
 
-- **Secrets Detection**: Uses gitleaks for finding exposed credentials
-- **Vulnerability Scanning**: Uses trivy and npm audit for package vulnerabilities
-- **SAST Analysis**: Uses semgrep for static analysis
-- **AWS Auditing**: Scans IAM, S3, EC2, Lambda, RDS for misconfigurations
-- **3D Visualization**: Interactive web-based control plane
+- **Multi-Scanner Integration**: Gitleaks, Trivy, Semgrep, npm audit
+- **AWS Infrastructure Scanning**: IAM, S3, EC2, Lambda, RDS security checks
+- **3D Visualization**: Interactive Three.js control plane
 - **SLOP Protocol**: Compatible with the Simple Language Open Protocol
 
 ## Environment Variables
 
 | Variable | Description |
 |----------|-------------|
-| `AWS_REGION` | Default AWS region |
-| `AWS_PROFILE` | AWS profile name |
-| `SLOP_URL` | SLOP server URL (default: http://127.0.0.1:3000) |
+| `AURA_PORT` | Aura server port (default: 3000) |
+| `VISUALIZER_PORT` | Visualizer port (default: 8080) |
 
 ## Links
 
-- [GitHub Repository](https://github.com/slopsecurityadmin/slop-security-auditor)
-- [npm Package](https://www.npmjs.com/package/@slop/auditor)
+- [GitHub Repository](https://github.com/yvasisht/aura-security)
+- [npm Package](https://www.npmjs.com/package/aura-security)
 - [SLOP Protocol](https://github.com/agnt-gg/slop)
-
-## License
-
-MIT

@@ -3,19 +3,18 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "slop-auditor"
+name = "aurasecurity"
 version = "0.2.0"
-description = "Security auditor with 3D visualization - Python wrapper for @slop/auditor"
+description = "Security auditor with 3D visualization - Python wrapper for aurasecurity npm package"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
-    {name = "slopsecurityadmin"}
+    {name = "aurasecurity"}
 ]
 keywords = [
     "security",
     "auditor",
     "scanner",
-    "slop",
     "vulnerability",
     "secrets",
     "aws",
@@ -38,13 +37,13 @@ classifiers = [
 requires-python = ">=3.8"
 
 [project.urls]
-Homepage = "https://github.com/slopsecurityadmin/slop-security-auditor"
-Documentation = "https://github.com/slopsecurityadmin/slop-security-auditor#readme"
-Repository = "https://github.com/slopsecurityadmin/slop-security-auditor.git"
-Issues = "https://github.com/slopsecurityadmin/slop-security-auditor/issues"
+Homepage = "https://github.com/yvasisht/aura-security"
+Documentation = "https://github.com/yvasisht/aura-security#readme"
+Repository = "https://github.com/yvasisht/aura-security.git"
+Issues = "https://github.com/yvasisht/aura-security/issues"
 
 [project.scripts]
-slop-auditor = "slop_auditor.cli:main"
+aurasecurity = "aurasecurity.cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -57,4 +56,4 @@ dev = [
 where = ["."]
 
 [tool.setuptools.package-data]
-slop_auditor = ["*.js", "*.json"]
+aurasecurity = ["*.js", "*.json"]

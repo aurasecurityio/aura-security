@@ -1,5 +1,5 @@
 /**
- * Notification Integrations for SLOP Auditor
+ * Notification Integrations for aurasecurity
  *
  * Supports:
  * - Slack (webhooks + bot API)
@@ -306,8 +306,8 @@ export class NotificationService {
    */
   async testChannel(channel: 'slack' | 'discord' | 'webhook'): Promise<{ success: boolean; error?: string }> {
     const testPayload: NotificationPayload = {
-      title: 'SLOP Auditor Test',
-      message: 'This is a test notification from SLOP Auditor.',
+      title: 'aurasecurity Test',
+      message: 'This is a test notification from aurasecurity.',
       severity: 'low',
       findings: { critical: 0, high: 0, medium: 1, low: 2 },
       target: 'test'

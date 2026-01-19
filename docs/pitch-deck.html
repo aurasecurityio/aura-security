@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SlopAuditor - Pitch Deck</title>
+  <title>aurasecurity - Pitch Deck</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
@@ -492,6 +492,44 @@
       color: rgba(255,255,255,0.9);
       font-size: 20px;
     }
+
+    .degen-quote {
+      font-size: 32px;
+      font-style: italic;
+      color: var(--accent);
+      text-align: center;
+      margin: 40px 0;
+      padding: 40px;
+      border-left: 4px solid var(--accent);
+      background: var(--card);
+      border-radius: 0 16px 16px 0;
+    }
+
+    .tech-badge {
+      display: inline-block;
+      background: var(--card);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 600;
+      margin: 4px;
+    }
+
+    .slop-highlight {
+      background: linear-gradient(135deg, rgba(0, 212, 255, 0.2) 0%, rgba(124, 58, 237, 0.2) 100%);
+      border: 2px solid var(--accent);
+      border-radius: 16px;
+      padding: 30px;
+      margin: 30px 0;
+    }
+
+    .slop-highlight h4 {
+      color: var(--accent);
+      font-size: 24px;
+      margin-bottom: 12px;
+    }
   </style>
 </head>
 <body>
@@ -501,23 +539,26 @@
     <div class="slide-content">
       <div class="logo">
         <div class="logo-icon">S</div>
-        <div class="logo-text">SlopAuditor</div>
+        <div class="logo-text">aurasecurity</div>
       </div>
-      <h1>Security Scanning<br>That Doesn't Suck</h1>
-      <p class="tagline">Find secrets, vulnerabilities & misconfigs in any codebase.<br>In 30 seconds. With a 3D visualization. Open source.</p>
+      <h1>Security Scanning<br>For The Culture</h1>
+      <p class="tagline">Find secrets, vulns & misconfigs in any repo. 30 seconds. 3D viz. No cap.</p>
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-value">30s</div>
-          <div class="stat-label">Average Scan Time</div>
+          <div class="stat-label">Scan Any Repo</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value">5+</div>
-          <div class="stat-label">Security Tools Integrated</div>
+          <div class="stat-value">3D</div>
+          <div class="stat-label">SLOP-Powered Viz</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value success">Free</div>
+          <div class="stat-value success">FOSS</div>
           <div class="stat-label">Open Source Core</div>
         </div>
+      </div>
+      <div class="degen-quote">
+        "We're not building another boring security tool.<br>We're building the future of how devs see their code."
       </div>
     </div>
     <div class="slide-number">01</div>
@@ -526,40 +567,40 @@
   <!-- Slide 2: The Problem -->
   <div class="slide">
     <div class="slide-content">
-      <h2>The Problem</h2>
+      <h2>The Problem is Real</h2>
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-value critical">60%</div>
-          <div class="stat-label">of breaches from leaked secrets in code</div>
+          <div class="stat-label">of breaches = leaked secrets in code</div>
         </div>
         <div class="stat-card">
           <div class="stat-value warning">$4.5M</div>
-          <div class="stat-label">average cost of a data breach</div>
+          <div class="stat-label">avg cost when you get rekt</div>
         </div>
         <div class="stat-card">
           <div class="stat-value">1000s</div>
-          <div class="stat-label">of commits pushed daily without checks</div>
+          <div class="stat-label">of commits pushed daily, unchecked</div>
         </div>
       </div>
       <div class="problem-item">
         <div class="problem-icon">💸</div>
         <div class="problem-text">
-          <h4>Enterprise tools are expensive</h4>
-          <p>Snyk, Checkmarx, Veracode charge $10K-100K/year. Out of reach for startups & indie devs.</p>
+          <h4>Enterprise tools = highway robbery</h4>
+          <p>Snyk, Checkmarx, Veracode want $10K-100K/year. Bro, we're not made of money.</p>
         </div>
       </div>
       <div class="problem-item">
-        <div class="problem-icon">😴</div>
+        <div class="problem-icon">💀</div>
         <div class="problem-text">
-          <h4>Existing tools have terrible UX</h4>
-          <p>Walls of text, confusing dashboards, 500-page PDF reports nobody reads.</p>
+          <h4>Current UX is absolute garbage</h4>
+          <p>Walls of text, 500-page PDFs, dashboards from 2005. Nobody actually reads that stuff.</p>
         </div>
       </div>
       <div class="problem-item">
-        <div class="problem-icon">🐌</div>
+        <div class="problem-icon">🤖</div>
         <div class="problem-text">
-          <h4>Manual audits don't scale</h4>
-          <p>Security consultants charge $200/hr. Can't afford to audit every commit.</p>
+          <h4>AI tools hallucinate and do random stuff</h4>
+          <p>Non-deterministic outputs. "AI found 47 vulns" one day, "AI found 3" the next. Sus.</p>
         </div>
       </div>
     </div>
@@ -569,33 +610,39 @@
   <!-- Slide 3: The Solution -->
   <div class="slide">
     <div class="slide-content">
-      <h2>The Solution</h2>
-      <p class="tagline">SlopAuditor: Security scanning that developers actually want to use.</p>
+      <h2>Enter aurasecurity</h2>
+      <p class="tagline">Security scanning that actually slaps.</p>
+
+      <div class="slop-highlight">
+        <h4>🔮 Powered by SLOP Protocol</h4>
+        <p style="color: var(--text-secondary); font-size: 18px;">
+          <strong>S</strong>imple <strong>L</strong>ightweight <strong>O</strong>rchestration <strong>P</strong>rotocol - our secret sauce.<br>
+          Turns boring scan data into interactive 3D visualizations. Click repos → drill into severities → see individual vulns.<br>
+          Not just a dashboard. An experience.
+        </p>
+      </div>
+
       <div class="feature-grid">
         <div class="feature-card">
-          <div class="feature-icon">⚡</div>
-          <div class="feature-title">Scan Any Repo in 30 Seconds</div>
-          <div class="feature-desc">Paste a GitHub URL, click scan, get results. No setup, no config files, no BS.</div>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🔍</div>
-          <div class="feature-title">Real Security Tools</div>
-          <div class="feature-desc">Powered by Gitleaks, Trivy, Grype, Semgrep - the same tools enterprises use.</div>
+          <div class="feature-icon">🎯</div>
+          <div class="feature-title">Deterministic AI</div>
+          <div class="feature-desc">No hallucinations. No random actions. Same input = same output. Every. Single. Time. Our AI analyzes and reports - it doesn't yolo your codebase.</div>
         </div>
         <div class="feature-card">
           <div class="feature-icon">🎮</div>
           <div class="feature-title">3D Visualization</div>
-          <div class="feature-desc">Interactive drill-down from repo → severity → individual findings. Not boring spreadsheets.</div>
+          <div class="feature-desc">Interactive Three.js scene. Click around like a game. Repos orbit the hub. Drill down: Critical → High → Medium → Low. Actually fun to use.</div>
         </div>
         <div class="feature-card">
-          <div class="feature-icon">🌍</div>
-          <div class="feature-title">Multi-Language Support</div>
-          <div class="feature-desc">JavaScript, Python, Go, Rust, Ruby, PHP, Java - we scan them all.</div>
+          <div class="feature-icon">⚡</div>
+          <div class="feature-title">30 Second Scans</div>
+          <div class="feature-desc">Paste URL. Click scan. Done. No setup, no config files, no 47-step onboarding flow. We respect your time.</div>
         </div>
-      </div>
-      <div class="highlight-box">
-        <h3>Try It Right Now</h3>
-        <p>http://54.90.137.98/app</p>
+        <div class="feature-card">
+          <div class="feature-icon">🔧</div>
+          <div class="feature-title">Real Tools Under Hood</div>
+          <div class="feature-desc">Gitleaks, Trivy, Grype, Semgrep - battle-tested scanners. We orchestrate them, not replace them.</div>
+        </div>
       </div>
     </div>
     <div class="slide-number">03</div>
@@ -605,64 +652,69 @@
   <div class="slide">
     <div class="slide-content">
       <h2>How It Works</h2>
+      <p class="tagline">Stupid simple. That's the point.</p>
+
       <div class="feature-grid">
         <div class="feature-card">
           <div class="feature-icon">1️⃣</div>
           <div class="feature-title">Paste & Scan</div>
-          <div class="feature-desc">Enter any GitHub URL or local path. Click "Start Scan". That's it.</div>
+          <div class="feature-desc">Drop any GitHub URL. Hit the button. Go touch grass while we scan.</div>
         </div>
         <div class="feature-card">
           <div class="feature-icon">2️⃣</div>
-          <div class="feature-title">See Results in 3D</div>
-          <div class="feature-desc">Each repo appears as a node. Green = safe, Yellow = warnings, Red = critical issues.</div>
+          <div class="feature-title">See It in 3D</div>
+          <div class="feature-desc">Repo appears as a node. Green = vibing. Yellow = sketchy. Red = ngmi.</div>
         </div>
         <div class="feature-card">
           <div class="feature-icon">3️⃣</div>
-          <div class="feature-title">Drill Down</div>
-          <div class="feature-desc">Click repo → See severity breakdown (Critical/High/Medium/Low)</div>
+          <div class="feature-title">Click to Drill Down</div>
+          <div class="feature-desc">Click repo → See severity breakdown (Critical/High/Medium/Low) as orbiting nodes.</div>
         </div>
         <div class="feature-card">
           <div class="feature-icon">4️⃣</div>
-          <div class="feature-title">Explore Findings</div>
-          <div class="feature-desc">Click severity → See each individual vulnerability with file & line number.</div>
+          <div class="feature-title">Explore Each Finding</div>
+          <div class="feature-desc">Click severity → See individual vulns with file paths & line numbers. Fix speedrun.</div>
         </div>
       </div>
-      <h3 style="margin-top: 40px;">What We Detect</h3>
-      <table class="comparison-table">
-        <tr>
-          <td>🔑 Secrets</td>
-          <td>API keys, passwords, tokens, private keys leaked in code</td>
-        </tr>
-        <tr>
-          <td>📦 Vulnerabilities</td>
-          <td>Known CVEs in npm, pip, go, cargo dependencies</td>
-        </tr>
-        <tr>
-          <td>🐛 Code Issues</td>
-          <td>SQL injection, XSS, insecure patterns (SAST)</td>
-        </tr>
-        <tr>
-          <td>☁️ IaC Misconfig</td>
-          <td>Terraform, Kubernetes, CloudFormation issues</td>
-        </tr>
-        <tr>
-          <td>🐳 Docker Issues</td>
-          <td>Dockerfile security best practices violations</td>
-        </tr>
-      </table>
+
+      <h3 style="margin-top: 40px;">What We Catch</h3>
+      <div style="margin: 20px 0;">
+        <span class="tech-badge">🔑 API Keys & Secrets</span>
+        <span class="tech-badge">📦 Dependency Vulns (CVEs)</span>
+        <span class="tech-badge">🐛 Code Issues (SAST)</span>
+        <span class="tech-badge">☁️ IaC Misconfigs</span>
+        <span class="tech-badge">🐳 Docker Issues</span>
+        <span class="tech-badge">🔐 Private Keys</span>
+      </div>
+
+      <div class="highlight-box">
+        <h3>Deterministic = Trustworthy</h3>
+        <p>Our AI doesn't guess. It doesn't take actions. It scans, analyzes, and reports.<br>Same repo today = same results tomorrow. Reproducible. Auditable. Based.</p>
+      </div>
     </div>
     <div class="slide-number">04</div>
   </div>
 
-  <!-- Slide 5: Competitive Advantage -->
+  <!-- Slide 5: Our Edge -->
   <div class="slide">
     <div class="slide-content">
-      <h2>Why We Win</h2>
+      <h2>Why We're Different</h2>
+
+      <div class="slop-highlight">
+        <h4>🚀 The SLOP Protocol Advantage</h4>
+        <p style="color: var(--text-secondary); font-size: 18px;">
+          Everyone else: JSON blobs → Table → Yawn<br>
+          Us: SLOP → 3D Scene → Interactive Drill-down → Actually Useful<br><br>
+          SLOP lets us transform any security data into spatial, navigable experiences.<br>
+          Your brain processes 3D better than spreadsheets. Science.
+        </p>
+      </div>
+
       <table class="comparison-table">
         <thead>
           <tr>
             <th></th>
-            <th>SlopAuditor</th>
+            <th>aurasecurity</th>
             <th>Snyk</th>
             <th>GitHub Security</th>
           </tr>
@@ -671,45 +723,41 @@
           <tr>
             <td>Price</td>
             <td><span class="check">Free / $29/mo</span></td>
-            <td><span class="cross">$52/dev/mo</span></td>
+            <td><span class="cross">$52/dev/mo lol</span></td>
             <td><span class="check">Free (basic)</span></td>
           </tr>
           <tr>
             <td>Setup Time</td>
             <td><span class="check">0 minutes</span></td>
-            <td><span class="cross">30+ minutes</span></td>
+            <td><span class="cross">30+ min config hell</span></td>
             <td><span class="warning">10 minutes</span></td>
           </tr>
           <tr>
             <td>Visualization</td>
-            <td><span class="check">3D Interactive</span></td>
-            <td><span class="cross">Tables only</span></td>
+            <td><span class="check">3D Interactive (SLOP)</span></td>
+            <td><span class="cross">Boring tables</span></td>
             <td><span class="cross">Basic list</span></td>
           </tr>
           <tr>
+            <td>AI Behavior</td>
+            <td><span class="check">Deterministic</span></td>
+            <td><span class="warning">Varies</span></td>
+            <td><span class="warning">Copilot vibes</span></td>
+          </tr>
+          <tr>
             <td>Open Source</td>
-            <td><span class="check">Yes</span></td>
-            <td><span class="cross">No</span></td>
-            <td><span class="cross">No</span></td>
+            <td><span class="check">Yes ser</span></td>
+            <td><span class="cross">Nope</span></td>
+            <td><span class="cross">Nope</span></td>
           </tr>
           <tr>
-            <td>Multi-tool</td>
-            <td><span class="check">5+ scanners</span></td>
-            <td><span class="warning">Proprietary</span></td>
-            <td><span class="cross">Limited</span></td>
-          </tr>
-          <tr>
-            <td>Self-hostable</td>
-            <td><span class="check">Yes</span></td>
-            <td><span class="cross">Enterprise only</span></td>
-            <td><span class="cross">No</span></td>
+            <td>Self-host</td>
+            <td><span class="check">Your infra, your rules</span></td>
+            <td><span class="cross">Enterprise only $$</span></td>
+            <td><span class="cross">lol no</span></td>
           </tr>
         </tbody>
       </table>
-      <div class="highlight-box">
-        <h3>10x Cheaper. 10x Faster. 10x Better UX.</h3>
-        <p>We're not competing on features. We're competing on experience.</p>
-      </div>
     </div>
     <div class="slide-number">05</div>
   </div>
@@ -717,8 +765,8 @@
   <!-- Slide 6: Market Opportunity -->
   <div class="slide">
     <div class="slide-content">
-      <h2>Market Opportunity</h2>
-      <h3>Application Security Market</h3>
+      <h2>The Market is Massive</h2>
+      <h3>Application Security = $25B by 2028</h3>
       <div class="market-bar">
         <div class="market-label">2024</div>
         <div class="market-fill">
@@ -748,14 +796,13 @@
         </div>
         <div class="stat-card">
           <div class="stat-value">200M+</div>
-          <div class="stat-label">GitHub Repositories</div>
+          <div class="stat-label">GitHub Repos</div>
         </div>
       </div>
-      <h3 style="margin-top: 40px;">Our Target</h3>
-      <p style="font-size: 20px; color: var(--text-secondary);">
-        Startups, indie developers, and teams who can't afford enterprise tools but need real security.
-        That's millions of developers currently using nothing or basic free tools.
-      </p>
+
+      <div class="degen-quote">
+        "Millions of devs need security tools but can't afford enterprise pricing.<br>We're here to democratize that. WAGMI."
+      </div>
     </div>
     <div class="slide-number">06</div>
   </div>
@@ -763,15 +810,16 @@
   <!-- Slide 7: Business Model -->
   <div class="slide">
     <div class="slide-content">
-      <h2>Business Model</h2>
+      <h2>How We Make Money</h2>
+      <p class="tagline">Open source core. Premium features. Classic playbook.</p>
       <div class="pricing-grid">
         <div class="pricing-card">
           <div class="pricing-tier">Community</div>
           <div class="pricing-price">Free</div>
-          <div class="pricing-period">forever</div>
+          <div class="pricing-period">forever, no cap</div>
           <ul class="pricing-features">
             <li>Public repo scanning</li>
-            <li>3D dashboard</li>
+            <li>3D SLOP dashboard</li>
             <li>Basic reports</li>
             <li>Community support</li>
           </ul>
@@ -785,7 +833,7 @@
             <li>CI/CD integration</li>
             <li>Slack/Discord alerts</li>
             <li>30-day history</li>
-            <li>Email support</li>
+            <li>Priority support</li>
           </ul>
         </div>
         <div class="pricing-card">
@@ -796,14 +844,14 @@
             <li>Unlimited repos</li>
             <li>Team dashboard</li>
             <li>Custom policies</li>
-            <li>Priority support</li>
             <li>API access</li>
+            <li>Audit logs</li>
           </ul>
         </div>
         <div class="pricing-card">
           <div class="pricing-tier">Enterprise</div>
           <div class="pricing-price">Custom</div>
-          <div class="pricing-period">contact us</div>
+          <div class="pricing-period">let's talk</div>
           <ul class="pricing-features">
             <li>On-prem / VPC</li>
             <li>SSO / SAML</li>
@@ -820,31 +868,31 @@
   <!-- Slide 8: Roadmap -->
   <div class="slide">
     <div class="slide-content">
-      <h2>Roadmap</h2>
+      <h2>The Roadmap</h2>
       <div class="timeline">
         <div class="timeline-item">
           <div class="timeline-dot done"></div>
-          <div class="timeline-date">NOW - COMPLETE</div>
+          <div class="timeline-date">NOW - SHIPPED ✅</div>
           <div class="timeline-title">Core Platform</div>
-          <div class="timeline-desc">Open source scanner, 3D dashboard, multi-language support, AWS deployment</div>
+          <div class="timeline-desc">SLOP-powered 3D viz, multi-scanner integration, deterministic AI analysis, AWS deployment, npm package live</div>
         </div>
         <div class="timeline-item">
           <div class="timeline-dot"></div>
           <div class="timeline-date">Q2 2026</div>
-          <div class="timeline-title">CI/CD & Integrations</div>
-          <div class="timeline-desc">GitHub Actions, GitLab CI, Slack/Discord alerts, team dashboards</div>
+          <div class="timeline-title">Integrations & Alerts</div>
+          <div class="timeline-desc">GitHub Actions, GitLab CI, Slack/Discord webhooks, team dashboards, historical tracking</div>
         </div>
         <div class="timeline-item">
           <div class="timeline-dot"></div>
           <div class="timeline-date">Q3 2026</div>
-          <div class="timeline-title">SlopAuditor Cloud</div>
-          <div class="timeline-desc">Hosted SaaS, private repo scanning, compliance reports, AI fix suggestions</div>
+          <div class="timeline-title">aurasecurity Cloud</div>
+          <div class="timeline-desc">Hosted SaaS, private repo scanning, compliance reports (SOC2/HIPAA), AI-powered remediation suggestions</div>
         </div>
         <div class="timeline-item">
           <div class="timeline-dot"></div>
           <div class="timeline-date">Q4 2026</div>
-          <div class="timeline-title">Enterprise Launch</div>
-          <div class="timeline-desc">On-prem deployment, SSO/SAML, audit logs, dedicated support</div>
+          <div class="timeline-title">Enterprise Mode</div>
+          <div class="timeline-desc">On-prem deployment, SSO/SAML, audit logs, dedicated support, SLA guarantees</div>
         </div>
       </div>
     </div>
@@ -858,7 +906,7 @@
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-value">$500K</div>
-          <div class="stat-label">to</div>
+          <div class="stat-label">minimum</div>
         </div>
         <div class="stat-card">
           <div class="stat-value">$1M</div>
@@ -873,15 +921,15 @@
       <div class="use-of-funds">
         <div class="fund-item">
           <div class="fund-percent">40%</div>
-          <div class="fund-label">Engineering<br><span style="color: var(--text-secondary); font-size: 14px;">2-3 full-time developers</span></div>
+          <div class="fund-label">Engineering<br><span style="color: var(--text-secondary); font-size: 14px;">2-3 cracked devs</span></div>
         </div>
         <div class="fund-item">
           <div class="fund-percent">30%</div>
-          <div class="fund-label">Infrastructure<br><span style="color: var(--text-secondary); font-size: 14px;">Cloud, security tools, scaling</span></div>
+          <div class="fund-label">Infrastructure<br><span style="color: var(--text-secondary); font-size: 14px;">Cloud, scaling, security tools</span></div>
         </div>
         <div class="fund-item">
           <div class="fund-percent">20%</div>
-          <div class="fund-label">Marketing<br><span style="color: var(--text-secondary); font-size: 14px;">Community, content, events</span></div>
+          <div class="fund-label">Community & Growth<br><span style="color: var(--text-secondary); font-size: 14px;">DevRel, content, events</span></div>
         </div>
         <div class="fund-item">
           <div class="fund-percent">10%</div>
@@ -892,15 +940,15 @@
       <table class="comparison-table">
         <tr>
           <td>6 months</td>
-          <td>1,000 active users</td>
+          <td>1,000 active users, community growing</td>
         </tr>
         <tr>
           <td>12 months</td>
-          <td>$10K MRR</td>
+          <td>$10K MRR, Pro tier traction</td>
         </tr>
         <tr>
           <td>18 months</td>
-          <td>Series A ready</td>
+          <td>Series A ready, enterprise pilots</td>
         </tr>
       </table>
     </div>
@@ -912,22 +960,35 @@
     <div class="slide-content" style="text-align: center;">
       <div class="logo" style="justify-content: center;">
         <div class="logo-icon">S</div>
-        <div class="logo-text">SlopAuditor</div>
+        <div class="logo-text">aurasecurity</div>
       </div>
-      <h1>Let's Secure<br>The World's Code</h1>
-      <p class="tagline">Security should be accessible to everyone, not just enterprises.</p>
+      <h1>Let's Build<br>The Future</h1>
+      <p class="tagline">Security for everyone. Not just the rich kids.</p>
+
+      <div class="slop-highlight" style="text-align: left; max-width: 800px; margin: 40px auto;">
+        <h4>Why Bet on Us?</h4>
+        <p style="color: var(--text-secondary); font-size: 18px; line-height: 1.8;">
+          ✅ <strong>Working product</strong> - not vaporware, you can use it today<br>
+          ✅ <strong>SLOP Protocol</strong> - unique 3D visualization tech<br>
+          ✅ <strong>Deterministic AI</strong> - reliable, reproducible, trustworthy<br>
+          ✅ <strong>Open source</strong> - community-driven growth<br>
+          ✅ <strong>Ship fast mentality</strong> - we built this in weeks, not years
+        </p>
+      </div>
+
       <div class="cta-box">
         <div class="cta-title">Ready to Talk?</div>
         <div class="cta-subtitle">Try the product. See the vision. Join the mission.</div>
         <div class="cta-links">
-          <a href="http://54.90.137.98/app">🚀 Live Demo</a>
-          <a href="https://github.com/slopsecurityadmin/slop-security-auditor">📦 GitHub</a>
-          <a href="https://npmjs.com/package/slop-auditor">📥 npm</a>
+          <a href="https://aurasecurity.io">🚀 Live Demo</a>
+          <a href="https://github.com/yvasisht/aura-security">📦 GitHub</a>
+          <a href="https://npmjs.com/package/aura-security">📥 npm</a>
         </div>
       </div>
-      <p style="margin-top: 60px; font-size: 24px; color: var(--text-secondary);">
-        Questions? Let's chat.
-      </p>
+
+      <div class="degen-quote" style="margin-top: 40px;">
+        "LFG 🚀"
+      </div>
     </div>
     <div class="slide-number">10</div>
   </div>

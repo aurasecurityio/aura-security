@@ -1,4 +1,4 @@
-// SLOP Client SDK - High-level API for interacting with the auditor
+// Aura Client SDK - High-level API for interacting with the auditor
 // Provides typed methods, automatic retries, and event streaming
 
 import type { AuditorInput, AuditorOutput, ChangeEvent, EvidenceBundle, PolicyContext } from '../types/events.js';

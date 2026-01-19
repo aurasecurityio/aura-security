@@ -1,32 +1,32 @@
-// SLOP Server - Minimal implementation for auditor pipeline
+// Aura Server - Minimal implementation for auditor pipeline
 // Exposes /tools, /memory, /info, /settings, /audits, /stats endpoints
 
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { getDatabase, type AuditorDatabase } from '../database/index.js';
 import { NotificationService, createNotificationFromAudit } from '../integrations/notifications.js';
 
-export interface SlopTool {
+export interface AuraTool {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
   handler: (args: Record<string, unknown>) => Promise<unknown>;
 }
 
-export interface SlopServerConfig {
+export interface AuraServerConfig {
   port: number;
   host?: string;
   dbPath?: string;
 }
 
-export class SlopServer {
+export class AuraServer {
   private server: ReturnType<typeof createServer> | null = null;
-  private tools = new Map<string, SlopTool>();
+  private tools = new Map<string, AuraTool>();
   private memory = new Map<string, unknown>();
-  private config: Required<SlopServerConfig>;
+  private config: Required<AuraServerConfig>;
   private db: AuditorDatabase;
   private notificationService: NotificationService;
 
-  constructor(config: SlopServerConfig) {
+  constructor(config: AuraServerConfig) {
     this.config = {
       port: config.port,
       host: config.host ?? '127.0.0.1',
@@ -47,7 +47,7 @@ export class SlopServer {
     this.notificationService.loadFromDatabase();
   }
 
-  registerTool(tool: SlopTool): void {
+  registerTool(tool: AuraTool): void {
     this.tools.set(tool.name, tool);
   }
 
@@ -73,7 +73,7 @@ export class SlopServer {
     }
 
     try {
-      // Core SLOP endpoints
+      // Core Aura endpoints
       if (path === '/info' && req.method === 'GET') {
         await this.handleInfo(res);
       } else if (path === '/tools' && req.method === 'GET') {
@@ -132,7 +132,7 @@ export class SlopServer {
   private async handleInfo(res: ServerResponse): Promise<void> {
     res.statusCode = 200;
     res.end(JSON.stringify({
-      name: 'slop-auditor',
+      name: 'aura-security',
       version: '0.2.0',
       endpoints: ['/info', '/tools', '/memory', '/settings', '/audits', '/stats', '/notifications'],
       tools: Array.from(this.tools.keys()),
@@ -354,7 +354,7 @@ export class SlopServer {
       // Manual notification
       payload = {
         title: title || 'Manual Notification',
-        message: message || 'Test notification from SLOP Auditor',
+        message: message || 'Test notification from Aura Auditor',
         severity: severity || 'low'
       };
     }

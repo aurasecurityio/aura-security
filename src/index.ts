@@ -1,17 +1,18 @@
-// SLOP Auditor - Main entry point
-// No SLOP bus = No run (fail-closed)
+// aurasecurity - Main entry point
+// No Aura bus = No run (fail-closed)
 
-import { SlopServer } from './slop/server.js';
-import { SlopClient } from './slop/client.js';
+import { AuraServer } from './aura/server.js';
+import { AuraClient } from './aura/client.js';
 import { AuditorPipeline } from './auditor/pipeline.js';
 import { SchemaValidator, ValidationError } from './auditor/validator.js';
 import { LocalScanner, scanRemoteGit } from './integrations/local-scanner.js';
 import type { LocalScanResult, SecretFinding } from './integrations/local-scanner.js';
+import { auraScan, getAuraState, getAvailableAgents } from './integrations/aura-scanner.js';
 import { getWebSocketServer, type AuditorWebSocket } from './websocket/index.js';
 
-const PORT = parseInt(process.env.SLOP_PORT ?? '3000', 10);
+const PORT = parseInt(process.env.AURA_PORT ?? '3000', 10);
 const WS_PORT = parseInt(process.env.WS_PORT ?? '3001', 10);
-const SLOP_BUS_URL = process.env.SLOP_BUS_URL;
+const AURA_BUS_URL = process.env.AURA_BUS_URL;
 
 // Secret patterns for remote scanning - stricter patterns to avoid false positives
 const REMOTE_SECRET_PATTERNS = [
@@ -48,7 +49,7 @@ async function scanRemoteGitRepo(gitUrl: string): Promise<unknown> {
   const owner = (githubMatch || gitlabMatch)![1];
   const repo = (githubMatch || gitlabMatch)![2].replace(/\.git$/, '');
 
-  console.log(`[SLOP] Fetching ${isGitHub ? 'GitHub' : 'GitLab'} repo: ${owner}/${repo}`);
+  console.log(`[AURA] Fetching ${isGitHub ? 'GitHub' : 'GitLab'} repo: ${owner}/${repo}`);
 
   const secrets: Array<{ file: string; line: number; type: string; severity: string }> = [];
   const discoveredServices: Array<{ id: string; name: string; type: string; source: string; severity: string }> = [];
@@ -58,7 +59,7 @@ async function scanRemoteGitRepo(gitUrl: string): Promise<unknown> {
   try {
     // Fetch repo tree
     let treeUrl: string;
-    let headers: Record<string, string> = { 'User-Agent': 'SLOP-Auditor' };
+    let headers: Record<string, string> = { 'User-Agent': 'Aura-Security' };
 
     if (isGitHub) {
       treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/HEAD?recursive=1`;
@@ -88,7 +89,7 @@ async function scanRemoteGitRepo(gitUrl: string): Promise<unknown> {
       files = (treeData as Array<{ path: string; type: string }>).filter(f => f.type === 'blob');
     }
 
-    console.log(`[SLOP] Found ${files.length} files in repo`);
+    console.log(`[AURA] Found ${files.length} files in repo`);
 
     // Filter to scannable files
     const scanExtensions = ['.js', '.ts', '.jsx', '.tsx', '.json', '.yaml', '.yml', '.env', '.py', '.go', '.rb', '.php', '.java', '.cs', '.config', '.conf', '.sh', '.bash'];
@@ -98,7 +99,7 @@ async function scanRemoteGitRepo(gitUrl: string): Promise<unknown> {
       return scanExtensions.includes(ext) || name.startsWith('.env') || name === 'package.json' || name === 'Dockerfile';
     }).slice(0, 100); // Limit to 100 files for API rate limits
 
-    console.log(`[SLOP] Scanning ${scanFiles.length} relevant files`);
+    console.log(`[AURA] Scanning ${scanFiles.length} relevant files`);
 
     // Scan each file
     for (const file of scanFiles) {
@@ -243,7 +244,7 @@ async function scanRemoteGitRepo(gitUrl: string): Promise<unknown> {
       timestamp: new Date().toISOString()
     }));
 
-    console.log(`[SLOP] Remote scan complete. Found ${secrets.length} secrets, ${discoveredServices.length} services, ${discoveredModules.length} modules`);
+    console.log(`[AURA] Remote scan complete. Found ${secrets.length} secrets, ${discoveredServices.length} services, ${discoveredModules.length} modules`);
 
     return {
       agent_id: 'exploit-reviewer',
@@ -267,37 +268,37 @@ async function scanRemoteGitRepo(gitUrl: string): Promise<unknown> {
     };
 
   } catch (err) {
-    console.error('[SLOP] Remote scan error:', err);
+    console.error('[AURA] Remote scan error:', err);
     throw err;
   }
 }
 
 async function main(): Promise<void> {
-  console.log('[SLOP] Starting auditor pipeline...');
+  console.log('[AURA] Starting auditor pipeline...');
 
-  // Create SLOP server
-  const server = new SlopServer({ port: PORT });
+  // Create Aura server
+  const server = new AuraServer({ port: PORT });
 
-  // Create SLOP client for publishing to bus (if configured)
-  let busClient: SlopClient | null = null;
+  // Create Aura client for publishing to bus (if configured)
+  let busClient: AuraClient | null = null;
 
-  if (SLOP_BUS_URL) {
-    busClient = new SlopClient({ baseUrl: SLOP_BUS_URL });
+  if (AURA_BUS_URL) {
+    busClient = new AuraClient({ baseUrl: AURA_BUS_URL });
 
     try {
       await busClient.connect();
-      console.log(`[SLOP] Connected to bus at ${SLOP_BUS_URL}`);
+      console.log(`[AURA] Connected to bus at ${AURA_BUS_URL}`);
     } catch (err) {
-      console.error('[SLOP] FATAL: Cannot connect to SLOP bus - fail-closed');
+      console.error('[AURA] FATAL: Cannot connect to Aura bus - fail-closed');
       process.exit(1);
     }
   } else {
     // Self-contained mode: client publishes to own server
-    busClient = new SlopClient({ baseUrl: `http://127.0.0.1:${PORT}` });
+    busClient = new AuraClient({ baseUrl: `http://127.0.0.1:${PORT}` });
   }
 
   // Create pipeline
-  const pipeline = new AuditorPipeline({ slopClient: busClient });
+  const pipeline = new AuditorPipeline({ auraClient: busClient });
   const validator = new SchemaValidator();
 
   // Register auditor tool
@@ -363,7 +364,7 @@ async function main(): Promise<void> {
         // Handle Git URL - clone and scan with full tool suite
         if (args.gitUrl) {
           const gitUrl = args.gitUrl as string;
-          console.log(`[SLOP] Cloning and scanning remote repo: ${gitUrl}`);
+          console.log(`[AURA] Cloning and scanning remote repo: ${gitUrl}`);
 
           try {
             // Use the clone-based scanner for full capabilities
@@ -373,8 +374,8 @@ async function main(): Promise<void> {
               scanPackages: args.scanPackages !== false
             });
 
-            console.log(`[SLOP] Remote scan complete in ${remoteResult.cloneDuration + remoteResult.scanDuration}ms`);
-            console.log(`[SLOP] Found: ${remoteResult.secrets.length} secrets, ${remoteResult.packages.length} vulns`);
+            console.log(`[AURA] Remote scan complete in ${remoteResult.cloneDuration + remoteResult.scanDuration}ms`);
+            console.log(`[AURA] Found: ${remoteResult.secrets.length} secrets, ${remoteResult.packages.length} vulns`);
 
             // Convert to audit input and run through pipeline
             const scanner = new LocalScanner({ targetPath: remoteResult.path });
@@ -422,7 +423,7 @@ async function main(): Promise<void> {
               }
             };
           } catch (gitErr) {
-            console.error(`[SLOP] Remote Git scan failed:`, gitErr);
+            console.error(`[AURA] Remote Git scan failed:`, gitErr);
             return {
               agent_id: 'exploit-reviewer',
               agent_state: 'blocked',
@@ -439,7 +440,7 @@ async function main(): Promise<void> {
           scanEnvFiles: args.scanEnvFiles !== false
         });
 
-        console.log(`[SLOP] Starting local scan of: ${targetPath}`);
+        console.log(`[AURA] Starting local scan of: ${targetPath}`);
 
         // Notify WebSocket clients that scan is starting
         const wsScanId = `scan-${Date.now()}`;
@@ -451,7 +452,7 @@ async function main(): Promise<void> {
         });
 
         const scanResult = await scanner.scan();
-        console.log(`[SLOP] Scan complete. Found ${scanResult.secrets.length} secrets, ${scanResult.packages.length} package issues, ${scanResult.sastFindings.length} SAST findings`);
+        console.log(`[AURA] Scan complete. Found ${scanResult.secrets.length} secrets, ${scanResult.packages.length} package issues, ${scanResult.sastFindings.length} SAST findings`);
 
         // Convert to audit input and run through pipeline
         const auditInput = scanner.toAuditorInput(scanResult);
@@ -461,7 +462,7 @@ async function main(): Promise<void> {
           auditResult = await pipeline.analyze(auditInput);
         } catch (pipelineErr) {
           // If pipeline fails, create a basic result from scan data
-          console.log(`[SLOP] Pipeline analysis skipped: ${pipelineErr}`);
+          console.log(`[AURA] Pipeline analysis skipped: ${pipelineErr}`);
           const events = scanResult.secrets.map(s => ({
             event_type: s.severity === 'critical' ? 'escalation_triggered' : 'finding_raised',
             target: 'self',
@@ -526,9 +527,9 @@ async function main(): Promise<void> {
               timestamp: new Date().toISOString()
             }
           });
-          console.log(`[SLOP] Scan result stored to memory: ${scanId}`);
+          console.log(`[AURA] Scan result stored to memory: ${scanId}`);
         } catch (storeErr) {
-          console.error('[SLOP] Failed to store scan result to memory:', storeErr);
+          console.error('[AURA] Failed to store scan result to memory:', storeErr);
         }
 
         // Store to SQLite database for persistent history
@@ -536,9 +537,9 @@ async function main(): Promise<void> {
         try {
           const db = server.getDatabase();
           auditId = db.saveAudit('code', scanResult.path, scanResult as LocalScanResult);
-          console.log(`[SLOP] Scan result saved to database: ${auditId}`);
+          console.log(`[AURA] Scan result saved to database: ${auditId}`);
         } catch (dbErr) {
-          console.error('[SLOP] Failed to save to database:', dbErr);
+          console.error('[AURA] Failed to save to database:', dbErr);
         }
 
         // Send notifications if enabled
@@ -560,7 +561,7 @@ async function main(): Promise<void> {
               findings: summary
             });
             if (result.sent.length > 0) {
-              console.log(`[SLOP] Notifications sent: ${result.sent.join(', ')}`);
+              console.log(`[AURA] Notifications sent: ${result.sent.join(', ')}`);
             }
 
             // Notify WebSocket clients that scan is complete
@@ -571,13 +572,13 @@ async function main(): Promise<void> {
               summary
             });
           } catch (notifyErr) {
-            console.error('[SLOP] Notification error:', notifyErr);
+            console.error('[AURA] Notification error:', notifyErr);
           }
         }
 
         return fullResult;
       } catch (err) {
-        console.error('[SLOP] Local scan error:', err);
+        console.error('[AURA] Local scan error:', err);
         return {
           agent_id: 'exploit-reviewer',
           agent_state: 'blocked',
@@ -601,32 +602,182 @@ async function main(): Promise<void> {
     }
   });
 
+  // Register Aura Protocol scan tool (multi-agent architecture)
+  server.registerTool({
+    name: 'scan-aura',
+    description: 'Aura Protocol scan - Multi-agent parallel security scanning with isolated zones',
+    parameters: {
+      type: 'object',
+      properties: {
+        targetPath: { type: 'string', description: 'Path to scan (defaults to current directory)' },
+        fullScan: { type: 'boolean', default: true, description: 'Run policy evaluation (slower, fewer false positives)' }
+      }
+    },
+    handler: async (args) => {
+      try {
+        const targetPath = (args.targetPath as string) || process.cwd();
+        const fullScan = args.fullScan !== false;
+
+        console.log(`[AURA] Starting Aura Protocol scan of: ${targetPath}`);
+        console.log(`[AURA] Mode: ${fullScan ? 'Full (with policy evaluation)' : 'Quick (scanner only)'}`);
+
+        // Notify WebSocket clients that scan is starting
+        const wsScanId = `aura-scan-${Date.now()}`;
+        const ws = getWebSocketServer(WS_PORT);
+        ws.notifyAuditStarted({
+          auditId: wsScanId,
+          type: 'aura-protocol',
+          target: targetPath
+        });
+
+        // Run Aura Protocol scan
+        const result = await auraScan({
+          targetPath,
+          fullScan
+        });
+
+        console.log(`[AURA] Aura Protocol scan complete`);
+        console.log(`[AURA] Zones executed: ${result.aura.zones.map(z => z.name).join(', ')}`);
+        console.log(`[AURA] Agents used: ${result.aura.agents.filter(a => a.status === 'success').map(a => a.name).join(', ')}`);
+        console.log(`[AURA] Findings: ${result.aura.summary.totalFindings}`);
+
+        // Store in database
+        let auditId: string | undefined;
+        try {
+          const db = server.getDatabase();
+          auditId = db.saveAudit('code', targetPath, {
+            path: targetPath,
+            timestamp: new Date().toISOString(),
+            secrets: result.legacy.secrets,
+            packages: result.legacy.packages,
+            sastFindings: result.legacy.sastFindings,
+            iacFindings: [],
+            dockerfileFindings: [],
+            gitInfo: null,
+            envFiles: [],
+            systemInfo: result.legacy.systemInfo,
+            discoveredServices: [],
+            discoveredModules: [],
+            toolsUsed: result.aura.summary.agentsUsed,
+            languagesDetected: [],
+            zones: result.aura.zones,
+            agents: result.aura.agents
+          } as any);
+          console.log(`[AURA] Aura scan saved to database: ${auditId}`);
+        } catch (dbErr) {
+          console.error('[AURA] Database save error:', dbErr);
+          auditId = `aura-${Date.now()}`;
+        }
+
+        // Notify WebSocket clients
+        ws.notifyAuditCompleted({
+          auditId: auditId || `aura-${Date.now()}`,
+          type: 'aura-protocol',
+          target: targetPath,
+          summary: {
+            critical: result.aura.summary.bySeverity['critical'] || 0,
+            high: result.aura.summary.bySeverity['high'] || 0,
+            medium: result.aura.summary.bySeverity['medium'] || 0,
+            low: result.aura.summary.bySeverity['low'] || 0
+          }
+        });
+
+        return {
+          agent_id: 'aura-orchestrator',
+          agent_state: result.aura.summary.totalFindings > 0 ? 'conflict' : 'aligned',
+          events: result.aura.findings.map(f => ({
+            event_type: f.severity === 'critical' ? 'escalation_triggered' : 'finding_raised',
+            target: 'self',
+            payload: {
+              severity: f.severity,
+              claim: f.title,
+              description: f.description,
+              file: f.file,
+              line: f.line,
+              type: f.type,
+              agent: f.agentId
+            },
+            timestamp: new Date(f.timestamp).toISOString()
+          })),
+          meta: {
+            zones: result.aura.zones,
+            agents: result.aura.agents,
+            summary: result.aura.summary
+          },
+          scan_details: {
+            path: targetPath,
+            mode: fullScan ? 'full' : 'quick',
+            secrets_found: result.aura.summary.byType['secret'] || 0,
+            vulnerabilities_found: result.aura.summary.byType['vulnerability'] || 0,
+            total_findings: result.aura.summary.totalFindings,
+            tools_used: result.aura.summary.agentsUsed,
+            zones_executed: result.aura.zones.length,
+            agents_executed: result.aura.agents.length,
+            raw_findings: {
+              secrets: result.legacy.secrets,
+              packages: result.legacy.packages,
+              sastFindings: result.legacy.sastFindings
+            }
+          }
+        };
+      } catch (err) {
+        console.error('[AURA] Aura Protocol scan error:', err);
+        return {
+          agent_id: 'aura-orchestrator',
+          agent_state: 'blocked',
+          events: [],
+          meta: { error: err instanceof Error ? err.message : 'Unknown error' }
+        };
+      }
+    }
+  });
+
+  // Register Aura state endpoint (for visualization)
+  server.registerTool({
+    name: 'aura-state',
+    description: 'Get current Aura Protocol state (zones, agents) for visualization',
+    parameters: { type: 'object', properties: {} },
+    handler: async () => {
+      const state = getAuraState();
+      const availableAgents = await getAvailableAgents();
+      return {
+        ...state,
+        availableAgents: availableAgents.map(a => ({
+          id: a.config.id,
+          name: a.config.name,
+          role: a.config.role,
+          description: a.config.description
+        }))
+      };
+    }
+  });
+
   // Start HTTP server
   await server.start();
-  console.log(`[SLOP] Auditor listening on http://127.0.0.1:${PORT}`);
-  console.log('[SLOP] Endpoints: /info, /tools, /memory, /settings, /audits, /stats, /notifications');
+  console.log(`[AURA] Auditor listening on http://127.0.0.1:${PORT}`);
+  console.log('[AURA] Endpoints: /info, /tools, /memory, /settings, /audits, /stats, /notifications');
 
   // Start WebSocket server for real-time updates
   const wsServer = getWebSocketServer(WS_PORT);
   await wsServer.start();
-  console.log(`[SLOP] WebSocket server on ws://127.0.0.1:${WS_PORT}`);
+  console.log(`[AURA] WebSocket server on ws://127.0.0.1:${WS_PORT}`);
 
   // Connect client to self for memory storage
-  if (!SLOP_BUS_URL) {
+  if (!AURA_BUS_URL) {
     await busClient.connect();
-    console.log('[SLOP] Self-contained mode: client connected to local server');
+    console.log('[AURA] Self-contained mode: client connected to local server');
   }
 
   // Graceful shutdown
   process.on('SIGINT', async () => {
-    console.log('\n[SLOP] Shutting down...');
+    console.log('\n[AURA] Shutting down...');
     await server.stop();
     await busClient?.disconnect();
     process.exit(0);
   });
 
   process.on('SIGTERM', async () => {
-    console.log('\n[SLOP] Shutting down...');
+    console.log('\n[AURA] Shutting down...');
     await server.stop();
     await busClient?.disconnect();
     process.exit(0);
@@ -634,13 +785,13 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error('[SLOP] FATAL:', err);
+  console.error('[AURA] FATAL:', err);
   process.exit(1);
 });
 
 // Export for programmatic use
-export { SlopServer } from './slop/server.js';
-export { SlopClient } from './slop/client.js';
+export { AuraServer } from './aura/server.js';
+export { AuraClient } from './aura/client.js';
 export { AuditorPipeline } from './auditor/pipeline.js';
 export { SchemaValidator, ValidationError } from './auditor/validator.js';
 export * from './types/events.js';

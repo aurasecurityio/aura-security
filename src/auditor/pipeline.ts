@@ -9,31 +9,31 @@ import type {
   AssuranceBreak
 } from '../types/events.js';
 import { SchemaValidator, ValidationError } from './validator.js';
-import { SlopClient, SlopConnectionError } from '../slop/client.js';
+import { AuraClient, AuraConnectionError } from '../aura/client.js';
 
 const AGENT_ID = 'exploit-reviewer';
 
 export interface PipelineConfig {
-  slopClient: SlopClient;
+  auraClient: AuraClient;
   strictMode?: boolean;
 }
 
 export class AuditorPipeline {
   private validator: SchemaValidator;
-  private client: SlopClient;
+  private client: AuraClient;
   private strictMode: boolean;
 
   constructor(config: PipelineConfig) {
     this.validator = new SchemaValidator();
-    this.client = config.slopClient;
+    this.client = config.auraClient;
     this.strictMode = config.strictMode ?? true;
   }
 
   // Main entry point - fail-closed on any error
   async analyze(rawInput: unknown): Promise<AuditorOutput> {
-    // Fail-closed: must be connected to SLOP
+    // Fail-closed: must be connected to Aura
     if (!this.client.connected) {
-      throw new SlopConnectionError('No SLOP connection - blocking execution');
+      throw new AuraConnectionError('No Aura connection - blocking execution');
     }
 
     // Fail-closed: validate input
@@ -86,7 +86,7 @@ export class AuditorPipeline {
     // Fail-closed: validate output
     this.validator.assertValidOutput(output);
 
-    // Publish to SLOP memory (audit log)
+    // Publish to Aura memory (audit log)
     await this.client.publishToMemory({
       key: `audit:${input.change_event.id}:${Date.now()}`,
       value: output,

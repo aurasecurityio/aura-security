@@ -30,7 +30,7 @@ test-repos/
 *-results.json
 
 # Local database
-.slop-auditor/
+.aura-security/
 
 # Python build artifacts
 python/dist/

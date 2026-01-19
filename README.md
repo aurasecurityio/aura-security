@@ -1,14 +1,14 @@
-# SLOP Auditor
+# aurasecurity
 
-[![npm version](https://badge.fury.io/js/slop-auditor.svg)](https://www.npmjs.com/package/slop-auditor)
+[![npm version](https://badge.fury.io/js/aura-security.svg)](https://www.npmjs.com/package/aura-security)
 [![Docker](https://img.shields.io/badge/docker-ready-blue)](https://hub.docker.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **A deterministic security auditing engine with an optional AI advisory layer.**
 
-SLOP Auditor can be run as a CLI, a CI step, or a long-running service. The AI does not make enforcement decisions—all security findings come from deterministic scanners (Gitleaks, Trivy, Semgrep, etc.) with reproducible results.
+aurasecurity can be run as a CLI, a CI step, or a long-running service. The AI does not make enforcement decisions—all security findings come from deterministic scanners (Gitleaks, Trivy, Semgrep, etc.) with reproducible results.
 
-Built on the SLOP (Simple Lightweight Orchestration Protocol) framework, it provides automated security analysis for code repositories and AWS infrastructure with a 3D visualization control plane.
+Built on the Aura framework, it provides automated security analysis for code repositories and AWS infrastructure with a 3D visualization control plane.
 
 ## Features
 
@@ -48,26 +48,26 @@ Built on the SLOP (Simple Lightweight Orchestration Protocol) framework, it prov
 ### Option 1: Install via npm (Recommended)
 
 ```bash
-npm install -g slop-auditor
+npm install -g aura-security
 
 # Check installed tools
-slop-auditor doctor
+aura-security doctor
 ```
 
-After installation, you can use the `slop-auditor` command directly:
+After installation, you can use the `aura-security` command directly:
 
 ```bash
-slop-auditor --help
+aura-security --help
 ```
 
 ### Option 2: Clone from GitHub
 
 ```bash
 # Step 1: Clone the repository
-git clone https://github.com/slopsecurityadmin/slop-security-auditor.git
+git clone https://github.com/yvasisht/aura-security.git
 
 # Step 2: Navigate to the project directory
-cd slop-audtior
+cd aura-security
 
 # Step 3: Install dependencies
 npm install
@@ -86,15 +86,15 @@ npm start -- --help
 docker-compose up -d
 
 # Or build and run manually
-docker build -t slop-auditor .
-docker run -p 3000:3000 -p 3001:3001 -p 8080:8080 slop-auditor
+docker build -t aura-security .
+docker run -p 3000:3000 -p 3001:3001 -p 8080:8080 aura-security
 ```
 
 ## Quick Start
 
 ### Running the Full Stack
 
-**Terminal 1 - Start the SLOP API Server:**
+**Terminal 1 - Start the Aura API Server:**
 ```bash
 npm start
 # Server starts on http://127.0.0.1:3000
@@ -115,7 +115,7 @@ Navigate to http://127.0.0.1:8080 to access the 3D control plane.
 Run a scan on a local directory:
 ```bash
 # Via CLI
-slop-auditor scan ./my-project
+aura-security scan ./my-project
 
 # Or via API
 curl -X POST http://127.0.0.1:3000/tools \
@@ -134,28 +134,28 @@ npm run full
 
 ```bash
 # Initialize configuration
-slop-auditor init [path]
+aura-security init [path]
 
 # Scan local directory
-slop-auditor scan <path>
+aura-security scan <path>
 
 # Scan AWS infrastructure
-slop-auditor aws
-slop-auditor aws --region us-west-2 -s iam,s3,ec2
+aura-security aws
+aura-security aws --region us-west-2 -s iam,s3,ec2
 
-# Start SLOP server
-slop-auditor serve
+# Start Aura server
+aura-security serve
 
 # Start 3D visualizer
-slop-auditor visualizer
+aura-security visualizer
 ```
 
 ## Architecture
 
 ```
-slop-auditor/
+aura-security/
 ├── src/
-│   ├── index.ts              # Main entry + SLOP server
+│   ├── index.ts              # Main entry + Aura server
 │   ├── cli.ts                # CLI commands
 │   ├── serve-visualizer.ts   # 3D web UI server
 │   ├── auditor/              # Core audit logic
@@ -167,7 +167,7 @@ slop-auditor/
 │   │   ├── notifications.ts  # Slack/Discord/webhooks
 │   │   └── ...
 │   ├── websocket/            # Real-time updates
-│   └── slop/                 # SLOP protocol impl
+│   └── aura/                 # Aura protocol impl
 ├── visualizer/               # 3D Web UI (Three.js)
 ├── Dockerfile                # Docker build
 ├── docker-compose.yml        # Docker Compose
@@ -211,7 +211,7 @@ ws.onmessage = (event) => {
 
 ```bash
 # Via CLI
-slop-auditor scan ./my-project
+aura-security scan ./my-project
 
 # Via API
 curl -X POST http://127.0.0.1:3000/tools \
@@ -228,7 +228,7 @@ curl -X POST http://127.0.0.1:3000/tools \
 
 ```bash
 # Via CLI
-slop-auditor aws --region us-east-1 -s iam,s3,ec2
+aura-security aws --region us-east-1 -s iam,s3,ec2
 
 # Via API (configure in Settings UI first)
 curl -X POST http://127.0.0.1:3000/tools \
@@ -260,7 +260,7 @@ curl -X POST http://127.0.0.1:3000/settings \
 ### Use the Client SDK
 
 ```typescript
-import { AuditClient, createPullRequestEvent } from 'slop-auditor';
+import { AuditClient, createPullRequestEvent } from 'aura-security';
 
 const client = new AuditClient({
   serverUrl: 'http://127.0.0.1:3000'
@@ -318,25 +318,25 @@ Scans for security misconfigurations:
 docker-compose up -d
 
 # Or build manually
-docker build -t slop-auditor .
-docker run -p 3000:3000 -p 3001:3001 -p 8080:8080 slop-auditor
+docker build -t aura-security .
+docker run -p 3000:3000 -p 3001:3001 -p 8080:8080 aura-security
 
 # With AWS credentials
 docker run -p 3000:3000 -p 3001:3001 -p 8080:8080 \
   -e AWS_ACCESS_KEY_ID=xxx \
   -e AWS_SECRET_ACCESS_KEY=xxx \
   -e AWS_DEFAULT_REGION=us-east-1 \
-  slop-auditor
+  aura-security
 ```
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SLOP_PORT` | 3000 | SLOP HTTP server port |
+| `AURA_PORT` | 3000 | Aura HTTP server port |
 | `WS_PORT` | 3001 | WebSocket server port |
 | `VISUALIZER_PORT` | 8080 | 3D visualizer web server port |
-| `SLOP_BUS_URL` | - | External SLOP bus URL (optional) |
+| `AURA_BUS_URL` | - | External Aura bus URL (optional) |
 | `AWS_DEFAULT_REGION` | us-east-1 | AWS region for scanning |
 
 ## 3D Visualizer Features
@@ -378,8 +378,8 @@ npm login
 npm publish --access public
 
 # Docker Hub
-docker build -t yourusername/slop-auditor .
-docker push yourusername/slop-auditor
+docker build -t yourusername/aura-security .
+docker push yourusername/aura-security
 ```
 
 ## Contributing
@@ -401,7 +401,7 @@ netstat -ano | findstr :3000  # Windows
 lsof -i :3000                 # macOS/Linux
 
 # Use a different port
-SLOP_PORT=3001 npm start
+AURA_PORT=3001 npm start
 ```
 
 **Security tools not found:**
@@ -423,15 +423,15 @@ brew install trivy
 Ensure the WebSocket server is running on port 3001. Check browser console for errors.
 
 **Database errors:**
-The SQLite database is stored in `.slop-auditor/auditor.db`. To reset:
+The SQLite database is stored in `.aura-security/auditor.db`. To reset:
 ```bash
-rm -rf .slop-auditor/
+rm -rf .aura-security/
 npm start  # Will recreate the database
 ```
 
 ### Getting Help
 
-- Check the [Issue Tracker](https://github.com/slopsecurityadmin/slop-security-auditor/issues) for known issues
+- Check the [Issue Tracker](https://github.com/yvasisht/aura-security/issues) for known issues
 - Open a new issue with your error message and environment details
 
 ## License
@@ -440,7 +440,7 @@ MIT - See [LICENSE](LICENSE) for details.
 
 ## Links
 
-- [GitHub Repository](https://github.com/slopsecurityadmin/slop-security-auditor)
-- [npm Package](https://www.npmjs.com/package/slop-auditor)
-- [Issue Tracker](https://github.com/slopsecurityadmin/slop-security-auditor/issues)
+- [GitHub Repository](https://github.com/yvasisht/aura-security)
+- [npm Package](https://www.npmjs.com/package/aura-security)
+- [Issue Tracker](https://github.com/yvasisht/aura-security/issues)
 - [Changelog](CHANGELOG.md)

@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 /**
- * SLOP Auditor CLI
+ * aurasecurity CLI
  *
  * A security auditor that can scan local directories, git repos, and more.
- * Works standalone (no server needed) or connected to SLOP server.
+ * Works standalone (no server needed) or connected to Aura server.
  *
  * Usage:
- *   slop-auditor scan <path>       Scan a local directory for security issues
- *   slop-auditor serve             Start the SLOP server
- *   slop-auditor visualizer        Start the 3D visualizer
- *   slop-auditor status            Show server status
- *   slop-auditor audit [file]      Run audit via server
- *   slop-auditor logs              Show audit log entries
- *   slop-auditor watch             Watch for new audits
+ *   aura-security scan <path>       Scan a local directory for security issues
+ *   aura-security serve             Start the Aura server
+ *   aura-security visualizer        Start the 3D visualizer
+ *   aura-security status            Show server status
+ *   aura-security audit [file]      Run audit via server
+ *   aura-security logs              Show audit log entries
+ *   aura-security watch             Watch for new audits
  */
 
 import { visualize, visualizeState, visualizeCompact } from './visualizer/index.js';
@@ -26,7 +26,7 @@ import { existsSync, writeFileSync, mkdirSync } from 'fs';
 import { join, resolve, basename } from 'path';
 import { spawnSync } from 'child_process';
 
-const SLOP_URL = process.env.SLOP_URL ?? 'http://127.0.0.1:3000';
+const AURA_URL = process.env.AURA_URL ?? 'http://127.0.0.1:3000';
 const VERSION = '0.3.0';
 
 // ANSI colors for terminal output
@@ -184,7 +184,7 @@ function isToolInstalled(command: string): { installed: boolean; version?: strin
 async function runDoctor(): Promise<void> {
   console.log('');
   console.log(c('cyan', '╔═══════════════════════════════════════════════════════════════╗'));
-  console.log(c('cyan', '║') + c('bold', '           SLOP AUDITOR - Security Tools Check               ') + c('cyan', '║'));
+  console.log(c('cyan', '║') + c('bold', '           AURASECURITY - Security Tools Check               ') + c('cyan', '║'));
   console.log(c('cyan', '╚═══════════════════════════════════════════════════════════════╝'));
   console.log('');
 
@@ -303,7 +303,7 @@ async function main() {
 
   // Handle flags
   if (args.includes('--version') || args.includes('-v')) {
-    console.log(`slop-auditor v${VERSION}`);
+    console.log(`aura-security v${VERSION}`);
     process.exit(0);
   }
 
@@ -352,7 +352,7 @@ async function main() {
       break;
     default:
       console.error(c('red', `Unknown command: ${command}`));
-      console.log('Run slop-auditor --help for usage information.');
+      console.log('Run aura-security --help for usage information.');
       process.exit(1);
   }
 }
@@ -361,19 +361,19 @@ async function main() {
 
 async function runInit(args: string[]) {
   const targetDir = args[0] ? resolve(args[0]) : process.cwd();
-  const configDir = join(targetDir, '.slop-auditor');
+  const configDir = join(targetDir, '.aura-security');
   const configFile = join(configDir, 'config.json');
   const gitignorePath = join(targetDir, '.gitignore');
 
   console.log('');
-  console.log(c('cyan', '🔧 Initializing SLOP Auditor configuration...'));
+  console.log(c('cyan', '🔧 Initializing aurasecurity configuration...'));
   console.log('');
 
   // Check if already initialized
   if (existsSync(configFile)) {
     console.log(c('yellow', `Configuration already exists at: ${configFile}`));
     console.log('');
-    console.log('To reinitialize, delete the .slop-auditor directory first.');
+    console.log('To reinitialize, delete the .aura-security directory first.');
     process.exit(0);
   }
 
@@ -385,7 +385,7 @@ async function runInit(args: string[]) {
 
   // Default configuration
   const defaultConfig = {
-    "$schema": "https://raw.githubusercontent.com/slopsecurityadmin/slop-security-auditor/main/schemas/config.schema.json",
+    "$schema": "https://raw.githubusercontent.com/aurasecurity/aura-security/main/schemas/config.schema.json",
     "version": "1.0",
     "project": {
       "name": basename(targetDir),
@@ -468,11 +468,11 @@ async function runInit(args: string[]) {
 
   // Create a sample .env.example
   const envExamplePath = join(configDir, '.env.example');
-  const envExample = `# SLOP Auditor Environment Variables
+  const envExample = `# aurasecurity Environment Variables
 # Copy this to .env and fill in your values
 
 # Server Configuration
-SLOP_PORT=3000
+AURA_PORT=3000
 VISUALIZER_PORT=8080
 
 # GitHub Integration (optional)
@@ -501,14 +501,14 @@ AWS_SECRET_ACCESS_KEY=
     const { readFileSync } = await import('fs');
     const gitignore = readFileSync(gitignorePath, 'utf-8');
     const linesToAdd = [
-      '.slop-auditor/.env',
-      '.slop-auditor/results/',
-      '.slop-auditor/*.log'
+      '.aura-security/.env',
+      '.aura-security/results/',
+      '.aura-security/*.log'
     ];
 
     const missingLines = linesToAdd.filter(line => !gitignore.includes(line));
     if (missingLines.length > 0) {
-      const addition = '\n# SLOP Auditor\n' + missingLines.join('\n') + '\n';
+      const addition = '\n# aurasecurity\n' + missingLines.join('\n') + '\n';
       const { appendFileSync } = await import('fs');
       appendFileSync(gitignorePath, addition);
       console.log(c('green', '✓') + ' Updated .gitignore');
@@ -521,7 +521,7 @@ AWS_SECRET_ACCESS_KEY=
   console.log('Next steps:');
   console.log(`  1. Edit ${c('cyan', configFile)} to customize settings`);
   console.log(`  2. Copy ${c('cyan', envExamplePath)} to .env and add credentials`);
-  console.log(`  3. Run ${c('cyan', 'slop-auditor scan .')} to scan your project`);
+  console.log(`  3. Run ${c('cyan', 'aura-security scan .')} to scan your project`);
   console.log('');
 }
 
@@ -576,7 +576,7 @@ async function runScan(args: string[]) {
   // Print header
   console.log('');
   console.log(c('cyan', '╔═══════════════════════════════════════════════════════════════╗'));
-  console.log(c('cyan', '║') + c('bold', '               SLOP AUDITOR - Security Scanner               ') + c('cyan', '║'));
+  console.log(c('cyan', '║') + c('bold', '               AURASECURITY - Security Scanner               ') + c('cyan', '║'));
   console.log(c('cyan', '╚═══════════════════════════════════════════════════════════════╝'));
   console.log('');
   console.log(c('dim', `Target: ${targetPath}`));
@@ -898,7 +898,7 @@ async function runAWSScan(args: string[]) {
   // Print header
   console.log('');
   console.log(c('cyan', '╔═══════════════════════════════════════════════════════════════╗'));
-  console.log(c('cyan', '║') + c('bold', '              SLOP AUDITOR - AWS Security Scan              ') + c('cyan', '║'));
+  console.log(c('cyan', '║') + c('bold', '              AURASECURITY - AWS Security Scan              ') + c('cyan', '║'));
   console.log(c('cyan', '╚═══════════════════════════════════════════════════════════════╝'));
   console.log('');
   console.log(c('dim', `Region:  ${region}`));
@@ -912,7 +912,7 @@ async function runAWSScan(args: string[]) {
     console.log('');
     console.log('Set credentials using one of these methods:');
     console.log(`  1. Environment variables: ${c('cyan', 'AWS_ACCESS_KEY_ID')} and ${c('cyan', 'AWS_SECRET_ACCESS_KEY')}`);
-    console.log(`  2. AWS profile: ${c('cyan', 'slop-auditor aws --profile <name>')}`);
+    console.log(`  2. AWS profile: ${c('cyan', 'aura-security aws --profile <name>')}`);
     console.log(`  3. AWS config file: ${c('cyan', '~/.aws/credentials')}`);
     console.log('');
     process.exit(1);
@@ -1006,7 +1006,7 @@ async function runSBOM(args: string[]) {
 
   console.log('');
   console.log(c('cyan', '╔═══════════════════════════════════════════════════════════════╗'));
-  console.log(c('cyan', '║') + c('bold', '              SLOP AUDITOR - SBOM Generator                  ') + c('cyan', '║'));
+  console.log(c('cyan', '║') + c('bold', '              AURASECURITY - SBOM Generator                  ') + c('cyan', '║'));
   console.log(c('cyan', '╚═══════════════════════════════════════════════════════════════╝'));
   console.log('');
   console.log(c('dim', `Target: ${targetPath}`));
@@ -1092,7 +1092,7 @@ async function runLicenseCheck(args: string[]) {
 
   console.log('');
   console.log(c('cyan', '╔═══════════════════════════════════════════════════════════════╗'));
-  console.log(c('cyan', '║') + c('bold', '            SLOP AUDITOR - License Compliance                ') + c('cyan', '║'));
+  console.log(c('cyan', '║') + c('bold', '            AURASECURITY - License Compliance                ') + c('cyan', '║'));
   console.log(c('cyan', '╚═══════════════════════════════════════════════════════════════╝'));
   console.log('');
   console.log(c('dim', `Target: ${targetPath}`));
@@ -1244,7 +1244,7 @@ function displayAWSResults(result: AWSScanResult) {
 // ============ SERVER COMMANDS ============
 
 async function startServer() {
-  console.log(c('cyan', '🚀 Starting SLOP Auditor server...'));
+  console.log(c('cyan', '🚀 Starting aurasecurity server...'));
   console.log('');
 
   // Dynamically import index.js which auto-starts the server
@@ -1272,24 +1272,24 @@ async function startVisualizer() {
 
 async function showStatus() {
   try {
-    const res = await fetch(`${SLOP_URL}/info`);
+    const res = await fetch(`${AURA_URL}/info`);
     const info = await res.json();
     console.log('');
     console.log(c('cyan', '╔═══════════════════════════════════════╗'));
-    console.log(c('cyan', '║') + c('bold', '       SLOP AUDITOR STATUS            ') + c('cyan', '║'));
+    console.log(c('cyan', '║') + c('bold', '       AURASECURITY STATUS            ') + c('cyan', '║'));
     console.log(c('cyan', '╚═══════════════════════════════════════╝'));
     console.log('');
-    console.log(`  Server:    ${c('green', SLOP_URL)}`);
+    console.log(`  Server:    ${c('green', AURA_URL)}`);
     console.log(`  Name:      ${info.name}`);
     console.log(`  Version:   ${info.version}`);
     console.log(`  Tools:     ${info.tools.join(', ')}`);
     console.log(`  Endpoints: ${info.endpoints.join(', ')}`);
     console.log('');
   } catch (err) {
-    console.error(c('red', '✗ Cannot connect to SLOP server at'), SLOP_URL);
+    console.error(c('red', '✗ Cannot connect to Aura server at'), AURA_URL);
     console.log('');
     console.log('  Is the server running? Start it with:');
-    console.log(c('cyan', '    slop-auditor serve'));
+    console.log(c('cyan', '    aura-security serve'));
     console.log('');
     process.exit(1);
   }
@@ -1327,7 +1327,7 @@ async function runAudit(args: string[]) {
     console.log('');
 
     try {
-      const res = await fetch(`${SLOP_URL}/tools`, {
+      const res = await fetch(`${AURA_URL}/tools`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(demoInput)
@@ -1342,7 +1342,7 @@ async function runAudit(args: string[]) {
       console.log('');
       console.log(visualizeCompact(output));
     } catch (err) {
-      console.error(c('red', '✗ Server not reachable. Start it with: slop-auditor serve'));
+      console.error(c('red', '✗ Server not reachable. Start it with: aura-security serve'));
       process.exit(1);
     }
   } else {
@@ -1352,7 +1352,7 @@ async function runAudit(args: string[]) {
 
     const payload = input.tool ? input : { tool: 'audit', arguments: input };
 
-    const res = await fetch(`${SLOP_URL}/tools`, {
+    const res = await fetch(`${AURA_URL}/tools`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -1367,7 +1367,7 @@ async function runAudit(args: string[]) {
 
 async function showLogs() {
   try {
-    const res = await fetch(`${SLOP_URL}/memory`);
+    const res = await fetch(`${AURA_URL}/memory`);
     const data = await res.json();
 
     console.log('');
@@ -1386,14 +1386,14 @@ async function showLogs() {
     }
     console.log('');
   } catch {
-    console.error(c('red', '✗ Server not reachable. Start it with: slop-auditor serve'));
+    console.error(c('red', '✗ Server not reachable. Start it with: aura-security serve'));
     process.exit(1);
   }
 }
 
 async function watchMode() {
   console.log('');
-  console.log(c('cyan', '👁️  SLOP Auditor Watch Mode'));
+  console.log(c('cyan', '👁️  aurasecurity Watch Mode'));
   console.log(c('dim', '   Monitoring for new audits... (Ctrl+C to exit)'));
   console.log('');
 
@@ -1401,13 +1401,13 @@ async function watchMode() {
 
   setInterval(async () => {
     try {
-      const res = await fetch(`${SLOP_URL}/memory`);
+      const res = await fetch(`${AURA_URL}/memory`);
       const data = await res.json();
 
       if (data.keys.length > lastCount) {
         const newKeys = data.keys.slice(lastCount);
         for (const key of newKeys) {
-          const entryRes = await fetch(`${SLOP_URL}/memory?key=${encodeURIComponent(key)}`);
+          const entryRes = await fetch(`${AURA_URL}/memory?key=${encodeURIComponent(key)}`);
           const entry = await entryRes.json();
 
           if (entry.value) {
@@ -1426,11 +1426,11 @@ async function watchMode() {
 
 function showHelp() {
   console.log(`
-${c('cyan', 'SLOP Auditor')} - Security Scanner & Audit Pipeline
+${c('cyan', 'aurasecurity')} - Security Scanner & Audit Pipeline
 ${c('dim', `Version ${VERSION}`)}
 
 ${c('bold', 'USAGE:')}
-  slop-auditor <command> [options]
+  aura-security <command> [options]
 
 ${c('bold', 'COMMANDS:')}
   ${c('green', 'doctor')}                 Check installed security tools and show install commands
@@ -1439,7 +1439,7 @@ ${c('bold', 'COMMANDS:')}
   ${c('green', 'sbom')} <path>            Generate Software Bill of Materials
   ${c('green', 'license-check')} <path>   Check license compliance
   ${c('green', 'aws')}                    Scan AWS infrastructure for security issues
-  ${c('green', 'serve')}                  Start the SLOP server (port 3000)
+  ${c('green', 'serve')}                  Start the Aura server (port 3000)
   ${c('green', 'visualizer')}             Start the 3D visualizer (port 8080)
   ${c('green', 'status')}                 Show server connection status
   ${c('green', 'audit')} [file]           Run audit via server (demo if no file)
@@ -1475,41 +1475,41 @@ ${c('bold', 'AWS OPTIONS:')}
 
 ${c('bold', 'EXAMPLES:')}
   ${c('dim', '# Initialize config in current directory')}
-  slop-auditor init
+  aura-security init
 
   ${c('dim', '# Scan current directory')}
-  slop-auditor scan .
+  aura-security scan .
 
   ${c('dim', '# Scan with SARIF output (GitHub Code Scanning)')}
-  slop-auditor scan . --format sarif -o results.sarif
+  aura-security scan . --format sarif -o results.sarif
 
   ${c('dim', '# Scan with GitLab security report format')}
-  slop-auditor scan . --format gitlab-sast -o gl-sast-report.json
+  aura-security scan . --format gitlab-sast -o gl-sast-report.json
 
   ${c('dim', '# Scan only Python projects')}
-  slop-auditor scan . --languages py
+  aura-security scan . --languages py
 
   ${c('dim', '# Use specific scanners')}
-  slop-auditor scan . --scanners grype,checkov,hadolint
+  aura-security scan . --scanners grype,checkov,hadolint
 
   ${c('dim', '# Generate CycloneDX SBOM')}
-  slop-auditor sbom . --format cyclonedx -o sbom.json
+  aura-security sbom . --format cyclonedx -o sbom.json
 
   ${c('dim', '# Generate SPDX SBOM with vulnerabilities')}
-  slop-auditor sbom . --format spdx --include-vulns -o sbom-spdx.json
+  aura-security sbom . --format spdx --include-vulns -o sbom-spdx.json
 
   ${c('dim', '# Check license compliance')}
-  slop-auditor license-check . --policy strict
+  aura-security license-check . --policy strict
 
   ${c('dim', '# License check with custom allowed licenses')}
-  slop-auditor license-check . --allow "MPL-2.0,LGPL-3.0"
+  aura-security license-check . --allow "MPL-2.0,LGPL-3.0"
 
   ${c('dim', '# Scan AWS infrastructure')}
-  slop-auditor aws --region us-west-2
+  aura-security aws --region us-west-2
 
   ${c('dim', '# Start full stack (2 terminals)')}
-  slop-auditor serve        ${c('dim', '# Terminal 1')}
-  slop-auditor visualizer   ${c('dim', '# Terminal 2')}
+  aura-security serve        ${c('dim', '# Terminal 1')}
+  aura-security visualizer   ${c('dim', '# Terminal 2')}
 
 ${c('bold', 'CI/CD INTEGRATION:')}
   ${c('dim', 'See templates/ci/ for GitHub Actions and GitLab CI examples')}
@@ -1524,14 +1524,14 @@ ${c('bold', 'OUTPUT FORMATS:')}
   summary       Compact JSON summary
 
 ${c('bold', 'ENVIRONMENT:')}
-  SLOP_URL          Server URL (default: http://127.0.0.1:3000)
+  AURA_URL          Server URL (default: http://127.0.0.1:3000)
 
 ${c('bold', 'EXIT CODES:')}
   0    Clean - no issues found
   1    High severity issues found
   2    Critical severity issues found
 
-${c('dim', 'For more info: https://github.com/slopsecurityadmin/slop-security-auditor')}
+${c('dim', 'For more info: https://github.com/aurasecurity/aura-security')}
 `);
 }
 

@@ -1,7 +1,7 @@
 """
-SLOP Auditor CLI - Python wrapper for @slop/auditor
+aurasecurity CLI - Python wrapper for aurasecurity npm package
 
-This module provides a Python interface to the slop-auditor npm package.
+This module provides a Python interface to the aurasecurity npm package.
 It requires Node.js to be installed on the system.
 """
 
@@ -24,16 +24,16 @@ def _check_npm() -> bool:
     return shutil.which("npm") is not None
 
 
-def _check_slop_auditor() -> bool:
-    """Check if slop-auditor is installed globally."""
-    return shutil.which("slop-auditor") is not None
+def _check_aurasecurity() -> bool:
+    """Check if aurasecurity is installed globally."""
+    return shutil.which("aura-security") is not None
 
 
 def _get_npx_cmd() -> List[str]:
-    """Get the npx command to run slop-auditor."""
-    if _check_slop_auditor():
-        return ["slop-auditor"]
-    return ["npx", "@slop/auditor"]
+    """Get the npx command to run aurasecurity."""
+    if _check_aurasecurity():
+        return ["aura-security"]
+    return ["npx", "aura-security"]
 
 
 def _run_command(args: List[str], capture_output: bool = False) -> subprocess.CompletedProcess:
@@ -54,18 +54,18 @@ def _run_command(args: List[str], capture_output: bool = False) -> subprocess.Co
         )
 
 
-class SlopAuditor:
+class AuraSecurity:
     """
-    Python interface to the SLOP Auditor security scanner.
+    Python interface to the aurasecurity scanner.
 
     Example usage:
-        auditor = SlopAuditor()
+        auditor = AuraSecurity()
         result = auditor.scan("./my-project")
         print(f"Found {len(result['secrets'])} secrets")
     """
 
     def __init__(self):
-        """Initialize the SLOP Auditor."""
+        """Initialize aurasecurity."""
         if not _check_node():
             raise RuntimeError(
                 "Node.js is not installed. Please install Node.js 18+ from https://nodejs.org"
@@ -150,7 +150,7 @@ class SlopAuditor:
 
     def init(self, path: str = ".") -> bool:
         """
-        Initialize SLOP Auditor configuration in a directory.
+        Initialize aurasecurity configuration in a directory.
 
         Args:
             path: Directory path (default: current directory)
@@ -163,12 +163,12 @@ class SlopAuditor:
 
     def serve(self, port: int = 3000) -> None:
         """
-        Start the SLOP server.
+        Start the Aura server.
 
         Args:
             port: Server port (default: 3000)
         """
-        os.environ["SLOP_PORT"] = str(port)
+        os.environ["AURA_PORT"] = str(port)
         _run_command(["serve"])
 
     def visualizer(self, port: int = 8080) -> None:
@@ -188,9 +188,9 @@ def scan(path: str = ".", output_json: bool = True) -> Dict[str, Any]:
     """
     Scan a directory for security issues.
 
-    Convenience function for SlopAuditor().scan()
+    Convenience function for AuraSecurity().scan()
     """
-    return SlopAuditor().scan(path, output_json)
+    return AuraSecurity().scan(path, output_json)
 
 
 def scan_aws(
@@ -201,23 +201,23 @@ def scan_aws(
     """
     Scan AWS infrastructure for security issues.
 
-    Convenience function for SlopAuditor().scan_aws()
+    Convenience function for AuraSecurity().scan_aws()
     """
-    return SlopAuditor().scan_aws(region, profile, services)
+    return AuraSecurity().scan_aws(region, profile, services)
 
 
 def main() -> int:
     """
     Main CLI entry point.
 
-    Passes all arguments to the underlying slop-auditor command.
+    Passes all arguments to the underlying aura-security command.
     """
     if not _check_node():
         print("Error: Node.js is not installed.")
         print("Please install Node.js 18+ from https://nodejs.org")
         return 1
 
-    # Pass through all arguments to slop-auditor
+    # Pass through all arguments to aura-security
     args = sys.argv[1:]
     result = _run_command(args)
     return result.returncode

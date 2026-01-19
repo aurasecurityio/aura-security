@@ -1,23 +1,23 @@
-# SLOP Auditor - Project Brain
+# aurasecurity - Project Brain
 
 This file tracks the current state of the project for Claude to pick up where we left off.
 
 ## Project Overview
 
-**SLOP Auditor** is a security audit pipeline built on the SLOP (Simple Lightweight Orchestration Protocol) framework. It provides automated security analysis for code changes with a 3D visualization control plane.
+**aurasecurity** is a security audit pipeline built on the Aura framework. It provides automated security analysis for code changes with a 3D visualization control plane.
 
 ## Current Status: ACTIVE DEVELOPMENT
 
 **Last Updated:** January 13, 2026
 **Phase:** Integration & Enhancement
-**GitHub:** https://github.com/slopsecurityadmin/slop-security-auditor
+**GitHub:** https://github.com/yvasisht/aura-security
 
 ---
 
 ## Architecture
 
 ```
-slop-auditor/
+aura-security/
 ├── src/
 │   ├── index.ts              # Main entry + exports
 │   ├── cli.ts                # CLI tool
@@ -37,7 +37,7 @@ slop-auditor/
 │   │   ├── scanners.ts       # Scanner parsers (Snyk, Trivy, etc.)
 │   │   └── config.ts         # Configuration system
 │   ├── schemas/              # JSON schemas
-│   ├── slop/                 # SLOP server/client
+│   ├── aura/                 # Aura server/client
 │   ├── types/                # TypeScript types
 │   └── visualizer/           # Console visualization
 ├── visualizer/               # 3D Web UI (Three.js)
@@ -53,8 +53,8 @@ slop-auditor/
 ## Completed Features
 
 ### Core
-- [x] SLOP Server with /info, /tools, /memory endpoints
-- [x] SLOP Client for API communication
+- [x] Aura Server with /info, /tools, /memory endpoints
+- [x] Aura Client for API communication
 - [x] Auditor Pipeline with rule-based analysis
 - [x] Schema validation (input/output)
 - [x] CLI tool (status, audit, logs, watch)
@@ -82,7 +82,7 @@ slop-auditor/
 - [x] Findings panel with severity badges
 - [x] Stats bar (Critical/High/Medium/Low counts)
 - [x] Hover tooltips on 3D objects
-- [x] Real-time polling of SLOP server
+- [x] Real-time polling of Aura server
 - [x] Audit History panel (browse past audits)
 - [x] Click-to-view audit details
 - [x] Selected audit info panel
@@ -104,8 +104,8 @@ slop-auditor/
 - [x] Module management (add/remove/enable/disable)
 - [x] Audit source selector (Demo/Local/Custom)
 - [x] Audit history browsing in visualizer
-- [x] Scan results stored to SLOP memory
-- [ ] Create example config file (slop.config.json)
+- [x] Scan results stored to Aura memory
+- [ ] Create example config file (aura.config.json)
 - [ ] AWS integration for cloud resource auditing
 - [ ] End-to-end testing with real GitHub webhook
 - [ ] Add persistent database (SQLite/file-based) for audit history
@@ -113,7 +113,7 @@ slop-auditor/
 ### Medium Priority
 - [ ] Add more scanner parsers (Grype, Clair, Checkov)
 - [ ] Add Slack/Discord notification integration
-- [ ] Add authentication to SLOP server
+- [ ] Add authentication to Aura server
 - [ ] Code simplifier/linter stage
 
 ### Low Priority
@@ -127,7 +127,7 @@ slop-auditor/
 
 ```bash
 # Navigate to project
-cd C:\Users\Justin\Documents\Projects\AI_Test\apps\slop-auditor
+cd C:\Users\Justin\Documents\Projects\AI_Test\apps\aura-security
 
 # Install dependencies
 npm install
@@ -135,7 +135,7 @@ npm install
 # Build TypeScript
 npm run build
 
-# Start SLOP server (port 3000)
+# Start Aura server (port 3000)
 npm start
 
 # Start 3D visualizer (port 8080) - separate terminal
@@ -195,7 +195,7 @@ The system monitors these modules:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| SLOP_PORT | 3000 | SLOP server port |
+| AURA_PORT | 3000 | Aura server port |
 | VISUALIZER_PORT | 8080 | 3D visualizer port |
 | WEBHOOK_PORT | 3001 | Webhook server port |
 | WEBHOOK_SECRET | - | Webhook signature secret |
@@ -306,12 +306,12 @@ curl -X POST http://127.0.0.1:3000/tools \
   -d '{"tool":"scan-local","arguments":{"targetPath":"C:/Users/Justin/Documents/Projects","scanSecrets":true,"scanPackages":true}}'
 
 # Build the project
-cd /c/Users/Justin/Documents/Projects/AI_Test/apps/slop-auditor && npm run build
+cd /c/Users/Justin/Documents/Projects/AI_Test/apps/aura-security && npm run build
 ```
 
 ---
 
-## Available SLOP Tools
+## Available Aura Tools
 
 | Tool | Description |
 |------|-------------|
@@ -340,11 +340,11 @@ cd /c/Users/Justin/Documents/Projects/AI_Test/apps/slop-auditor && npm run build
 - **COMPLETED**: Web UI settings panel for AWS/Slack/Discord configuration
 - **COMPLETED**: Docker containerization (Dockerfile + docker-compose.yml)
 - **COMPLETED**: CI/CD GitHub Actions workflow (.github/workflows/ci.yml)
-- **PACKAGE**: Ready for `npm publish` (scoped @slop/auditor)
+- **PACKAGE**: Ready for `npm publish` (scoped @aura/auditor)
 - **PACKAGE**: Python wrapper in `python/` directory ready for PyPI
 
 ### New Features This Session
-1. **SQLite Database** - Audits persist across restarts, stored in `.slop-auditor/auditor.db`
+1. **SQLite Database** - Audits persist across restarts, stored in `.aura-security/auditor.db`
 2. **WebSocket Server** - Real-time updates on port 3001, visualizer auto-connects
 3. **Settings Panel** - Configure AWS, Slack, Discord, webhooks from the UI
 4. **Notifications** - Send alerts to Slack/Discord when scans complete
@@ -375,29 +375,29 @@ POST /notifications/send  # Send notification
 docker-compose up -d
 
 # Or build manually
-docker build -t slop-auditor .
-docker run -p 3000:3000 -p 3001:3001 -p 8080:8080 slop-auditor
+docker build -t aura-security .
+docker run -p 3000:3000 -p 3001:3001 -p 8080:8080 aura-security
 ```
 
 ### Publishing Commands
 ```bash
 # npm (requires npm login)
-cd /path/to/slop-auditor
+cd /path/to/aura-security
 npm publish --access public
 
 # pip (requires twine)
-cd /path/to/slop-auditor/python
+cd /path/to/aura-security/python
 pip install build twine
 python -m build
 twine upload dist/*
 
 # Docker Hub
-docker build -t yourusername/slop-auditor .
-docker push yourusername/slop-auditor
+docker build -t yourusername/aura-security .
+docker push yourusername/aura-security
 ```
 
 ### Suggested Next Steps
-1. Add authentication to SLOP server (JWT/API keys)
+1. Add authentication to Aura server (JWT/API keys)
 2. Add more scanner parsers (Grype, Clair, Checkov)
 3. Add report generation (PDF, HTML)
 4. Integrate with CI/CD systems (webhook triggers)
@@ -409,9 +409,9 @@ The following repos are cloned in `test-repos/` for testing:
 
 ### How to Resume
 ```bash
-cd C:\Users\Justin\Documents\Projects\AI_Test\apps\slop-auditor
+cd C:\Users\Justin\Documents\Projects\AI_Test\apps\aura-security
 npm run build
-npm start                    # Terminal 1: SLOP server on :3000
+npm start                    # Terminal 1: Aura server on :3000
 npm run visualizer           # Terminal 2: Visualizer on :8080
 # Open http://127.0.0.1:8080
 ```
