@@ -37,10 +37,10 @@ classifiers = [
 requires-python = ">=3.8"
 
 [project.urls]
-Homepage = "https://github.com/yvasisht/aura-security"
-Documentation = "https://github.com/yvasisht/aura-security#readme"
-Repository = "https://github.com/yvasisht/aura-security.git"
-Issues = "https://github.com/yvasisht/aura-security/issues"
+Homepage = "https://github.com/aurasecurityio/aura-security"
+Documentation = "https://github.com/aurasecurityio/aura-security#readme"
+Repository = "https://github.com/aurasecurityio/aura-security.git"
+Issues = "https://github.com/aurasecurityio/aura-security/issues"
 
 [project.scripts]
 aurasecurity = "aurasecurity.cli:main"
