@@ -49,10 +49,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yvasisht/aura-security.git"
+    "url": "git+https://github.com/aurasecurityio/aura-security.git"
   },
   "bugs": {
-    "url": "https://github.com/yvasisht/aura-security/issues"
+    "url": "https://github.com/aurasecurityio/aura-security/issues"
   },
   "homepage": "https://aurasecurity.io",
   "dependencies": {

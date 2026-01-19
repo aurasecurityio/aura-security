@@ -66,6 +66,6 @@ results = auditor.scan("./project", output_json=True)
 
 ## Links
 
-- [GitHub Repository](https://github.com/yvasisht/aura-security)
+- [GitHub Repository](https://github.com/aurasecurityio/aura-security)
 - [npm Package](https://www.npmjs.com/package/aura-security)
 - [SLOP Protocol](https://github.com/agnt-gg/slop)

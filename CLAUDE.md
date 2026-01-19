@@ -10,7 +10,7 @@ This file tracks the current state of the project for Claude to pick up where we
 
 **Last Updated:** January 13, 2026
 **Phase:** Integration & Enhancement
-**GitHub:** https://github.com/yvasisht/aura-security
+**GitHub:** https://github.com/aurasecurityio/aura-security
 
 ---
 

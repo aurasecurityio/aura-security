@@ -64,7 +64,7 @@ aura-security --help
 
 ```bash
 # Step 1: Clone the repository
-git clone https://github.com/yvasisht/aura-security.git
+git clone https://github.com/aurasecurityio/aura-security.git
 
 # Step 2: Navigate to the project directory
 cd aura-security
@@ -431,7 +431,7 @@ npm start  # Will recreate the database
 
 ### Getting Help
 
-- Check the [Issue Tracker](https://github.com/yvasisht/aura-security/issues) for known issues
+- Check the [Issue Tracker](https://github.com/aurasecurityio/aura-security/issues) for known issues
 - Open a new issue with your error message and environment details
 
 ## License
@@ -440,7 +440,7 @@ MIT - See [LICENSE](LICENSE) for details.
 
 ## Links
 
-- [GitHub Repository](https://github.com/yvasisht/aura-security)
+- [GitHub Repository](https://github.com/aurasecurityio/aura-security)
 - [npm Package](https://www.npmjs.com/package/aura-security)
-- [Issue Tracker](https://github.com/yvasisht/aura-security/issues)
+- [Issue Tracker](https://github.com/aurasecurityio/aura-security/issues)
 - [Changelog](CHANGELOG.md)
