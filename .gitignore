@@ -43,6 +43,9 @@ __pycache__/
 visualizer/landing.html
 docs/pitch-deck.html
 
+# Internal development notes
+CLAUDE.md
+
 # Deployment secrets (keep examples only)
 deploy/terraform/terraform.tfvars
 *.pem
