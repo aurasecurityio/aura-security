@@ -210,6 +210,33 @@
       color: white;
     }
 
+    .home-link {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all 0.15s;
+      margin-left: 16px;
+    }
+
+    .home-link:hover {
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      border-color: var(--border-light);
+    }
+
+    .home-link svg {
+      width: 14px;
+      height: 14px;
+    }
+
     .nav-tabs {
       display: flex;
       gap: 4px;
@@ -625,6 +652,13 @@
       <div class="logo-icon">S</div>
       <span>aurasecurity</span>
     </div>
+
+    <a href="https://aurasecurity.io" class="home-link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+        <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/>
+      </svg>
+      Home
+    </a>
 
     <div class="nav-tabs">
       <button class="nav-tab active" onclick="showView('scan')">Scan</button>
@@ -1436,7 +1470,19 @@
           body: JSON.stringify({ tool: 'scan-local', arguments: args })
         });
 
-        const data = await res.json();
+        // Check if response is OK before parsing JSON
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(`Server error (${res.status}): ${errorText.substring(0, 100)}`);
+        }
+
+        // Safely parse JSON
+        let data;
+        try {
+          data = await res.json();
+        } catch (parseErr) {
+          throw new Error('Invalid response from server (not JSON)');
+        }
         console.log('API Response:', JSON.stringify(data, null, 2));
 
         if (data.result?.error) {

@@ -27,7 +27,7 @@ import { join, resolve, basename } from 'path';
 import { spawnSync } from 'child_process';
 
 const AURA_URL = process.env.AURA_URL ?? 'http://127.0.0.1:3000';
-const VERSION = '0.3.0';
+const VERSION = '0.4.7';
 
 // ANSI colors for terminal output
 const colors = {
@@ -160,6 +160,15 @@ const SECURITY_TOOLS: ToolInfo[] = [
     category: 'vulnerabilities',
     install: { gem: 'gem install bundler-audit' },
     license: 'GPLv3 (Free)',
+    required: false
+  },
+  {
+    name: 'flawfinder',
+    command: 'flawfinder',
+    description: 'C/C++ source code security scanner',
+    category: 'sast',
+    install: { pip: 'pip install flawfinder', apt: 'apt install flawfinder' },
+    license: 'GPL-2.0 (Free)',
     required: false
   }
 ];
@@ -688,22 +697,29 @@ function displayScanResults(result: LocalScanResult) {
   const serviceCount = result.discoveredServices.length;
   const moduleCount = result.discoveredModules.length;
 
+  // Helper to normalize severity (SAST findings use uppercase)
+  const normSev = (sev: string) => (sev || '').toLowerCase();
+
   const criticalCount = result.secrets.filter(s => s.severity === 'critical').length +
                         result.packages.filter(p => p.severity === 'critical').length +
                         result.iacFindings.filter(i => i.severity === 'critical').length +
-                        result.dockerfileFindings.filter(d => d.severity === 'critical').length;
+                        result.dockerfileFindings.filter(d => d.severity === 'critical').length +
+                        result.sastFindings.filter(s => normSev(s.severity) === 'critical').length;
   const highCount = result.secrets.filter(s => s.severity === 'high').length +
                     result.packages.filter(p => p.severity === 'high').length +
                     result.iacFindings.filter(i => i.severity === 'high').length +
-                    result.dockerfileFindings.filter(d => d.severity === 'high').length;
+                    result.dockerfileFindings.filter(d => d.severity === 'high').length +
+                    result.sastFindings.filter(s => normSev(s.severity) === 'high').length;
   const mediumCount = result.secrets.filter(s => s.severity === 'medium').length +
                       result.packages.filter(p => p.severity === 'medium').length +
                       result.iacFindings.filter(i => i.severity === 'medium').length +
-                      result.dockerfileFindings.filter(d => d.severity === 'medium').length;
+                      result.dockerfileFindings.filter(d => d.severity === 'medium').length +
+                      result.sastFindings.filter(s => normSev(s.severity) === 'medium').length;
   const lowCount = result.secrets.filter(s => s.severity === 'low').length +
                    result.packages.filter(p => p.severity === 'low').length +
                    result.iacFindings.filter(i => i.severity === 'low').length +
-                   result.dockerfileFindings.filter(d => d.severity === 'low').length;
+                   result.dockerfileFindings.filter(d => d.severity === 'low').length +
+                   result.sastFindings.filter(s => normSev(s.severity) === 'low').length;
 
   // Stats bar
   console.log('┌─────────────────────────────────────────────────────────────────┐');
@@ -1450,8 +1466,8 @@ ${c('bold', 'SCAN OPTIONS:')}
   -j, --json        Output results as JSON
   -f, --format      Output format: console, json, sarif, junit, gitlab-sast, gitlab-deps, summary
   -o, --output      Save results to file
-  -l, --languages   Filter by languages: js,py,go,rust,ruby,php,java
-  -S, --scanners    Use specific scanners: grype,trivy,gitleaks,semgrep,checkov,hadolint,pip-audit,govulncheck,cargo-audit,bundle-audit,composer
+  -l, --languages   Filter by languages: js,py,go,rust,ruby,php,java,c,csharp
+  -S, --scanners    Use specific scanners: grype,trivy,gitleaks,semgrep,checkov,hadolint,pip-audit,govulncheck,cargo-audit,bundle-audit,composer,flawfinder
   --fail-on         Exit with error on severity: critical,high,medium (default: critical)
   --no-fail         Never exit with error code
 
