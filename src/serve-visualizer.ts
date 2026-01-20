@@ -6,6 +6,28 @@ import { readFileSync, existsSync } from 'fs';
 import { join, extname } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { exec } from 'child_process';
+import { platform } from 'os';
+
+// Open URL in default browser
+function openBrowser(url: string): void {
+  const plat = platform();
+  let cmd: string;
+
+  if (plat === 'darwin') {
+    cmd = `open "${url}"`;
+  } else if (plat === 'win32') {
+    cmd = `start "" "${url}"`;
+  } else {
+    cmd = `xdg-open "${url}"`;
+  }
+
+  exec(cmd, (err) => {
+    if (err) {
+      console.log(`\n  Open manually: ${url}\n`);
+    }
+  });
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const VISUALIZER_DIR = join(__dirname, '..', 'visualizer');
@@ -68,6 +90,8 @@ const server = createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
+  const dashboardUrl = `http://127.0.0.1:${PORT}/app`;
+
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║              AURASECURITY - WEB SERVER                    ║
@@ -82,4 +106,10 @@ Routes:
   /app       3D Dashboard (visualizer)
   /app/classic   Classic dashboard UI
 `);
+
+  // Auto-open browser (skip if NO_OPEN env var is set)
+  if (!process.env.NO_OPEN) {
+    console.log('  Opening browser...\n');
+    openBrowser(dashboardUrl);
+  }
 });

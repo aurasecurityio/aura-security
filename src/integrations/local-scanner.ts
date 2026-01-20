@@ -94,17 +94,52 @@ const SECRET_SCAN_EXCLUDE_FILES = [
   'coverage/'
 ];
 
-// Directories that often contain false positives (test data, scripts, examples)
+// Directories that often contain false positives (test data, vendored deps, examples)
 const FALSE_POSITIVE_DIRS = [
   'node_modules',
   '__tests__',
   '__mocks__',
-  'test/',
-  'tests/',
-  'spec/',
-  'fixtures/',
-  'examples/',
-  'scripts/'
+  '/test/',
+  '/tests/',
+  '/spec/',
+  '/fixtures/',
+  '/examples/',
+  '/example/',
+  '/sample/',
+  '/samples/',
+  '/demo/',
+  '/demos/',
+  '/mock/',
+  '/mocks/',
+  '/testdata/',
+  '/test-data/',
+  '/assets/test/',
+  '/testing/',
+  '/vendor/',
+  '/vendors/',
+  '/bundled/',
+  '/deps/',
+  '/third_party/',
+  '/third-party/',
+  '/thirdparty/',
+  '/external/',
+  '/dummy/',
+  '/fake/'
+];
+
+// File name patterns that indicate test/example data (not real secrets)
+const TEST_FILE_PATTERNS = [
+  /\.example$/i,
+  /\.sample$/i,
+  /\.test\./i,
+  /\.spec\./i,
+  /example\d*\.(key|pem|jwt|crt|p12|pfx)$/i,
+  /test\d*\.(key|pem|jwt|crt|p12|pfx)$/i,
+  /sample\d*\.(key|pem|jwt|crt|p12|pfx)$/i,
+  /fake[-_]?(key|secret|token|credential)/i,
+  /dummy[-_]?(key|secret|token|credential)/i,
+  /mock[-_]?(key|secret|token|credential)/i,
+  /temporary[-_]?key/i,
 ];
 
 // Rules to completely skip - too many false positives to be useful
@@ -118,6 +153,15 @@ const SKIP_RULES_ENTIRELY = [
 const FALSE_POSITIVE_RULES = [
   'generic-api-key'
 ];
+
+// Rules to skip in specific file types (too many false positives)
+const SKIP_RULES_IN_FILE_TYPES: Record<string, string[]> = {
+  // generic-api-key matches C macros and function signatures in headers
+  '.h': ['generic-api-key'],
+  '.hpp': ['generic-api-key'],
+  '.c': ['generic-api-key', 'sourcegraph-access-token'],
+  '.cpp': ['generic-api-key'],
+};
 
 // Run gitleaks for secrets detection
 function runGitleaks(targetPath: string): SecretFinding[] {
@@ -167,11 +211,22 @@ function runGitleaks(targetPath: string): SecretFinding[] {
           filePath.includes(dir.toLowerCase())
         );
 
+        // Filter out test/example file names
+        const isTestFile = TEST_FILE_PATTERNS.some(pattern =>
+          pattern.test(fileName) || pattern.test(filePath)
+        );
+
         // Filter out known false positive rules in certain file types
         const isFalsePositiveRule = FALSE_POSITIVE_RULES.includes(ruleId) &&
           (isExcludedFile || isInFalsePositiveDir);
 
-        if (isExcludedFile || isFalsePositiveRule) {
+        // Check if this rule should be skipped for this file type
+        const fileExt = extname(fileName).toLowerCase();
+        const skipRulesForExt = SKIP_RULES_IN_FILE_TYPES[fileExt] || [];
+        const isRuleSkippedForFileType = skipRulesForExt.includes(ruleId);
+
+        // Skip if any false positive indicator matches
+        if (isExcludedFile || isInFalsePositiveDir || isTestFile || isFalsePositiveRule || isRuleSkippedForFileType) {
           filteredCount++;
           continue;
         }
@@ -189,7 +244,7 @@ function runGitleaks(targetPath: string): SecretFinding[] {
       try { rmSync(reportPath); } catch {}
 
       if (filteredCount > 0) {
-        console.log(`[SCANNER] Filtered ${filteredCount} false positives from lock/generated files`);
+        console.log(`[SCANNER] Filtered ${filteredCount} false positives (test files, examples, lock files)`);
       }
     }
 
@@ -772,6 +827,69 @@ function runComposerAudit(targetPath: string): PackageFinding[] {
   return findings;
 }
 
+// ============ FLAWFINDER - C/C++ SAST Scanner ============
+
+interface FlawfinderResult {
+  file: string;
+  line: number;
+  column: number;
+  level: number;
+  category: string;
+  name: string;
+  message: string;
+}
+
+function runFlawfinder(targetPath: string): Array<{ file: string; line: number; rule: string; message: string; severity: string }> {
+  const findings: Array<{ file: string; line: number; rule: string; message: string; severity: string }> = [];
+
+  if (!isToolAvailable('flawfinder')) {
+    console.log('[SCANNER] flawfinder not available, skipping C/C++ SAST');
+    return findings;
+  }
+
+  try {
+    console.log('[SCANNER] Running flawfinder...');
+
+    const result = spawnSync('flawfinder', [
+      '--dataonly',
+      '--quiet',
+      '--csv',
+      targetPath
+    ], { encoding: 'utf-8', timeout: 180000, maxBuffer: 50 * 1024 * 1024 });
+
+    if (result.stdout) {
+      // Parse CSV output: File,Line,Column,Level,Category,Name,Warning
+      const lines = result.stdout.split('\n').filter(l => l.trim() && !l.startsWith('File,'));
+
+      for (const line of lines) {
+        const parts = line.split(',');
+        if (parts.length >= 7) {
+          const level = parseInt(parts[3], 10);
+          // Map flawfinder levels (0-5) to severity
+          let severity = 'low';
+          if (level >= 5) severity = 'critical';
+          else if (level >= 4) severity = 'high';
+          else if (level >= 2) severity = 'medium';
+
+          findings.push({
+            file: parts[0],
+            line: parseInt(parts[1], 10),
+            rule: `${parts[4]}:${parts[5]}`,
+            message: parts.slice(6).join(',').replace(/"/g, ''),
+            severity
+          });
+        }
+      }
+    }
+
+    console.log(`[SCANNER] flawfinder found ${findings.length} issues`);
+  } catch (err) {
+    console.error('[SCANNER] flawfinder error:', err);
+  }
+
+  return findings;
+}
+
 // ============ CHECKOV - IaC Security Scanner ============
 
 interface CheckovResult {
@@ -1321,6 +1439,14 @@ export class LocalScanner {
       console.log('[SCANNER] semgrep not available, skipping SAST');
     }
 
+    // C/C++ SAST with flawfinder
+    if (shouldScanLang('c') && shouldUsescanner('flawfinder') && isToolAvailable('flawfinder')) {
+      console.log('[SCANNER] Using flawfinder for C/C++ SAST analysis');
+      const flawfinderFindings = runFlawfinder(this.config.targetPath);
+      result.sastFindings.push(...flawfinderFindings);
+      toolsUsed.push('flawfinder');
+    }
+
     // ============ IAC SCANNING ============
     if (this.config.scanIaC !== false) {
       if (shouldUsescanner('checkov') && isToolAvailable('checkov')) {
@@ -1380,7 +1506,14 @@ export class LocalScanner {
     if (existsSync(join(dir, 'Gemfile'))) languages.add('ruby');
     if (existsSync(join(dir, 'composer.json'))) languages.add('php');
     if (existsSync(join(dir, 'pom.xml')) || existsSync(join(dir, 'build.gradle'))) languages.add('java');
-    if (existsSync(join(dir, '*.csproj')) || existsSync(join(dir, '*.sln'))) languages.add('csharp');
+
+    // C# - need to scan directory for .csproj/.sln files (existsSync doesn't support globs)
+    try {
+      const entries = readdirSync(dir);
+      if (entries.some(f => f.endsWith('.csproj') || f.endsWith('.sln'))) languages.add('csharp');
+      // C/C++ detection
+      if (entries.some(f => f === 'CMakeLists.txt' || f === 'Makefile' || f.endsWith('.c') || f.endsWith('.cpp') || f.endsWith('.h') || f.endsWith('.hpp'))) languages.add('c');
+    } catch { /* ignore */ }
 
     return Array.from(languages);
   }

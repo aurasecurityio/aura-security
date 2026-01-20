@@ -804,8 +804,21 @@
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
     // ========== CONFIGURATION ==========
-    const AURA_URL = 'http://127.0.0.1:3000';
-    const WS_URL = 'ws://127.0.0.1:3001';
+    // Auto-detect environment based on hostname
+    const hostname = window.location.hostname;
+    const isLocalDev = hostname === '127.0.0.1' || hostname === 'localhost';
+
+    // API URL: local dev uses localhost:3000, production uses same origin (nginx proxies to API)
+    const AURA_URL = isLocalDev ? 'http://127.0.0.1:3000' : '';
+
+    // WebSocket URL: local dev uses localhost:3001, production uses same origin /ws path
+    const WS_URL = isLocalDev
+      ? 'ws://127.0.0.1:3001'
+      : `wss://${hostname}/ws`;
+
+    console.log('[CONFIG] Environment:', isLocalDev ? 'local' : 'production');
+    console.log('[CONFIG] API URL:', AURA_URL || '(same origin)');
+    console.log('[CONFIG] WS URL:', WS_URL);
     const POLL_INTERVAL = 5000; // Slower polling as WebSocket handles real-time
     let wsConnected = false;
     let ws = null;
@@ -2383,7 +2396,19 @@
           })
         });
 
-        const data = await res.json();
+        // Check if response is OK before parsing JSON
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(`Server error (${res.status}): ${errorText.substring(0, 100)}`);
+        }
+
+        // Safely parse JSON with error handling
+        let data;
+        try {
+          data = await res.json();
+        } catch (parseErr) {
+          throw new Error('Invalid response from server (not JSON)');
+        }
         console.log('Git scan response:', data);
 
         if (data.result && data.result.scan_details) {
@@ -2391,8 +2416,11 @@
         } else if (data.error) {
           statusEl.innerHTML = `<span style="color: #ff4444;">Error: ${data.error}</span>`;
           showToast('Git scan failed', true);
+        } else if (data.result && data.result.error) {
+          statusEl.innerHTML = `<span style="color: #ff4444;">Error: ${data.result.error}</span>`;
+          showToast('Git scan failed', true);
         } else {
-          statusEl.innerHTML = '<span style="color: #ff4444;">Scan failed</span>';
+          statusEl.innerHTML = '<span style="color: #ff4444;">Scan failed - no results</span>';
         }
       } catch (err) {
         console.error('Git scan error:', err);
