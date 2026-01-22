@@ -27,7 +27,7 @@ import { join, resolve, basename } from 'path';
 import { spawnSync } from 'child_process';
 
 const AURA_URL = process.env.AURA_URL ?? 'http://127.0.0.1:3000';
-const VERSION = '0.4.7';
+const VERSION = '0.5.0';
 
 // ANSI colors for terminal output
 const colors = {

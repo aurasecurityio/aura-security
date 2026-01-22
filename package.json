@@ -1,6 +1,6 @@
 {
   "name": "aura-security",
-  "version": "0.4.7",
+  "version": "0.5.0",
   "description": "Deterministic security auditing engine with optional AI advisory layer. Run as CLI, CI step, or service. AI does not make enforcement decisions.",
   "type": "module",
   "main": "dist/index.js",

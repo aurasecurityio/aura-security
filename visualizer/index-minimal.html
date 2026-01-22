@@ -577,6 +577,152 @@
       color: var(--text-primary);
     }
 
+    /* Filter toggles */
+    .filter-section {
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .filter-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .filter-toggles {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .filter-toggle {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: inherit;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .filter-toggle:hover {
+      border-color: var(--border-light);
+      color: var(--text-primary);
+    }
+
+    .filter-toggle.active {
+      background: var(--accent-subtle);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .filter-toggle.active.critical {
+      background: var(--critical-subtle);
+      border-color: var(--critical);
+      color: var(--critical);
+    }
+
+    .filter-toggle.active.high {
+      background: var(--high-subtle);
+      border-color: var(--high);
+      color: var(--high);
+    }
+
+    .filter-toggle.active.medium {
+      background: var(--warning-subtle);
+      border-color: var(--warning);
+      color: var(--warning);
+    }
+
+    .filter-toggle.active.low {
+      background: var(--success-subtle);
+      border-color: var(--success);
+      color: var(--success);
+    }
+
+    .filter-toggle .toggle-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: 0.6;
+    }
+
+    .filter-toggle.active .toggle-dot {
+      opacity: 1;
+    }
+
+    .filter-toggle .toggle-count {
+      font-weight: 600;
+      margin-left: 2px;
+    }
+
+    /* Badge generator */
+    .badge-section {
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .badge-preview {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      padding: 12px;
+      background: var(--bg-primary);
+      border-radius: 6px;
+      justify-content: center;
+    }
+
+    .badge-preview img {
+      height: 20px;
+    }
+
+    .badge-code {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 11px;
+      color: var(--text-secondary);
+      word-break: break-all;
+      margin-bottom: 8px;
+    }
+
+    .badge-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .badge-actions .btn {
+      width: auto;
+      padding: 6px 12px;
+      font-size: 11px;
+      margin-top: 0;
+    }
+
+    .copy-success {
+      color: var(--success);
+      font-size: 11px;
+      margin-left: 8px;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .copy-success.visible {
+      opacity: 1;
+    }
+
     /* Empty state */
     .empty-state {
       text-align: center;
@@ -722,10 +868,61 @@
       <div class="selected-repo-path" id="selectedRepoPath">-</div>
     </div>
 
+    <!-- Filter Toggles -->
+    <div class="filter-section" id="filterSection" style="display: none;">
+      <div class="filter-label">Filter by Severity</div>
+      <div class="filter-toggles" id="severityFilters">
+        <button class="filter-toggle active critical" data-filter="critical" onclick="toggleFilter('severity', 'critical')">
+          <span class="toggle-dot"></span>Critical <span class="toggle-count" id="countCritical">0</span>
+        </button>
+        <button class="filter-toggle active high" data-filter="high" onclick="toggleFilter('severity', 'high')">
+          <span class="toggle-dot"></span>High <span class="toggle-count" id="countHigh">0</span>
+        </button>
+        <button class="filter-toggle active medium" data-filter="medium" onclick="toggleFilter('severity', 'medium')">
+          <span class="toggle-dot"></span>Medium <span class="toggle-count" id="countMedium">0</span>
+        </button>
+        <button class="filter-toggle active low" data-filter="low" onclick="toggleFilter('severity', 'low')">
+          <span class="toggle-dot"></span>Low <span class="toggle-count" id="countLow">0</span>
+        </button>
+      </div>
+      <div class="filter-label" style="margin-top: 12px;">Filter by Type</div>
+      <div class="filter-toggles" id="typeFilters">
+        <button class="filter-toggle active" data-filter="SECRET" onclick="toggleFilter('type', 'SECRET')">
+          <span class="toggle-dot"></span>Secrets
+        </button>
+        <button class="filter-toggle active" data-filter="VULN" onclick="toggleFilter('type', 'VULN')">
+          <span class="toggle-dot"></span>Vulns
+        </button>
+        <button class="filter-toggle active" data-filter="CODE" onclick="toggleFilter('type', 'CODE')">
+          <span class="toggle-dot"></span>Code
+        </button>
+        <button class="filter-toggle active" data-filter="IAC" onclick="toggleFilter('type', 'IAC')">
+          <span class="toggle-dot"></span>IaC
+        </button>
+        <button class="filter-toggle active" data-filter="DOCKER" onclick="toggleFilter('type', 'DOCKER')">
+          <span class="toggle-dot"></span>Docker
+        </button>
+      </div>
+    </div>
+
     <div class="finding-list" id="findingList">
       <div class="empty-state">
         <div class="empty-state-icon">🔍</div>
         <p>Select a target to view findings</p>
+      </div>
+    </div>
+
+    <!-- Badge Generator -->
+    <div class="badge-section" id="badgeSection" style="display: none;">
+      <div class="filter-label">Security Badge</div>
+      <div class="badge-preview" id="badgePreview">
+        <img id="badgeImg" src="" alt="Security Badge">
+      </div>
+      <div class="badge-code" id="badgeCode">Select a repo to generate badge</div>
+      <div class="badge-actions">
+        <button class="btn btn-secondary" onclick="copyBadge('markdown')">Copy Markdown</button>
+        <button class="btn btn-secondary" onclick="copyBadge('html')">Copy HTML</button>
+        <span class="copy-success" id="copySuccess">Copied!</span>
       </div>
     </div>
   </div>
@@ -1652,6 +1849,113 @@
     }
     window.selectRepo = selectRepo;
 
+    // ========== FILTER TOGGLES ==========
+    const filters = {
+      severity: { critical: true, high: true, medium: true, low: true },
+      type: { SECRET: true, VULN: true, CODE: true, IAC: true, DOCKER: true }
+    };
+
+    function toggleFilter(category, value) {
+      filters[category][value] = !filters[category][value];
+
+      // Update button state
+      const btn = document.querySelector(`.filter-toggle[data-filter="${value}"]`);
+      if (btn) {
+        btn.classList.toggle('active', filters[category][value]);
+      }
+
+      // Re-render findings list with filters
+      if (state.selectedRepo) {
+        const repo = state.repos.find(r => r.id === state.selectedRepo);
+        if (repo) {
+          updateFindingsList(repo);
+        }
+      }
+    }
+    window.toggleFilter = toggleFilter;
+
+    function updateFilterCounts(repo) {
+      const counts = { critical: 0, high: 0, medium: 0, low: 0 };
+      if (repo && repo.findings) {
+        repo.findings.forEach(f => {
+          const sev = f.severity?.toLowerCase() || 'medium';
+          if (counts[sev] !== undefined) counts[sev]++;
+        });
+      }
+
+      document.getElementById('countCritical').textContent = counts.critical;
+      document.getElementById('countHigh').textContent = counts.high;
+      document.getElementById('countMedium').textContent = counts.medium;
+      document.getElementById('countLow').textContent = counts.low;
+    }
+
+    // ========== BADGE GENERATOR ==========
+    function generateBadge(repo) {
+      if (!repo) return;
+
+      const secrets = repo.secrets || 0;
+      const vulns = repo.vulns || 0;
+
+      // Determine status and color
+      let status, color;
+      if (secrets > 0) {
+        status = `${secrets} secrets`;
+        color = 'critical';
+      } else if (vulns > 10) {
+        status = `${vulns} vulns`;
+        color = 'important';
+      } else if (vulns > 0) {
+        status = `${vulns} vulns`;
+        color = 'yellow';
+      } else {
+        status = 'passing';
+        color = 'success';
+      }
+
+      // Generate shields.io URL
+      const label = 'security';
+      const encodedStatus = encodeURIComponent(status);
+      const badgeUrl = `https://img.shields.io/badge/${label}-${encodedStatus}-${color}?style=flat-square&logo=shield&logoColor=white`;
+
+      // Update preview
+      const badgeImg = document.getElementById('badgeImg');
+      badgeImg.src = badgeUrl;
+      badgeImg.alt = `Security: ${status}`;
+
+      // Store for copy functions
+      window.currentBadge = {
+        url: badgeUrl,
+        label: label,
+        status: status,
+        repoName: repo.name
+      };
+
+      // Update code preview with markdown
+      const markdown = `[![Security](${badgeUrl})](https://aurasecurity.io)`;
+      document.getElementById('badgeCode').textContent = markdown;
+
+      // Show badge section
+      document.getElementById('badgeSection').style.display = 'block';
+    }
+
+    function copyBadge(format) {
+      if (!window.currentBadge) return;
+
+      let text;
+      if (format === 'markdown') {
+        text = `[![Security](${window.currentBadge.url})](https://aurasecurity.io)`;
+      } else {
+        text = `<a href="https://aurasecurity.io"><img src="${window.currentBadge.url}" alt="Security"></a>`;
+      }
+
+      navigator.clipboard.writeText(text).then(() => {
+        const successEl = document.getElementById('copySuccess');
+        successEl.classList.add('visible');
+        setTimeout(() => successEl.classList.remove('visible'), 2000);
+      });
+    }
+    window.copyBadge = copyBadge;
+
     function updateUI() {
       let totalCrit = 0, totalWarn = 0;
       state.repos.forEach(r => {
@@ -1695,7 +1999,17 @@
     function updateFindingsList(repo) {
       const container = document.getElementById('findingList');
 
+      // Show/hide filter section
+      document.getElementById('filterSection').style.display = repo && repo.findings?.length > 0 ? 'block' : 'none';
+
+      // Update filter counts
+      updateFilterCounts(repo);
+
+      // Generate badge
+      generateBadge(repo);
+
       if (!repo || repo.findings.length === 0) {
+        document.getElementById('badgeSection').style.display = 'none';
         container.innerHTML = `
           <div class="empty-state">
             <div class="empty-state-icon">✓</div>
@@ -1705,7 +2019,24 @@
         return;
       }
 
-      container.innerHTML = repo.findings.map(f => `
+      // Apply filters
+      const filtered = repo.findings.filter(f => {
+        const sev = f.severity?.toLowerCase() || 'medium';
+        const type = f.type || 'CODE';
+        return filters.severity[sev] && filters.type[type];
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">🔍</div>
+            <p>No findings match current filters</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = filtered.map(f => `
         <div class="finding-item ${f.severity}">
           <div class="finding-header">
             <span class="finding-severity">${f.severity}</span>

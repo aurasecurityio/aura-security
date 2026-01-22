@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Documentation - aurasecurity</title>
+  <meta name="description" content="Learn how to use aurasecurity's 3D visualization and understand the SLOP protocol.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg: #030712;
+      --bg-elevated: #0f172a;
+      --bg-card: rgba(15, 23, 42, 0.6);
+      --border: rgba(148, 163, 184, 0.1);
+      --text: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --primary: #06b6d4;
+      --primary-glow: rgba(6, 182, 212, 0.4);
+      --secondary: #8b5cf6;
+      --critical: #ef4444;
+      --high: #f97316;
+      --medium: #f59e0b;
+      --low: #22c55e;
+      --success: #10b981;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+    }
+
+    h1, h2, h3, h4 {
+      font-family: 'Space Grotesk', sans-serif;
+    }
+
+    code {
+      font-family: 'JetBrains Mono', monospace;
+      background: rgba(6, 182, 212, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.875em;
+    }
+
+    a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    /* Navigation */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 1rem 2rem;
+      background: rgba(3, 7, 18, 0.95);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      color: var(--text);
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      font-size: 1.25rem;
+    }
+
+    .logo-mark {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 1.5rem;
+      align-items: center;
+    }
+
+    .nav-links a {
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+
+    .nav-links a:hover {
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    /* Main Content */
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 8rem 2rem 4rem;
+    }
+
+    .hero {
+      text-align: center;
+      margin-bottom: 4rem;
+    }
+
+    .hero h1 {
+      font-size: 3rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero p {
+      font-size: 1.25rem;
+      color: var(--text-secondary);
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* Table of Contents */
+    .toc {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 2rem;
+      margin-bottom: 3rem;
+    }
+
+    .toc h3 {
+      font-size: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+    }
+
+    .toc ul {
+      list-style: none;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 0.5rem;
+    }
+
+    .toc a {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem;
+      border-radius: 8px;
+      transition: background 0.2s;
+    }
+
+    .toc a:hover {
+      background: rgba(6, 182, 212, 0.1);
+      text-decoration: none;
+    }
+
+    /* Sections */
+    section {
+      margin-bottom: 4rem;
+    }
+
+    section h2 {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 2px solid var(--border);
+    }
+
+    section h3 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin: 2rem 0 1rem;
+      color: var(--primary);
+    }
+
+    section h4 {
+      font-size: 1.125rem;
+      font-weight: 600;
+      margin: 1.5rem 0 0.75rem;
+    }
+
+    section p {
+      margin-bottom: 1rem;
+      color: var(--text-secondary);
+    }
+
+    /* SLOP Grid */
+    .slop-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1.5rem;
+      margin: 2rem 0;
+    }
+
+    .slop-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      text-align: center;
+    }
+
+    .slop-letter {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 3rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .slop-word {
+      font-weight: 600;
+      margin: 0.5rem 0;
+    }
+
+    .slop-desc {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+    }
+
+    /* Visual Guide */
+    .visual-guide {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+      margin: 2rem 0;
+    }
+
+    .guide-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.5rem;
+    }
+
+    .guide-card h4 {
+      margin-top: 0;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .guide-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+    }
+
+    /* Severity Colors */
+    .severity-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      margin: 2rem 0;
+    }
+
+    .severity-card {
+      padding: 1.5rem;
+      border-radius: 12px;
+      text-align: center;
+    }
+
+    .severity-card.critical {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .severity-card.high {
+      background: rgba(249, 115, 22, 0.15);
+      border: 1px solid rgba(249, 115, 22, 0.3);
+    }
+
+    .severity-card.medium {
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .severity-card.low {
+      background: rgba(34, 197, 94, 0.15);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+    }
+
+    .severity-indicator {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      margin: 0 auto 0.75rem;
+    }
+
+    .severity-card.critical .severity-indicator { background: var(--critical); box-shadow: 0 0 20px var(--critical); }
+    .severity-card.high .severity-indicator { background: var(--high); box-shadow: 0 0 20px var(--high); }
+    .severity-card.medium .severity-indicator { background: var(--medium); box-shadow: 0 0 20px var(--medium); }
+    .severity-card.low .severity-indicator { background: var(--low); box-shadow: 0 0 20px var(--low); }
+
+    .severity-card h5 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+
+    .severity-card.critical h5 { color: var(--critical); }
+    .severity-card.high h5 { color: var(--high); }
+    .severity-card.medium h5 { color: var(--medium); }
+    .severity-card.low h5 { color: var(--low); }
+
+    .severity-card p {
+      font-size: 0.8125rem;
+      margin: 0;
+    }
+
+    /* Comparison */
+    .comparison {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+      margin: 2rem 0;
+    }
+
+    .comparison-card {
+      background: var(--bg-card);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .comparison-header {
+      padding: 1.25rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-weight: 600;
+    }
+
+    .comparison-card.bad .comparison-header {
+      background: rgba(239, 68, 68, 0.15);
+      border-bottom: 2px solid var(--critical);
+      color: var(--critical);
+    }
+
+    .comparison-card.good .comparison-header {
+      background: rgba(34, 197, 94, 0.15);
+      border-bottom: 2px solid var(--success);
+      color: var(--success);
+    }
+
+    .comparison-body {
+      padding: 1.5rem;
+    }
+
+    .comparison-stat {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .comparison-stat:last-child {
+      border-bottom: none;
+    }
+
+    .stat-label {
+      color: var(--text-secondary);
+    }
+
+    .stat-value {
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .stat-value.critical { color: var(--critical); }
+    .stat-value.high { color: var(--high); }
+    .stat-value.medium { color: var(--medium); }
+    .stat-value.low { color: var(--low); }
+    .stat-value.clean { color: var(--success); }
+
+    /* Finding Examples */
+    .finding-example {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin: 1rem 0;
+      overflow: hidden;
+    }
+
+    .finding-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 1rem;
+      background: rgba(0, 0, 0, 0.3);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .finding-type {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .finding-severity {
+      font-size: 0.6875rem;
+      font-weight: 700;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+
+    .finding-severity.critical { background: var(--critical); color: white; }
+    .finding-severity.high { background: var(--high); color: white; }
+    .finding-severity.medium { background: var(--medium); color: black; }
+    .finding-severity.low { background: var(--low); color: black; }
+
+    .finding-body {
+      padding: 1rem;
+    }
+
+    .finding-file {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8125rem;
+      color: var(--primary);
+      margin-bottom: 0.5rem;
+    }
+
+    .finding-message {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+    }
+
+    /* Info Boxes */
+    .info-box {
+      background: rgba(6, 182, 212, 0.1);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      border-radius: 12px;
+      padding: 1.25rem;
+      margin: 1.5rem 0;
+    }
+
+    .info-box h5 {
+      color: var(--primary);
+      font-size: 0.875rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .info-box p {
+      margin: 0;
+      font-size: 0.9375rem;
+    }
+
+    .warning-box {
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .warning-box h5 {
+      color: var(--medium);
+    }
+
+    /* Code Block */
+    .code-block {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.875rem;
+      overflow-x: auto;
+      margin: 1rem 0;
+    }
+
+    .code-block .prompt {
+      color: var(--primary);
+      user-select: none;
+    }
+
+    /* Footer */
+    footer {
+      padding: 3rem 2rem;
+      border-top: 1px solid var(--border);
+      text-align: center;
+    }
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 2rem;
+      margin-bottom: 1rem;
+    }
+
+    .footer-links a {
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+    }
+
+    .footer-copy {
+      color: var(--text-muted);
+      font-size: 0.8125rem;
+    }
+
+    /* Responsive */
+    @media (max-width: 1024px) {
+      .slop-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .severity-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 768px) {
+      .comparison {
+        grid-template-columns: 1fr;
+      }
+      .slop-grid {
+        grid-template-columns: 1fr;
+      }
+      .severity-grid {
+        grid-template-columns: 1fr;
+      }
+      .hero h1 {
+        font-size: 2rem;
+      }
+      main {
+        padding: 6rem 1rem 2rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation -->
+  <nav>
+    <div class="nav-inner">
+      <a href="https://aurasecurity.io" class="logo">
+        <div class="logo-mark">&#128737;</div>
+        aurasecurity
+      </a>
+      <div class="nav-links">
+        <a href="https://aurasecurity.io">Home</a>
+        <a href="https://app.aurasecurity.io/app">Dashboard</a>
+        <a href="https://github.com/aurasecurityio/aura-security" target="_blank">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <main>
+    <!-- Hero -->
+    <div class="hero">
+      <h1>Documentation</h1>
+      <p>Learn how to read scan results, understand the visualization, and interpret security findings.</p>
+    </div>
+
+    <!-- Table of Contents -->
+    <div class="toc">
+      <h3>Contents</h3>
+      <ul>
+        <li><a href="#slop-protocol">&#128640; The SLOP Protocol</a></li>
+        <li><a href="#visual-guide">&#127912; Visual Guide</a></li>
+        <li><a href="#severity-levels">&#128680; Severity Levels</a></li>
+        <li><a href="#finding-types">&#128269; Finding Types</a></li>
+        <li><a href="#good-vs-bad">&#9989; Good vs Bad Examples</a></li>
+        <li><a href="#interpreting-results">&#128200; Interpreting Results</a></li>
+      </ul>
+    </div>
+
+    <!-- SLOP Protocol -->
+    <section id="slop-protocol">
+      <h2>The SLOP Protocol</h2>
+      <p>SLOP (Segmentation, Labeling, Organization, Parallelism) is the architecture that powers aurasecurity's multi-scanner orchestration and visualization.</p>
+
+      <div class="slop-grid">
+        <div class="slop-card">
+          <div class="slop-letter">S</div>
+          <div class="slop-word">Segmentation</div>
+          <p class="slop-desc">Each scanner runs in isolation. Gitleaks can't corrupt Trivy's output. One tool failing doesn't break the pipeline.</p>
+        </div>
+        <div class="slop-card">
+          <div class="slop-letter">L</div>
+          <div class="slop-word">Labeling</div>
+          <p class="slop-desc">Every finding is tagged with its source tool, file path, and line number. Full transparency on where results came from.</p>
+        </div>
+        <div class="slop-card">
+          <div class="slop-letter">O</div>
+          <div class="slop-word">Organization</div>
+          <p class="slop-desc">Findings are deduplicated, categorized by severity, and organized into actionable groups. Clean, structured output.</p>
+        </div>
+        <div class="slop-card">
+          <div class="slop-letter">P</div>
+          <div class="slop-word">Parallelism</div>
+          <p class="slop-desc">All scanners run simultaneously. 8 tools don't mean 8x the wait time. Results stream in real-time.</p>
+        </div>
+      </div>
+
+      <div class="info-box">
+        <h5>&#128161; Why SLOP Matters</h5>
+        <p>Traditional security tools give you a wall of text. SLOP transforms raw scanner output into structured, navigable data that can be visualized in 3D, exported to any format, and integrated into your CI/CD pipeline.</p>
+      </div>
+    </section>
+
+    <!-- Visual Guide -->
+    <section id="visual-guide">
+      <h2>Visual Guide</h2>
+      <p>The 3D dashboard represents your security posture as an interactive scene. Here's what each element means:</p>
+
+      <div class="visual-guide">
+        <div class="guide-card">
+          <h4>
+            <div class="guide-icon" style="background: linear-gradient(135deg, #06b6d4, #8b5cf6);">&#128737;</div>
+            Central Hub
+          </h4>
+          <p>The glowing hexagonal shield at the center represents the Security Auditor - the orchestration engine that coordinates all scanners and aggregates results.</p>
+        </div>
+
+        <div class="guide-card">
+          <h4>
+            <div class="guide-icon" style="background: #22c55e;">&#9632;</div>
+            Green Nodes
+          </h4>
+          <p>Clean modules or repos with no findings. These components passed all security checks. The goal is to have all nodes green.</p>
+        </div>
+
+        <div class="guide-card">
+          <h4>
+            <div class="guide-icon" style="background: #f59e0b;">&#9632;</div>
+            Yellow/Orange Nodes
+          </h4>
+          <p>Modules with medium or high severity findings. These require attention but aren't critical. Review and prioritize fixes.</p>
+        </div>
+
+        <div class="guide-card">
+          <h4>
+            <div class="guide-icon" style="background: #ef4444;">&#9632;</div>
+            Red Nodes
+          </h4>
+          <p>Critical security issues detected. These require immediate attention - exposed secrets, critical CVEs, or severe misconfigurations.</p>
+        </div>
+
+        <div class="guide-card">
+          <h4>
+            <div class="guide-icon" style="background: linear-gradient(90deg, #06b6d4, #8b5cf6); height: 4px; width: 40px; border-radius: 2px;"></div>
+            Connection Lines
+          </h4>
+          <p>Lines between nodes show relationships - data flow, dependencies, or audit connections. Thicker lines indicate stronger coupling.</p>
+        </div>
+
+        <div class="guide-card">
+          <h4>
+            <div class="guide-icon" style="background: rgba(6, 182, 212, 0.3); border: 2px solid #06b6d4;">&#9711;</div>
+            Orbital Rings
+          </h4>
+          <p>Circular paths show scanning progress and module groupings. Nodes orbit the hub based on their scan status and category.</p>
+        </div>
+      </div>
+
+      <h3>Navigation</h3>
+      <ul style="color: var(--text-secondary); margin-left: 1.5rem;">
+        <li><strong>Click</strong> a node to select it and view details</li>
+        <li><strong>Drag</strong> to rotate the scene</li>
+        <li><strong>Scroll</strong> to zoom in/out</li>
+        <li><strong>Hover</strong> over nodes to see tooltips</li>
+      </ul>
+    </section>
+
+    <!-- Severity Levels -->
+    <section id="severity-levels">
+      <h2>Severity Levels</h2>
+      <p>Findings are categorized by severity to help you prioritize remediation efforts:</p>
+
+      <div class="severity-grid">
+        <div class="severity-card critical">
+          <div class="severity-indicator"></div>
+          <h5>Critical</h5>
+          <p>Immediate action required. Exposed secrets, critical CVEs with known exploits, or severe misconfigurations that could lead to full compromise.</p>
+        </div>
+
+        <div class="severity-card high">
+          <div class="severity-indicator"></div>
+          <h5>High</h5>
+          <p>Address soon. API keys, high-severity vulnerabilities, or security issues that could be exploited with some effort.</p>
+        </div>
+
+        <div class="severity-card medium">
+          <div class="severity-indicator"></div>
+          <h5>Medium</h5>
+          <p>Plan to fix. Deprecated dependencies, missing security headers, or issues that increase attack surface.</p>
+        </div>
+
+        <div class="severity-card low">
+          <div class="severity-indicator"></div>
+          <h5>Low</h5>
+          <p>Best practice improvements. Code style, minor optimizations, or informational findings that improve security posture.</p>
+        </div>
+      </div>
+
+      <div class="info-box warning-box">
+        <h5>&#9888;&#65039; Exit Codes</h5>
+        <p>By default, <code>aura-security scan</code> exits with code 2 for critical findings and code 1 for high findings. Use <code>--fail-on medium</code> to fail on medium+ or <code>--no-fail</code> to always exit 0.</p>
+      </div>
+    </section>
+
+    <!-- Finding Types -->
+    <section id="finding-types">
+      <h2>Finding Types</h2>
+      <p>aurasecurity detects multiple categories of security issues:</p>
+
+      <h4>&#128273; Secrets & Credentials</h4>
+      <p>Exposed API keys, passwords, tokens, private keys, and other sensitive credentials in your codebase. Detected by Gitleaks.</p>
+      <div class="finding-example">
+        <div class="finding-header">
+          <span class="finding-type">Private Key</span>
+          <span class="finding-severity critical">Critical</span>
+        </div>
+        <div class="finding-body">
+          <div class="finding-file">lib/insecurity.ts:23</div>
+          <div class="finding-message">Identified a Private Key, which may compromise cryptographic security and sensitive data encryption.</div>
+        </div>
+      </div>
+
+      <h4>&#128230; Dependency Vulnerabilities</h4>
+      <p>Known CVEs in your project dependencies. Detected by Grype, Trivy, and language-specific tools (npm audit, pip-audit, etc.).</p>
+      <div class="finding-example">
+        <div class="finding-header">
+          <span class="finding-type">CVE-2024-XXXXX</span>
+          <span class="finding-severity high">High</span>
+        </div>
+        <div class="finding-body">
+          <div class="finding-file">package.json (lodash@4.17.20)</div>
+          <div class="finding-message">Prototype pollution vulnerability allowing arbitrary code execution.</div>
+        </div>
+      </div>
+
+      <h4>&#128027; Code Issues (SAST)</h4>
+      <p>Static analysis findings like SQL injection, XSS, insecure deserialization. Detected by Semgrep.</p>
+
+      <h4>&#9729;&#65039; Infrastructure as Code</h4>
+      <p>Misconfigurations in Terraform, CloudFormation, Kubernetes manifests. Detected by Checkov.</p>
+
+      <h4>&#128051; Dockerfile Issues</h4>
+      <p>Best practice violations in Dockerfiles - unpinned versions, running as root, missing security directives. Detected by Hadolint.</p>
+      <div class="finding-example">
+        <div class="finding-header">
+          <span class="finding-type">DL3006</span>
+          <span class="finding-severity medium">Medium</span>
+        </div>
+        <div class="finding-body">
+          <div class="finding-file">Dockerfile:22</div>
+          <div class="finding-message">Always tag the version of an image explicitly.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Good vs Bad Examples -->
+    <section id="good-vs-bad">
+      <h2>Good vs Bad: Real Examples</h2>
+      <p>Here's what secure and insecure repositories look like when scanned with aurasecurity:</p>
+
+      <div class="comparison">
+        <div class="comparison-card bad">
+          <div class="comparison-header">
+            <span>&#10060;</span>
+            <span>juice-shop (Intentionally Vulnerable)</span>
+          </div>
+          <div class="comparison-body">
+            <p style="font-size: 0.875rem; margin-bottom: 1rem;">OWASP Juice Shop - an intentionally insecure application for security training.</p>
+            <div class="comparison-stat">
+              <span class="stat-label">Scan Time</span>
+              <span class="stat-value">93.30s</span>
+            </div>
+            <div class="comparison-stat">
+              <span class="stat-label">Critical Findings</span>
+              <span class="stat-value critical">1 (Private Key)</span>
+            </div>
+            <div class="comparison-stat">
+              <span class="stat-label">High Findings</span>
+              <span class="stat-value high">4 (API Keys)</span>
+            </div>
+            <div class="comparison-stat">
+              <span class="stat-label">Medium Findings</span>
+              <span class="stat-value medium">4 (Dockerfile)</span>
+            </div>
+            <div class="comparison-stat">
+              <span class="stat-label">Low Findings</span>
+              <span class="stat-value low">11 (Dockerfile)</span>
+            </div>
+            <div class="comparison-stat">
+              <span class="stat-label">Total Issues</span>
+              <span class="stat-value critical">20</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="comparison-card good">
+          <div class="comparison-header">
+            <span>&#9989;</span>
+            <span>get-shit-done (Clean)</span>
+          </div>
+          <div class="comparison-body">
+            <p style="font-size: 0.875rem; margin-bottom: 1rem;">A simple productivity tool with no security findings.</p>
+            <div class="comparison-stat">
+              <span class="stat-label">Scan Time</span>
+              <span class="stat-value">2.87s</span>
+            </div>
+            <div class="comparison-stat">
+              <span class="stat-label">Critical Findings</span>
+              <span class="stat-value clean">0</span>
+            </div>
+            <div class="comparison-stat">
+              <span class="stat-label">High Findings</span>
+              <span class="stat-value clean">0</span>
+            </div>
+            <div class="comparison-stat">
+              <span class="stat-label">Medium Findings</span>
+              <span class="stat-value clean">0</span>
+            </div>
+            <div class="comparison-stat">
+              <span class="stat-label">Low Findings</span>
+              <span class="stat-value clean">0</span>
+            </div>
+            <div class="comparison-stat">
+              <span class="stat-label">Total Issues</span>
+              <span class="stat-value clean">0 &#127881;</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3>What Made juice-shop Fail?</h3>
+      <p>Here are the actual findings from the scan:</p>
+
+      <div class="finding-example">
+        <div class="finding-header">
+          <span class="finding-type">Private Key Exposed</span>
+          <span class="finding-severity critical">Critical</span>
+        </div>
+        <div class="finding-body">
+          <div class="finding-file">lib/insecurity.ts:23</div>
+          <div class="finding-message">Hardcoded private key found in source code. This could compromise all cryptographic operations.</div>
+        </div>
+      </div>
+
+      <div class="finding-example">
+        <div class="finding-header">
+          <span class="finding-type">Generic API Key</span>
+          <span class="finding-severity high">High</span>
+        </div>
+        <div class="finding-body">
+          <div class="finding-file">data/static/users.yml:88</div>
+          <div class="finding-message">API key detected in configuration file. Could expose access to various services.</div>
+        </div>
+      </div>
+
+      <div class="finding-example">
+        <div class="finding-header">
+          <span class="finding-type">Generic API Key</span>
+          <span class="finding-severity high">High</span>
+        </div>
+        <div class="finding-body">
+          <div class="finding-file">routes/login.ts:65</div>
+          <div class="finding-message">Hardcoded API key in authentication route. Credentials should be loaded from environment variables.</div>
+        </div>
+      </div>
+
+      <div class="info-box">
+        <h5>&#128161; Key Takeaway</h5>
+        <p>A clean scan doesn't mean "no vulnerabilities exist" - it means "no <em>known</em> vulnerabilities were detected by the scanners." Always combine automated scanning with manual security review for critical applications.</p>
+      </div>
+    </section>
+
+    <!-- Interpreting Results -->
+    <section id="interpreting-results">
+      <h2>Interpreting Results</h2>
+
+      <h3>When You See Critical Findings</h3>
+      <ol style="color: var(--text-secondary); margin-left: 1.5rem;">
+        <li><strong>Stop and assess</strong> - Don't deploy code with critical findings</li>
+        <li><strong>Check if it's a false positive</strong> - Test files, examples, and documentation may trigger detections</li>
+        <li><strong>Rotate compromised credentials immediately</strong> - If real secrets are exposed, assume they're compromised</li>
+        <li><strong>Fix at the source</strong> - Use environment variables, secret managers, or .gitignore</li>
+      </ol>
+
+      <h3>When You See High/Medium Findings</h3>
+      <ol style="color: var(--text-secondary); margin-left: 1.5rem;">
+        <li><strong>Prioritize by exploitability</strong> - A CVE with a public exploit is more urgent than a theoretical issue</li>
+        <li><strong>Check your dependencies</strong> - Often the fix is just updating a package version</li>
+        <li><strong>Document accepted risks</strong> - Some findings may be acceptable in your context</li>
+      </ol>
+
+      <h3>Using the CLI Output</h3>
+      <div class="code-block">
+<span class="prompt">$</span> aura-security scan . --format summary
+
+<span style="color: var(--success);">&#10003;</span> Scan completed in 12.34s
+
+<span style="color: var(--critical);">CRITICAL: 0</span>  <span style="color: var(--high);">HIGH: 2</span>  <span style="color: var(--medium);">MEDIUM: 5</span>  <span style="color: var(--low);">LOW: 8</span>
+
+Tools: gitleaks, grype, trivy, hadolint
+</div>
+
+      <h3>CI/CD Integration</h3>
+      <p>Use exit codes to gate your pipeline:</p>
+      <div class="code-block">
+<span class="prompt">$</span> aura-security scan . --fail-on high
+<span style="color: var(--text-muted);"># Exits 1 if high+ findings detected</span>
+
+<span class="prompt">$</span> aura-security scan . --fail-on critical
+<span style="color: var(--text-muted);"># Only fails on critical (default)</span>
+
+<span class="prompt">$</span> aura-security scan . --no-fail
+<span style="color: var(--text-muted);"># Always exits 0, for informational scans</span>
+</div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-links">
+      <a href="https://aurasecurity.io">Home</a>
+      <a href="https://app.aurasecurity.io/app">Dashboard</a>
+      <a href="https://github.com/aurasecurityio/aura-security">GitHub</a>
+      <a href="https://www.npmjs.com/package/aura-security">npm</a>
+      <a href="https://x.com/aiaurasecurity">X</a>
+      <a href="https://www.linkedin.com/in/shubham-vashist/">LinkedIn</a>
+    </div>
+    <p class="footer-copy">&copy; 2026 aurasecurity &middot; MIT License</p>
+  </footer>
+</body>
+</html>
