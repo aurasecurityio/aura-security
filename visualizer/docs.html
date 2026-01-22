@@ -349,6 +349,103 @@
       margin: 0;
     }
 
+    /* Screenshot Comparison */
+    .screenshot-comparison {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+      margin: 2rem 0;
+    }
+
+    .screenshot-card {
+      background: var(--bg-card);
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    .screenshot-label {
+      padding: 1rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-weight: 600;
+      font-size: 0.9375rem;
+    }
+
+    .screenshot-card.bad .screenshot-label {
+      background: rgba(239, 68, 68, 0.1);
+      border-bottom: 2px solid var(--critical);
+      color: var(--critical);
+    }
+
+    .screenshot-card.good .screenshot-label {
+      background: rgba(34, 197, 94, 0.1);
+      border-bottom: 2px solid var(--success);
+      color: var(--success);
+    }
+
+    .screenshot-icon {
+      font-size: 1.25rem;
+    }
+
+    .screenshot-container {
+      position: relative;
+      background: #0d1117;
+      min-height: 280px;
+    }
+
+    .screenshot-container img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .screenshot-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 280px;
+      text-align: center;
+      padding: 2rem;
+    }
+
+    .screenshot-placeholder.bad {
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(249, 115, 22, 0.1));
+    }
+
+    .screenshot-placeholder.good {
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(6, 182, 212, 0.1));
+    }
+
+    .placeholder-icon {
+      font-size: 4rem;
+      margin-bottom: 1rem;
+      opacity: 0.8;
+    }
+
+    .placeholder-text {
+      color: var(--text-secondary);
+      font-size: 1rem;
+      line-height: 1.5;
+    }
+
+    .placeholder-text small {
+      opacity: 0.7;
+    }
+
+    .screenshot-caption {
+      padding: 1rem 1.25rem;
+      font-size: 0.8125rem;
+      color: var(--text-secondary);
+      border-top: 1px solid var(--border);
+    }
+
+    .screenshot-caption strong {
+      color: var(--text);
+    }
+
     /* Comparison */
     .comparison {
       display: grid;
@@ -553,6 +650,9 @@
 
     @media (max-width: 768px) {
       .comparison {
+        grid-template-columns: 1fr;
+      }
+      .screenshot-comparison {
         grid-template-columns: 1fr;
       }
       .slop-grid {
@@ -797,6 +897,47 @@
       <h2>Good vs Bad: Real Examples</h2>
       <p>Here's what secure and insecure repositories look like when scanned with aurasecurity:</p>
 
+      <!-- 3D Visualizer Screenshots -->
+      <h3>3D Visualization Comparison</h3>
+      <p>See the difference at a glance - red means danger, green means safe:</p>
+
+      <div class="screenshot-comparison">
+        <div class="screenshot-card bad">
+          <div class="screenshot-label">
+            <span class="screenshot-icon bad">&#10060;</span>
+            <span>Vulnerable Repository</span>
+          </div>
+          <div class="screenshot-container">
+            <img src="https://app.aurasecurity.io/screenshots/bad-repo.png" alt="3D view of vulnerable repository with red nodes" onerror="this.parentElement.innerHTML='<div class=\'screenshot-placeholder bad\'><div class=\'placeholder-icon\'>&#128308;</div><div class=\'placeholder-text\'>juice-shop scan result<br><small>Red node = 9 secrets found</small></div></div>'">
+          </div>
+          <div class="screenshot-caption">
+            <strong>juice-shop</strong> - Multiple red severity indicators orbiting the node. Each red sphere represents a critical or high finding.
+          </div>
+        </div>
+
+        <div class="screenshot-card good">
+          <div class="screenshot-label">
+            <span class="screenshot-icon good">&#9989;</span>
+            <span>Clean Repository</span>
+          </div>
+          <div class="screenshot-container">
+            <img src="https://app.aurasecurity.io/screenshots/good-repo.png" alt="3D view of clean repository with green node" onerror="this.parentElement.innerHTML='<div class=\'screenshot-placeholder good\'><div class=\'placeholder-icon\'>&#128994;</div><div class=\'placeholder-text\'>aurasecurity scan result<br><small>Green node = 0 issues</small></div></div>'">
+          </div>
+          <div class="screenshot-caption">
+            <strong>aurasecurity</strong> - Clean green node with no severity indicators. This is your target state.
+          </div>
+        </div>
+      </div>
+
+      <div class="info-box">
+        <h5>&#127912; Reading the 3D View</h5>
+        <p><strong>Node Color:</strong> Red = critical issues, Orange = high, Yellow = medium, Green = clean<br>
+        <strong>Orbiting Shapes:</strong> Each shape around a node represents a finding category. More shapes = more issues.<br>
+        <strong>Click to Drill Down:</strong> Click any node to see severity breakdown, click severity to see individual findings.</p>
+      </div>
+
+      <!-- Stats Comparison Cards -->
+      <h3>Scan Statistics</h3>
       <div class="comparison">
         <div class="comparison-card bad">
           <div class="comparison-header">
@@ -815,7 +956,7 @@
             </div>
             <div class="comparison-stat">
               <span class="stat-label">High Findings</span>
-              <span class="stat-value high">4 (API Keys)</span>
+              <span class="stat-value high">8 (API Keys)</span>
             </div>
             <div class="comparison-stat">
               <span class="stat-label">Medium Findings</span>
@@ -827,7 +968,7 @@
             </div>
             <div class="comparison-stat">
               <span class="stat-label">Total Issues</span>
-              <span class="stat-value critical">20</span>
+              <span class="stat-value critical">24</span>
             </div>
           </div>
         </div>
@@ -835,13 +976,13 @@
         <div class="comparison-card good">
           <div class="comparison-header">
             <span>&#9989;</span>
-            <span>get-shit-done (Clean)</span>
+            <span>aurasecurity (Clean)</span>
           </div>
           <div class="comparison-body">
-            <p style="font-size: 0.875rem; margin-bottom: 1rem;">A simple productivity tool with no security findings.</p>
+            <p style="font-size: 0.875rem; margin-bottom: 1rem;">Our own repository - we practice what we preach.</p>
             <div class="comparison-stat">
               <span class="stat-label">Scan Time</span>
-              <span class="stat-value">2.87s</span>
+              <span class="stat-value">4.10s</span>
             </div>
             <div class="comparison-stat">
               <span class="stat-label">Critical Findings</span>
