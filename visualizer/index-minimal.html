@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- aurasecurity v1.2.0 - 2026-01-23 22:45 UTC - Rug Check Fix -->
+<!-- aurasecurity v1.2.1 - 2026-01-23 22:51 UTC - Rug Check Fix v2 -->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -3257,37 +3257,46 @@
     window.doRugCheck = doRugCheck;
 
     function renderRugCheckResults(data) {
-      console.log('[RugCheck v1.2.0] renderRugCheckResults called');
+      console.log('[RugCheck v1.2.1] renderRugCheckResults called - BULLETPROOF VERSION');
       try {
-        console.log('[RugCheck] Rendering results:', data);
-        console.log('[RugCheck] data type:', typeof data);
-        console.log('[RugCheck] data.grade:', data?.grade, 'type:', typeof data?.grade);
+        console.log('[RugCheck] Input data:', JSON.stringify(data));
 
-        if (!data || typeof data !== 'object') {
-          throw new Error('Invalid data received from server: ' + typeof data);
-        }
-
-        // Safely extract values with MAXIMUM defensive coding
-        const trustScore = typeof data.trustScore === 'number' ? data.trustScore : 0;
-
-        // Triple-safe grade extraction
+        // BULLETPROOF: Extract with absolute safety
+        let trustScore = 0;
         let grade = 'F';
-        if (data.grade !== undefined && data.grade !== null) {
-          grade = String(data.grade);
-        }
-
-        // Triple-safe verdict extraction
         let verdict = 'UNKNOWN';
-        if (data.verdict !== undefined && data.verdict !== null) {
-          verdict = String(data.verdict);
+        let verdictEmoji = '';
+        let summary = '';
+        let checks = [];
+        let metrics = {};
+
+        try { trustScore = (data && typeof data.trustScore === 'number') ? data.trustScore : 0; } catch(e) { console.error('trustScore error:', e); }
+        try { grade = (data && data.grade) ? String(data.grade) : 'F'; } catch(e) { console.error('grade error:', e); }
+        try { verdict = (data && data.verdict) ? String(data.verdict) : 'UNKNOWN'; } catch(e) { console.error('verdict error:', e); }
+        try { verdictEmoji = (data && data.verdictEmoji) ? String(data.verdictEmoji) : ''; } catch(e) { console.error('verdictEmoji error:', e); }
+        try { summary = (data && data.summary) ? String(data.summary) : ''; } catch(e) { console.error('summary error:', e); }
+        try { checks = (data && Array.isArray(data.checks)) ? data.checks : []; } catch(e) { console.error('checks error:', e); }
+        try { metrics = (data && data.metrics) ? data.metrics : {}; } catch(e) { console.error('metrics error:', e); }
+
+        console.log('[RugCheck] Extracted - grade:', grade, ', verdict:', verdict, ', score:', trustScore);
+
+        // BULLETPROOF: Convert grade to lowercase safely
+        let gradeLower = 'f';
+        try {
+          gradeLower = grade ? grade.toString().toLowerCase() : 'f';
+        } catch(e) {
+          console.error('grade toLowerCase error:', e);
+          gradeLower = 'f';
         }
 
-        const verdictEmoji = data.verdictEmoji ? String(data.verdictEmoji) : '';
-        const summary = data.summary ? String(data.summary) : '';
-        const checks = Array.isArray(data.checks) ? data.checks : [];
-        const metrics = data.metrics && typeof data.metrics === 'object' ? data.metrics : {};
-
-        console.log('[RugCheck] Parsed - grade:', grade, '(type:', typeof grade, '), verdict:', verdict, ', score:', trustScore);
+        // BULLETPROOF: Convert verdict to lowercase safely
+        let verdictLower = 'unknown';
+        try {
+          verdictLower = verdict ? verdict.toString().toLowerCase().replace(/ /g, '-') : 'unknown';
+        } catch(e) {
+          console.error('verdict toLowerCase error:', e);
+          verdictLower = 'unknown';
+        }
 
         // Update score circle
         const scoreCircle = document.getElementById('trustScoreCircle');
@@ -3297,10 +3306,9 @@
         if (scoreNumber) scoreNumber.textContent = trustScore;
         if (scoreGrade) scoreGrade.textContent = grade;
 
-        // Set grade class for colors - with explicit type guard
-        if (scoreCircle && typeof grade === 'string' && grade.length > 0) {
+        if (scoreCircle) {
           scoreCircle.className = 'trust-score-circle';
-          scoreCircle.classList.add('grade-' + grade.toLowerCase());
+          scoreCircle.classList.add('grade-' + gradeLower);
         }
 
       // Update verdict banner
@@ -3308,9 +3316,9 @@
       const verdictText = document.getElementById('verdictText');
 
       if (verdictText) verdictText.textContent = verdictEmoji + ' ' + verdict;
-      if (verdictBanner && typeof verdict === 'string' && verdict.length > 0) {
+      if (verdictBanner) {
         verdictBanner.className = 'verdict-banner';
-        verdictBanner.classList.add(verdict.toLowerCase().replace(/ /g, '-'));
+        verdictBanner.classList.add(verdictLower);
       }
 
       // Update quick stats
