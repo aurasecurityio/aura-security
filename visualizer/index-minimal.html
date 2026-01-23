@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- aurasecurity v1.2.0 - 2026-01-23 22:45 UTC - Rug Check Fix -->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -3256,23 +3257,37 @@
     window.doRugCheck = doRugCheck;
 
     function renderRugCheckResults(data) {
+      console.log('[RugCheck v1.2.0] renderRugCheckResults called');
       try {
         console.log('[RugCheck] Rendering results:', data);
+        console.log('[RugCheck] data type:', typeof data);
+        console.log('[RugCheck] data.grade:', data?.grade, 'type:', typeof data?.grade);
 
         if (!data || typeof data !== 'object') {
-          throw new Error('Invalid data received from server');
+          throw new Error('Invalid data received from server: ' + typeof data);
         }
 
-        // Safely extract values with defaults
+        // Safely extract values with MAXIMUM defensive coding
         const trustScore = typeof data.trustScore === 'number' ? data.trustScore : 0;
-        const grade = String(data.grade || 'F');
-        const verdict = String(data.verdict || 'UNKNOWN');
-        const verdictEmoji = String(data.verdictEmoji || '');
-        const summary = String(data.summary || '');
+
+        // Triple-safe grade extraction
+        let grade = 'F';
+        if (data.grade !== undefined && data.grade !== null) {
+          grade = String(data.grade);
+        }
+
+        // Triple-safe verdict extraction
+        let verdict = 'UNKNOWN';
+        if (data.verdict !== undefined && data.verdict !== null) {
+          verdict = String(data.verdict);
+        }
+
+        const verdictEmoji = data.verdictEmoji ? String(data.verdictEmoji) : '';
+        const summary = data.summary ? String(data.summary) : '';
         const checks = Array.isArray(data.checks) ? data.checks : [];
         const metrics = data.metrics && typeof data.metrics === 'object' ? data.metrics : {};
 
-        console.log('[RugCheck] Parsed - grade:', grade, 'verdict:', verdict, 'score:', trustScore);
+        console.log('[RugCheck] Parsed - grade:', grade, '(type:', typeof grade, '), verdict:', verdict, ', score:', trustScore);
 
         // Update score circle
         const scoreCircle = document.getElementById('trustScoreCircle');
@@ -3282,8 +3297,8 @@
         if (scoreNumber) scoreNumber.textContent = trustScore;
         if (scoreGrade) scoreGrade.textContent = grade;
 
-        // Set grade class for colors
-        if (scoreCircle) {
+        // Set grade class for colors - with explicit type guard
+        if (scoreCircle && typeof grade === 'string' && grade.length > 0) {
           scoreCircle.className = 'trust-score-circle';
           scoreCircle.classList.add('grade-' + grade.toLowerCase());
         }
@@ -3293,7 +3308,7 @@
       const verdictText = document.getElementById('verdictText');
 
       if (verdictText) verdictText.textContent = verdictEmoji + ' ' + verdict;
-      if (verdictBanner) {
+      if (verdictBanner && typeof verdict === 'string' && verdict.length > 0) {
         verdictBanner.className = 'verdict-banner';
         verdictBanner.classList.add(verdict.toLowerCase().replace(/ /g, '-'));
       }
