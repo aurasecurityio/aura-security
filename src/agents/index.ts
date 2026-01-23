@@ -9,6 +9,9 @@ export * from './base.js';
 export * from './scanners/index.js';
 export * from './policy/index.js';
 
+// SLOP-native agents
+export * as slop from './slop/index.js';
+
 import { createScannerAgents } from './scanners/index.js';
 import { createPolicyAgents } from './policy/index.js';
 import { Agent } from './types.js';

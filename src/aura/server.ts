@@ -4,6 +4,7 @@
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { getDatabase, type AuditorDatabase } from '../database/index.js';
 import { NotificationService, createNotificationFromAudit } from '../integrations/notifications.js';
+import { generateScoreBadge } from '../scoring/index.js';
 
 export interface AuraTool {
   name: string;
@@ -113,6 +114,23 @@ export class AuraServer {
       } else if (path === '/notifications/send' && req.method === 'POST') {
         await this.handleSendNotification(req, res);
       }
+      // Score endpoints
+      else if (path === '/score' && req.method === 'GET') {
+        await this.handleGetScore(url, res);
+      } else if (path.match(/^\/score\/(.+)\/history$/) && req.method === 'GET') {
+        const target = decodeURIComponent(path.slice(7, -8));
+        await this.handleGetScoreHistory(target, url, res);
+      } else if (path.match(/^\/score\/(.+)\/trend$/) && req.method === 'GET') {
+        const target = decodeURIComponent(path.slice(7, -6));
+        await this.handleGetScoreTrend(target, url, res);
+      }
+      // Badge endpoints
+      else if (path === '/badge/score' && req.method === 'GET') {
+        await this.handleGetBadge(res);
+      } else if (path.startsWith('/badge/') && req.method === 'GET') {
+        const target = decodeURIComponent(path.slice(7));
+        await this.handleGetBadgeForTarget(target, res);
+      }
       else {
         res.statusCode = 404;
         res.end(JSON.stringify({ error: 'Not found' }));
@@ -133,8 +151,8 @@ export class AuraServer {
     res.statusCode = 200;
     res.end(JSON.stringify({
       name: 'aura-security',
-      version: '0.2.0',
-      endpoints: ['/info', '/tools', '/memory', '/settings', '/audits', '/stats', '/notifications'],
+      version: '0.5.2',
+      endpoints: ['/info', '/tools', '/memory', '/settings', '/audits', '/stats', '/notifications', '/score', '/badge'],
       tools: Array.from(this.tools.keys()),
       database: true
     }));
@@ -365,6 +383,109 @@ export class AuraServer {
 
     res.statusCode = 200;
     res.end(JSON.stringify(result));
+  }
+
+  // ============ SCORE ENDPOINTS ============
+
+  private async handleGetScore(url: URL, res: ServerResponse): Promise<void> {
+    const target = url.searchParams.get('target') || undefined;
+
+    if (target) {
+      // Get score for specific target
+      const latest = this.db.getLatestScore(target);
+      const trend = this.db.getScoreTrend(target, 10);
+
+      if (!latest) {
+        res.statusCode = 404;
+        res.end(JSON.stringify({ error: 'No score history for target' }));
+        return;
+      }
+
+      res.statusCode = 200;
+      res.end(JSON.stringify({
+        score: latest.score,
+        grade: latest.grade,
+        target: latest.target,
+        breakdown: {
+          critical: latest.critical,
+          high: latest.high,
+          medium: latest.medium,
+          low: latest.low
+        },
+        trend,
+        lastUpdated: latest.timestamp
+      }));
+    } else {
+      // Get aggregate score
+      const aggregate = this.db.getAggregateScore();
+
+      res.statusCode = 200;
+      res.end(JSON.stringify({
+        score: aggregate.score,
+        grade: aggregate.grade,
+        gradeColor: aggregate.gradeColor,
+        breakdown: aggregate.breakdown,
+        trend: aggregate.trend,
+        lastUpdated: new Date().toISOString()
+      }));
+    }
+  }
+
+  private async handleGetScoreHistory(target: string, url: URL, res: ServerResponse): Promise<void> {
+    const limit = parseInt(url.searchParams.get('limit') || '50', 10);
+
+    const history = this.db.getScoreHistory(target, limit);
+
+    res.statusCode = 200;
+    res.end(JSON.stringify({ target, history }));
+  }
+
+  private async handleGetScoreTrend(target: string, url: URL, res: ServerResponse): Promise<void> {
+    const limit = parseInt(url.searchParams.get('limit') || '10', 10);
+
+    const trend = this.db.getScoreTrend(target, limit);
+
+    res.statusCode = 200;
+    res.end(JSON.stringify({ target, ...trend }));
+  }
+
+  // ============ BADGE ENDPOINTS ============
+
+  private async handleGetBadge(res: ServerResponse): Promise<void> {
+    const aggregate = this.db.getAggregateScore();
+    const svg = generateScoreBadge(aggregate.score, aggregate.grade, aggregate.gradeColor);
+
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.statusCode = 200;
+    res.end(svg);
+  }
+
+  private async handleGetBadgeForTarget(target: string, res: ServerResponse): Promise<void> {
+    const latest = this.db.getLatestScore(target);
+
+    if (!latest) {
+      // Return a "no data" badge
+      const svg = generateScoreBadge(0, '?', '#6e7681');
+      res.setHeader('Content-Type', 'image/svg+xml');
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.statusCode = 200;
+      res.end(svg);
+      return;
+    }
+
+    // Get grade color based on score
+    let gradeColor = '#f85149'; // F - red
+    if (latest.score >= 90) gradeColor = '#3fb950'; // A - green
+    else if (latest.score >= 70) gradeColor = '#58a6ff'; // B - blue
+    else if (latest.score >= 50) gradeColor = '#d29922'; // C - yellow
+
+    const svg = generateScoreBadge(latest.score, latest.grade, gradeColor);
+
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.statusCode = 200;
+    res.end(svg);
   }
 
   private readBody(req: IncomingMessage): Promise<string> {

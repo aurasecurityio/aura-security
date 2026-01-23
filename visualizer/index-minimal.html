@@ -198,16 +198,13 @@
     }
 
     .logo-icon {
-      width: 28px;
-      height: 28px;
-      background: var(--accent);
-      border-radius: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 14px;
-      font-weight: 600;
-      color: white;
+      height: 24px;
+      width: auto;
+    }
+
+    .logo-icon img {
+      height: 100%;
+      width: auto;
     }
 
     .home-link {
@@ -288,6 +285,100 @@
 
     .stat-value.critical { color: var(--critical); }
     .stat-value.warning { color: var(--warning); }
+
+    /* Score Display */
+    .score-display {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 16px;
+      border-left: 1px solid var(--border);
+      margin-left: 8px;
+    }
+
+    .score-circle {
+      position: relative;
+      width: 40px;
+      height: 40px;
+    }
+
+    .score-circle svg {
+      transform: rotate(-90deg);
+    }
+
+    .score-circle .score-bg {
+      fill: none;
+      stroke: var(--bg-tertiary);
+      stroke-width: 3;
+    }
+
+    .score-circle .score-progress {
+      fill: none;
+      stroke: var(--success);
+      stroke-width: 3;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 0.5s ease, stroke 0.3s;
+    }
+
+    .score-value-container {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+    }
+
+    .score-number {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-primary);
+      line-height: 1;
+    }
+
+    .score-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .score-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .score-grade {
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .score-grade.grade-a { color: var(--success); }
+    .score-grade.grade-b { color: var(--accent); }
+    .score-grade.grade-c { color: var(--warning); }
+    .score-grade.grade-f { color: var(--critical); }
+
+    .score-trend {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+    }
+
+    .score-trend.up { color: var(--success); }
+    .score-trend.down { color: var(--critical); }
+    .score-trend.same { color: var(--text-muted); }
+
+    .trend-chart-mini {
+      width: 60px;
+      height: 24px;
+    }
+
+    .trend-chart-mini polyline {
+      fill: none;
+      stroke: var(--accent);
+      stroke-width: 1.5;
+    }
 
     /* Left Panel - Scanner */
     #scanner-panel {
@@ -795,7 +886,7 @@
   <!-- Header -->
   <header id="header" class="panel">
     <div class="logo">
-      <div class="logo-icon">S</div>
+      <div class="logo-icon"><img src="/images/aura-logo.jpg" alt="AURA"></div>
       <span>aurasecurity</span>
     </div>
 
@@ -823,6 +914,28 @@
       <div class="header-stat">
         <span class="stat-value" id="totalRepos">0</span>
         <span>Scanned</span>
+      </div>
+
+      <!-- Security Score -->
+      <div class="score-display" id="scoreDisplay">
+        <div class="score-circle">
+          <svg viewBox="0 0 40 40">
+            <circle class="score-bg" cx="20" cy="20" r="17"/>
+            <circle class="score-progress" id="scoreProgress" cx="20" cy="20" r="17"
+                    stroke-dasharray="106.8" stroke-dashoffset="106.8"/>
+          </svg>
+          <div class="score-value-container">
+            <span class="score-number" id="scoreNumber">--</span>
+          </div>
+        </div>
+        <div class="score-info">
+          <span class="score-label">Score</span>
+          <span class="score-grade grade-a" id="scoreGrade">-</span>
+          <span class="score-trend same" id="scoreTrend">--</span>
+        </div>
+        <svg class="trend-chart-mini" id="trendChartMini" viewBox="0 0 60 24">
+          <polyline id="trendLine" points=""/>
+        </svg>
       </div>
     </div>
   </header>
@@ -1584,11 +1697,15 @@
       const allClickables = [...findingNodes.filter(n => n.userData.isSeverityNode), ...repoNodes];
       const intersects = raycaster.intersectObjects(allClickables, true);
 
+      console.log('[Click] Intersects:', intersects.length, 'allClickables:', allClickables.length);
+
       if (intersects.length > 0) {
         let target = intersects[0].object;
+        console.log('[Click] Target object:', target.userData);
 
         // Check if clicking a severity node (drill down to findings)
         if (target.userData.isSeverityNode) {
+          console.log('[Click] Clicking severity node:', target.userData.severity);
           const repo = state.repos.find(r => r.id === state.selectedRepo);
           const repoNode = repoNodes.find(n => n.userData.repoId === state.selectedRepo);
           if (repo && repoNode) {
@@ -1602,6 +1719,7 @@
           target = target.parent;
         }
         if (target.userData.repoId) {
+          console.log('[Click] Clicking repo node:', target.userData.repoId, target.userData.repoName);
           selectRepo(target.userData.repoId);
         }
       }
@@ -1802,6 +1920,7 @@
           log(`Complete: ${repo.secrets} secrets, ${repo.vulns} vulnerabilities`, repo.secrets > 0 ? 'error' : 'success');
         }
         updateUI();
+        refreshScore(); // Update security score after scan
         selectRepo(repo.id);
 
       } catch (err) {
@@ -1815,6 +1934,7 @@
     window.executeScan = executeScan;
 
     function selectRepo(repoId) {
+      console.log('[SelectRepo] Called with repoId:', repoId);
       state.selectedRepo = repoId;
       updateUI();
 
@@ -1830,11 +1950,16 @@
       });
 
       const repo = state.repos.find(r => r.id === repoId);
+      console.log('[SelectRepo] Found repo:', repo?.name, 'secrets:', repo?.secrets, 'vulns:', repo?.vulns, 'findings:', repo?.findings?.length);
+
       if (repo) {
         document.getElementById('selectedRepoInfo').classList.add('visible');
         document.getElementById('selectedRepoName').textContent = repo.name;
         document.getElementById('selectedRepoPath').textContent = repo.path;
         updateFindingsList(repo);
+
+        // Update score display for this specific repo
+        updateScoreForRepo(repo);
 
         // Show severity breakdown in 3D view (Level 1)
         if (selectedNode) {
@@ -2140,8 +2265,155 @@
     }
     window.clearAllReports = clearAllReports;
 
+    // ========== SECURITY SCORE ==========
+    function calculateScore(counts) {
+      const penalties = {
+        critical: (counts.critical || 0) * 15,
+        high: (counts.high || 0) * 8,
+        medium: (counts.medium || 0) * 3,
+        low: (counts.low || 0) * 1
+      };
+      const totalPenalty = penalties.critical + penalties.high + penalties.medium + penalties.low;
+      const score = Math.round(100 / (1 + totalPenalty / 100));
+
+      let grade = 'F', gradeColor = '#f85149';
+      if (score >= 90) { grade = 'A'; gradeColor = '#3fb950'; }
+      else if (score >= 70) { grade = 'B'; gradeColor = '#58a6ff'; }
+      else if (score >= 50) { grade = 'C'; gradeColor = '#d29922'; }
+
+      return { score, grade, gradeColor, breakdown: { ...penalties, totalPenalty } };
+    }
+
+    function updateScoreForRepo(repo) {
+      console.log('[Score] updateScoreForRepo called for:', repo?.name);
+
+      if (!repo) {
+        console.log('[Score] No repo, falling back to global score');
+        refreshScore();
+        return;
+      }
+
+      // Count findings by severity - handle both findings array and raw counts
+      const counts = { critical: 0, high: 0, medium: 0, low: 0 };
+
+      if (repo.findings && repo.findings.length > 0) {
+        // Calculate from findings array
+        repo.findings.forEach(f => {
+          const sev = (f.severity || 'medium').toLowerCase();
+          if (counts[sev] !== undefined) counts[sev]++;
+        });
+        console.log('[Score] Calculated from findings:', counts);
+      } else {
+        // Fallback: use secrets and vulns counts if no findings array
+        // Secrets are typically critical, vulns are mixed but default to medium
+        counts.critical = repo.secrets || 0;
+        counts.medium = repo.vulns || 0;
+        console.log('[Score] Calculated from secrets/vulns:', counts);
+      }
+
+      const scoreData = calculateScore(counts);
+      console.log('[Score] Result:', scoreData.score, scoreData.grade);
+
+      // Update display
+      document.getElementById('scoreNumber').textContent = scoreData.score;
+
+      const gradeEl = document.getElementById('scoreGrade');
+      gradeEl.textContent = scoreData.grade;
+      gradeEl.className = 'score-grade';
+      if (scoreData.score >= 90) gradeEl.classList.add('grade-a');
+      else if (scoreData.score >= 70) gradeEl.classList.add('grade-b');
+      else if (scoreData.score >= 50) gradeEl.classList.add('grade-c');
+      else gradeEl.classList.add('grade-f');
+
+      // Update progress ring
+      const circumference = 106.8;
+      const offset = circumference - (scoreData.score / 100) * circumference;
+      const progressEl = document.getElementById('scoreProgress');
+      progressEl.style.strokeDashoffset = offset;
+      progressEl.style.stroke = scoreData.gradeColor;
+
+      // Update trend to show repo name
+      const trendEl = document.getElementById('scoreTrend');
+      trendEl.textContent = repo.name;
+      trendEl.className = 'score-trend same';
+    }
+
+    async function fetchSecurityScore() {
+      try {
+        const res = await fetch(`${AURA_URL}/score`);
+        if (!res.ok) return null;
+        return await res.json();
+      } catch (e) {
+        console.log('Score fetch failed:', e);
+        return null;
+      }
+    }
+
+    function updateScoreDisplay(scoreData) {
+      if (!scoreData) {
+        document.getElementById('scoreNumber').textContent = '--';
+        document.getElementById('scoreGrade').textContent = '-';
+        document.getElementById('scoreTrend').textContent = '--';
+        return;
+      }
+
+      const { score, grade, gradeColor, trend } = scoreData;
+
+      // Update score number
+      document.getElementById('scoreNumber').textContent = score;
+
+      // Update grade with color
+      const gradeEl = document.getElementById('scoreGrade');
+      gradeEl.textContent = grade;
+      gradeEl.className = 'score-grade';
+      if (score >= 90) gradeEl.classList.add('grade-a');
+      else if (score >= 70) gradeEl.classList.add('grade-b');
+      else if (score >= 50) gradeEl.classList.add('grade-c');
+      else gradeEl.classList.add('grade-f');
+
+      // Update progress ring (circumference = 2 * PI * 17 = 106.8)
+      const circumference = 106.8;
+      const offset = circumference - (score / 100) * circumference;
+      const progressEl = document.getElementById('scoreProgress');
+      progressEl.style.strokeDashoffset = offset;
+      progressEl.style.stroke = gradeColor || (score >= 70 ? 'var(--success)' : score >= 50 ? 'var(--warning)' : 'var(--critical)');
+
+      // Update trend indicator
+      const trendEl = document.getElementById('scoreTrend');
+      if (trend && trend.previousScore !== null) {
+        const arrow = trend.direction === 'up' ? '↑' : trend.direction === 'down' ? '↓' : '→';
+        trendEl.textContent = `${arrow} ${trend.change}`;
+        trendEl.className = `score-trend ${trend.direction}`;
+      } else {
+        trendEl.textContent = '—';
+        trendEl.className = 'score-trend same';
+      }
+
+      // Update mini trend chart
+      if (trend && trend.history && trend.history.length > 1) {
+        const points = trend.history.slice().reverse();
+        const maxScore = Math.max(...points.map(p => p.score), 100);
+        const minScore = Math.min(...points.map(p => p.score), 0);
+        const range = maxScore - minScore || 1;
+
+        const polyPoints = points.map((p, i) => {
+          const x = (i / (points.length - 1)) * 58 + 1;
+          const y = 22 - ((p.score - minScore) / range) * 20;
+          return `${x},${y}`;
+        }).join(' ');
+
+        document.getElementById('trendLine').setAttribute('points', polyPoints);
+      }
+    }
+
+    async function refreshScore() {
+      const scoreData = await fetchSecurityScore();
+      updateScoreDisplay(scoreData);
+    }
+
     // ========== INIT ==========
     initScene();
+    refreshScore(); // Fetch initial score
     log('Ready to scan');
   </script>
 </body>
