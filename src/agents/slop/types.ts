@@ -92,6 +92,62 @@ export interface FixSuggestion {
   confidence: number;
 }
 
+// Detailed fix types for Fixer Agent
+export type FixStrategy = 'version-bump' | 'code-change' | 'config-change' | 'env-var' | 'remove' | 'manual';
+
+export interface FixResult {
+  findingId: string;
+  finding: Finding;
+  fixable: boolean;
+  strategy: FixStrategy;
+  // For version bumps
+  package?: string;
+  currentVersion?: string;
+  fixedVersion?: string;
+  // The actual fix
+  description: string;
+  explanation: string;
+  commands: string[];
+  diff?: string;
+  // Metadata
+  confidence: number;
+  breakingChangeRisk: 'none' | 'low' | 'medium' | 'high';
+  testRequired: boolean;
+  autoFixSafe: boolean;
+}
+
+export interface FixBatchResult {
+  total: number;
+  fixable: number;
+  unfixable: number;
+  fixes: FixResult[];
+  summary: {
+    versionBumps: number;
+    codeChanges: number;
+    configChanges: number;
+    manual: number;
+  };
+  // Combined commands to fix all
+  allCommands: string[];
+}
+
+export interface ApplyFixResult {
+  findingId: string;
+  success: boolean;
+  applied: boolean;
+  output?: string;
+  error?: string;
+}
+
+export interface PRResult {
+  findingId?: string;
+  success: boolean;
+  prUrl?: string;
+  prNumber?: number;
+  branch?: string;
+  error?: string;
+}
+
 // Agent configuration
 export interface SLOPAgentConfig {
   id: string;

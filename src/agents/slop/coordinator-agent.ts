@@ -6,7 +6,7 @@
  */
 
 import { SLOPAgent } from './base.js';
-import { SLOPAgentConfig, SLOPTool, SLOPToolCall, SLOPToolResult, Finding, TriageResult, PipelineResult } from './types.js';
+import { SLOPAgentConfig, SLOPTool, SLOPToolCall, SLOPToolResult, Finding, TriageResult, PipelineResult, FixBatchResult } from './types.js';
 
 interface RegisteredAgent {
   id: string;
@@ -266,6 +266,46 @@ export class CoordinatorAgent extends SLOPAgent {
           for (const finding of prioritizedFindings.slice(0, 5)) {
             console.log(`[Coordinator]   [${finding.severity.toUpperCase()}] ${finding.title}`);
             if (finding.file) console.log(`[Coordinator]     └─ ${finding.file}${finding.line ? ':' + finding.line : ''}`);
+          }
+        }
+
+        // Stage 5: Generate Fixes
+        console.log(`\n[Coordinator] Stage 5: GENERATING FIXES...`);
+        const fixerAgent = this.findAgentWithTool('suggest-fixes-batch');
+        if (!fixerAgent) {
+          console.log(`[Coordinator] ⚠ No fixer agent available, skipping fix generation`);
+        } else {
+          const stageStartFix = Date.now();
+          const fixResult = (await this.callAgent(fixerAgent.url, 'suggest-fixes-batch', { findings: prioritizedFindings })) as FixBatchResult;
+
+          stages.push({
+            agent: fixerAgent.id,
+            tool: 'suggest-fixes-batch',
+            result: fixResult,
+            duration: Date.now() - stageStartFix,
+          });
+
+          console.log(`[Coordinator] ✓ Fix generation complete:`);
+          console.log(`[Coordinator]   Fixable: ${fixResult.fixable}, Unfixable: ${fixResult.unfixable}`);
+          console.log(`[Coordinator]   Version bumps: ${fixResult.summary.versionBumps}, Code changes: ${fixResult.summary.codeChanges}`);
+
+          // Show top fixes
+          const topFixes = fixResult.fixes.filter(f => f.fixable).slice(0, 5);
+          if (topFixes.length > 0) {
+            console.log(`\n[Coordinator] Top fixes:`);
+            for (const fix of topFixes) {
+              if (fix.strategy === 'version-bump') {
+                console.log(`[Coordinator]   📦 ${fix.package}: ${fix.currentVersion} → ${fix.fixedVersion}`);
+              } else {
+                console.log(`[Coordinator]   🔧 ${fix.description}`);
+              }
+            }
+
+            // Show combined command
+            if (fixResult.allCommands.length > 0) {
+              console.log(`\n[Coordinator] Quick fix command:`);
+              console.log(`[Coordinator]   ${fixResult.allCommands[0]}`);
+            }
           }
         }
       }
