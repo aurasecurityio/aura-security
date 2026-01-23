@@ -612,6 +612,174 @@
 
     #reports-panel.active { display: block; }
 
+    /* Fixes Section */
+    .fixes-section {
+      margin-top: 20px;
+      border-top: 1px solid var(--border);
+      padding-top: 16px;
+    }
+
+    .fixes-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .fixes-title {
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+
+    .fixes-summary {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 12px;
+      font-size: 12px;
+    }
+
+    .fixes-stat {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      background: var(--bg-tertiary);
+      border-radius: 4px;
+    }
+
+    .fixes-stat.fixable { color: var(--success); }
+    .fixes-stat.unfixable { color: var(--text-muted); }
+
+    .fix-command-box {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    .fix-command-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .fix-command {
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 11px;
+      color: var(--success);
+      word-break: break-all;
+      max-height: 80px;
+      overflow-y: auto;
+    }
+
+    .fix-list {
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .fix-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+
+    .fix-item:last-child {
+      border-bottom: none;
+    }
+
+    .fix-icon {
+      font-size: 14px;
+    }
+
+    .fix-package {
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .fix-version {
+      color: var(--text-muted);
+    }
+
+    .fix-arrow {
+      color: var(--success);
+    }
+
+    .fix-new-version {
+      color: var(--success);
+      font-weight: 500;
+    }
+
+    .btn-fix {
+      background: linear-gradient(135deg, #238636 0%, #2ea043 100%);
+      border: 1px solid #238636;
+    }
+
+    .btn-fix:hover {
+      background: linear-gradient(135deg, #2ea043 0%, #3fb950 100%);
+    }
+
+    .btn-fix:disabled {
+      background: var(--bg-tertiary);
+      border-color: var(--border);
+      color: var(--text-muted);
+      cursor: not-allowed;
+    }
+
+    .fixes-loading {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+
+    .fixes-loading .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .fixes-error {
+      background: var(--critical-subtle);
+      border: 1px solid var(--critical);
+      border-radius: 6px;
+      padding: 12px;
+      font-size: 12px;
+    }
+
+    .fixes-error-title {
+      color: var(--critical);
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+
+    .fixes-error-msg {
+      color: var(--text-secondary);
+    }
+
+    .fixes-error code {
+      display: block;
+      margin-top: 8px;
+      padding: 8px;
+      background: var(--bg-primary);
+      border-radius: 4px;
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 11px;
+      color: var(--text-primary);
+    }
+
     .report-actions {
       display: flex;
       gap: 8px;
@@ -1036,6 +1204,20 @@
         <button class="btn btn-secondary" onclick="copyBadge('markdown')">Copy Markdown</button>
         <button class="btn btn-secondary" onclick="copyBadge('html')">Copy HTML</button>
         <span class="copy-success" id="copySuccess">Copied!</span>
+      </div>
+    </div>
+
+    <!-- Fixes Section -->
+    <div class="fixes-section" id="fixesSection" style="display: none;">
+      <div class="fixes-header">
+        <span class="fixes-title">🔧 Fix Suggestions</span>
+        <button class="btn btn-fix" id="generateFixesBtn" onclick="generateFixes()">
+          Generate Fixes
+        </button>
+      </div>
+
+      <div id="fixesContent">
+        <!-- Will be populated by JavaScript -->
       </div>
     </div>
   </div>
@@ -2127,6 +2309,12 @@
       // Show/hide filter section
       document.getElementById('filterSection').style.display = repo && repo.findings?.length > 0 ? 'block' : 'none';
 
+      // Show/hide fixes section (show if repo has findings)
+      showFixesSection(repo && repo.findings?.length > 0);
+      // Reset fixes content when switching repos
+      document.getElementById('fixesContent').innerHTML = '';
+      currentFixesData = null;
+
       // Update filter counts
       updateFilterCounts(repo);
 
@@ -2409,6 +2597,207 @@
     async function refreshScore() {
       const scoreData = await fetchSecurityScore();
       updateScoreDisplay(scoreData);
+    }
+
+    // ========== FIXER AGENT INTEGRATION ==========
+    const FIXER_AGENT_URL = 'http://localhost:3012';
+    let currentFixesData = null;
+
+    function showFixesSection(show) {
+      document.getElementById('fixesSection').style.display = show ? 'block' : 'none';
+    }
+
+    async function generateFixes() {
+      const repo = state.repos.find(r => r.id === state.selectedRepo);
+      if (!repo || !repo.findings || repo.findings.length === 0) {
+        showFixesError('No findings to generate fixes for');
+        return;
+      }
+
+      const btn = document.getElementById('generateFixesBtn');
+      const content = document.getElementById('fixesContent');
+
+      // Show loading state
+      btn.disabled = true;
+      btn.textContent = 'Generating...';
+      content.innerHTML = `
+        <div class="fixes-loading">
+          <div class="spinner"></div>
+          <span>Connecting to Fixer Agent...</span>
+        </div>
+      `;
+
+      try {
+        // Convert findings to the format expected by Fixer Agent
+        const findings = repo.findings.map(f => ({
+          id: f.id || `finding-${Math.random().toString(36).substr(2, 9)}`,
+          type: f.type === 'SECRET' ? 'secret' : f.type === 'VULN' ? 'vulnerability' : 'code-issue',
+          severity: f.severity.toLowerCase(),
+          title: f.title || f.description,
+          description: f.description,
+          file: f.file,
+          line: f.line,
+          package: f.package,
+          version: f.version,
+          cve: f.cve,
+          cwe: f.cwe,
+          metadata: f.metadata || {}
+        }));
+
+        const response = await fetch(`${FIXER_AGENT_URL}/tools`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tool: 'suggest-fixes-batch',
+            arguments: { findings }
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Fixer Agent returned ${response.status}`);
+        }
+
+        const data = await response.json();
+        currentFixesData = data.result;
+        displayFixes(data.result);
+      } catch (error) {
+        console.error('Fixer Agent error:', error);
+        showFixesError(error.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Generate Fixes';
+      }
+    }
+    window.generateFixes = generateFixes;
+
+    function displayFixes(data) {
+      const content = document.getElementById('fixesContent');
+
+      if (!data || data.total === 0) {
+        content.innerHTML = `
+          <div class="empty-state" style="padding: 20px 0;">
+            <div class="empty-state-icon">✓</div>
+            <p>No fixes needed</p>
+          </div>
+        `;
+        return;
+      }
+
+      // Summary stats
+      let html = `
+        <div class="fixes-summary">
+          <div class="fixes-stat fixable">
+            <span>✓</span> ${data.fixable} Fixable
+          </div>
+          <div class="fixes-stat unfixable">
+            <span>✗</span> ${data.unfixable} Manual
+          </div>
+        </div>
+      `;
+
+      // Quick fix command
+      if (data.allCommands && data.allCommands.length > 0) {
+        const command = data.allCommands[0];
+        html += `
+          <div class="fix-command-box">
+            <div class="fix-command-label">Quick Fix Command (click to copy)</div>
+            <div class="fix-command" onclick="copyFixCommand()" style="cursor: pointer;" title="Click to copy">
+              ${escapeHtml(command)}
+            </div>
+          </div>
+        `;
+      }
+
+      // Version bump summary
+      const versionBumps = data.fixes.filter(f => f.strategy === 'version-bump' && f.fixable);
+      if (versionBumps.length > 0) {
+        html += `
+          <div class="filter-label" style="margin-bottom: 8px;">Package Updates (${versionBumps.length})</div>
+          <div class="fix-list">
+        `;
+
+        // Show top 10 version bumps
+        versionBumps.slice(0, 10).forEach(fix => {
+          html += `
+            <div class="fix-item">
+              <span class="fix-icon">📦</span>
+              <span class="fix-package">${fix.package || fix.finding?.package || 'unknown'}</span>
+              <span class="fix-version">${fix.currentVersion || '?'}</span>
+              <span class="fix-arrow">→</span>
+              <span class="fix-new-version">${fix.fixedVersion || 'latest'}</span>
+            </div>
+          `;
+        });
+
+        if (versionBumps.length > 10) {
+          html += `
+            <div class="fix-item" style="color: var(--text-muted);">
+              ... and ${versionBumps.length - 10} more
+            </div>
+          `;
+        }
+
+        html += '</div>';
+      }
+
+      // Other fixes summary
+      const otherFixes = data.fixes.filter(f => f.strategy !== 'version-bump' && f.fixable);
+      if (otherFixes.length > 0) {
+        html += `
+          <div class="filter-label" style="margin-top: 12px; margin-bottom: 8px;">Other Fixes (${otherFixes.length})</div>
+          <div class="fix-list">
+        `;
+
+        otherFixes.slice(0, 5).forEach(fix => {
+          const icon = fix.strategy === 'env-var' ? '🔐' : fix.strategy === 'code-change' ? '🔧' : '📝';
+          html += `
+            <div class="fix-item">
+              <span class="fix-icon">${icon}</span>
+              <span class="fix-package">${fix.description}</span>
+            </div>
+          `;
+        });
+
+        html += '</div>';
+      }
+
+      content.innerHTML = html;
+    }
+
+    function showFixesError(message) {
+      const content = document.getElementById('fixesContent');
+      const isConnectionError = message.includes('Failed to fetch') || message.includes('NetworkError');
+
+      content.innerHTML = `
+        <div class="fixes-error">
+          <div class="fixes-error-title">${isConnectionError ? 'Fixer Agent Not Running' : 'Error'}</div>
+          <div class="fixes-error-msg">${isConnectionError ? 'Start the Fixer Agent first:' : message}</div>
+          ${isConnectionError ? '<code>npx tsx src/agents/slop/fixer-agent.ts</code>' : ''}
+        </div>
+      `;
+    }
+
+    function copyFixCommand() {
+      if (!currentFixesData || !currentFixesData.allCommands || currentFixesData.allCommands.length === 0) return;
+
+      const command = currentFixesData.allCommands[0];
+      navigator.clipboard.writeText(command).then(() => {
+        const commandEl = document.querySelector('.fix-command');
+        const originalText = commandEl.textContent;
+        commandEl.textContent = '✓ Copied to clipboard!';
+        commandEl.style.color = 'var(--success)';
+        setTimeout(() => {
+          commandEl.textContent = originalText;
+          commandEl.style.color = '';
+        }, 2000);
+      });
+    }
+    window.copyFixCommand = copyFixCommand;
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
     }
 
     // ========== INIT ==========
