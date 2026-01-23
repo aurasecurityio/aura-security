@@ -612,6 +612,333 @@
 
     #reports-panel.active { display: block; }
 
+    /* Rug Check Panel */
+    #rugcheck-panel {
+      top: 72px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 600px;
+      max-width: calc(100% - 40px);
+      max-height: calc(100vh - 88px);
+      overflow-y: auto;
+      display: none;
+    }
+
+    #rugcheck-panel.active { display: block; }
+
+    .rugcheck-header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .rugcheck-title {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .rugcheck-subtitle {
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+
+    .rugcheck-input-section {
+      margin-bottom: 24px;
+    }
+
+    .rugcheck-input {
+      width: 100%;
+      padding: 14px 16px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+
+    .rugcheck-input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .rugcheck-btn {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .rugcheck-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+    }
+
+    .rugcheck-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Trust Score Circle */
+    .trust-score-section {
+      text-align: center;
+      margin: 32px 0;
+    }
+
+    .trust-score-circle {
+      width: 160px;
+      height: 160px;
+      border-radius: 50%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px;
+      position: relative;
+    }
+
+    .trust-score-circle::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      padding: 4px;
+      background: linear-gradient(135deg, var(--score-color-1) 0%, var(--score-color-2) 100%);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+    }
+
+    .trust-score-circle.grade-a {
+      --score-color-1: #3fb950;
+      --score-color-2: #238636;
+    }
+
+    .trust-score-circle.grade-b {
+      --score-color-1: #58a6ff;
+      --score-color-2: #1f6feb;
+    }
+
+    .trust-score-circle.grade-c {
+      --score-color-1: #d29922;
+      --score-color-2: #9e6a03;
+    }
+
+    .trust-score-circle.grade-f {
+      --score-color-1: #f85149;
+      --score-color-2: #da3633;
+    }
+
+    .trust-score-number {
+      font-size: 48px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .trust-score-grade {
+      font-size: 20px;
+      font-weight: 600;
+      opacity: 0.8;
+    }
+
+    /* Verdict Banner */
+    .verdict-banner {
+      padding: 16px;
+      border-radius: 8px;
+      text-align: center;
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      margin-bottom: 16px;
+    }
+
+    .verdict-banner.safu {
+      background: rgba(63, 185, 80, 0.15);
+      color: #3fb950;
+      border: 1px solid rgba(63, 185, 80, 0.3);
+    }
+
+    .verdict-banner.dyor {
+      background: rgba(88, 166, 255, 0.15);
+      color: #58a6ff;
+      border: 1px solid rgba(88, 166, 255, 0.3);
+    }
+
+    .verdict-banner.risky {
+      background: rgba(210, 153, 34, 0.15);
+      color: #d29922;
+      border: 1px solid rgba(210, 153, 34, 0.3);
+    }
+
+    .verdict-banner.rug-alert {
+      background: rgba(248, 81, 73, 0.15);
+      color: #f85149;
+      border: 1px solid rgba(248, 81, 73, 0.3);
+    }
+
+    /* Quick Stats */
+    .quick-stats {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+
+    .quick-stat {
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .quick-stat.good {
+      background: rgba(63, 185, 80, 0.15);
+      color: #3fb950;
+    }
+
+    .quick-stat.warn {
+      background: rgba(210, 153, 34, 0.15);
+      color: #d29922;
+    }
+
+    .quick-stat.bad {
+      background: rgba(248, 81, 73, 0.15);
+      color: #f85149;
+    }
+
+    .quick-stat.info {
+      background: rgba(88, 166, 255, 0.15);
+      color: #58a6ff;
+    }
+
+    /* Checks List */
+    .checks-section {
+      margin-bottom: 24px;
+    }
+
+    .checks-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .check-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px;
+      background: var(--bg-primary);
+      border-radius: 6px;
+      margin-bottom: 8px;
+      border-left: 3px solid;
+    }
+
+    .check-item.good {
+      border-left-color: #3fb950;
+    }
+
+    .check-item.warn {
+      border-left-color: #d29922;
+    }
+
+    .check-item.bad {
+      border-left-color: #f85149;
+    }
+
+    .check-item.info {
+      border-left-color: #58a6ff;
+    }
+
+    .check-icon {
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .check-content {
+      flex: 1;
+    }
+
+    .check-name {
+      font-weight: 500;
+      font-size: 13px;
+      color: var(--text-primary);
+      margin-bottom: 2px;
+    }
+
+    .check-explanation {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    /* Summary Section */
+    .summary-section {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .summary-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .summary-text {
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--text-primary);
+    }
+
+    /* Metrics Grid */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .metric-card {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .metric-value {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .metric-label {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
     /* Fixes Section */
     .fixes-section {
       margin-top: 20px;
@@ -1054,7 +1381,7 @@
   <!-- Header -->
   <header id="header" class="panel">
     <div class="logo">
-      <div class="logo-icon"><img src="/images/aura-logo.jpg" alt="AURA"></div>
+      <div class="logo-icon"><img src="/images/logo.png" alt="AuraSecurity"></div>
       <span>aurasecurity</span>
     </div>
 
@@ -1068,6 +1395,7 @@
     <div class="nav-tabs">
       <button class="nav-tab active" onclick="showView('scan')">Scan</button>
       <button class="nav-tab" onclick="showView('reports')">Reports</button>
+      <button class="nav-tab" onclick="showView('rugcheck')">Rug Check</button>
     </div>
 
     <div class="header-stats">
@@ -1250,6 +1578,62 @@
         </tr>
       </tbody>
     </table>
+  </div>
+
+  <!-- Rug Check Panel -->
+  <div id="rugcheck-panel" class="panel">
+    <div class="rugcheck-header">
+      <div class="rugcheck-title">
+        <span>🔍</span> Rug Check
+      </div>
+      <div class="rugcheck-subtitle">Is this crypto project getting rugged?</div>
+    </div>
+
+    <div class="rugcheck-input-section">
+      <input type="text" id="rugcheckUrl" class="rugcheck-input" placeholder="https://github.com/owner/repo">
+      <button class="rugcheck-btn" id="rugcheckBtn" onclick="doRugCheck()">
+        Check Project
+      </button>
+    </div>
+
+    <div id="rugcheckResults" style="display: none;">
+      <div class="trust-score-section">
+        <div class="trust-score-circle" id="trustScoreCircle">
+          <div class="trust-score-number" id="trustScoreNumber">--</div>
+          <div class="trust-score-grade" id="trustScoreGrade">-</div>
+        </div>
+      </div>
+
+      <div class="verdict-banner" id="verdictBanner">
+        <span id="verdictText">--</span>
+      </div>
+
+      <div class="quick-stats" id="quickStats">
+        <!-- Populated by JS -->
+      </div>
+
+      <div class="checks-section">
+        <div class="checks-title">
+          <span>📋</span> Detailed Checks
+        </div>
+        <div id="checksList">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <div class="summary-section">
+        <div class="summary-title">What This Means</div>
+        <div class="summary-text" id="summaryText">--</div>
+      </div>
+
+      <div class="metrics-grid" id="metricsGrid">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+
+    <div id="rugcheckError" style="display: none; text-align: center; padding: 20px; color: var(--critical);">
+      <!-- Error message -->
+    </div>
   </div>
 
   <!-- View Info -->
@@ -1917,6 +2301,7 @@
       document.getElementById('scanner-panel').style.display = view === 'scan' ? 'block' : 'none';
       document.getElementById('details-panel').style.display = view === 'scan' ? 'block' : 'none';
       document.getElementById('reports-panel').classList.toggle('active', view === 'reports');
+      document.getElementById('rugcheck-panel').classList.toggle('active', view === 'rugcheck');
       document.getElementById('view-info').style.display = view === 'scan' ? 'block' : 'none';
 
       if (view === 'reports') updateReportsTable();
@@ -2636,7 +3021,7 @@
         const findings = repo.findings.map(f => ({
           id: f.id || `finding-${Math.random().toString(36).substr(2, 9)}`,
           type: f.type === 'SECRET' ? 'secret' : f.type === 'VULN' ? 'vulnerability' : 'code-issue',
-          severity: f.severity.toLowerCase(),
+          severity: (f.severity || 'medium').toLowerCase(),
           title: f.title || f.description,
           description: f.description,
           file: f.file,
@@ -2802,6 +3187,184 @@
       const div = document.createElement('div');
       div.textContent = text;
       return div.innerHTML;
+    }
+
+    // ========== RUG CHECK ==========
+    async function doRugCheck() {
+      const urlInput = document.getElementById('rugcheckUrl');
+      const btn = document.getElementById('rugcheckBtn');
+      const resultsDiv = document.getElementById('rugcheckResults');
+      const errorDiv = document.getElementById('rugcheckError');
+      const gitUrl = urlInput.value.trim();
+
+      if (!gitUrl) {
+        errorDiv.innerHTML = 'Please enter a GitHub URL';
+        errorDiv.style.display = 'block';
+        resultsDiv.style.display = 'none';
+        return;
+      }
+
+      // Validate URL format
+      if (!gitUrl.includes('github.com')) {
+        errorDiv.innerHTML = 'Only GitHub URLs are supported. Use format: https://github.com/owner/repo';
+        errorDiv.style.display = 'block';
+        resultsDiv.style.display = 'none';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Checking...';
+      errorDiv.style.display = 'none';
+      resultsDiv.style.display = 'none';
+
+      try {
+        const response = await fetch(`${AURA_URL}/tools`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tool: 'trust-scan',
+            arguments: { gitUrl }
+          })
+        });
+
+        const data = await response.json();
+        console.log('[RugCheck] Raw response:', JSON.stringify(data, null, 2));
+        console.log('[RugCheck] Response status:', response.status);
+        console.log('[RugCheck] data.result exists:', !!data.result);
+        const result = data.result || data;
+        console.log('[RugCheck] Extracted result:', JSON.stringify(result, null, 2));
+        console.log('[RugCheck] result.grade:', result.grade);
+        console.log('[RugCheck] result.verdict:', result.verdict);
+
+        if (result.error) {
+          throw new Error(result.error);
+        }
+
+        console.log('[RugCheck] Calling renderRugCheckResults...');
+        renderRugCheckResults(result);
+        console.log('[RugCheck] renderRugCheckResults completed');
+        resultsDiv.style.display = 'block';
+      } catch (err) {
+        console.error('Rug Check error:', err);
+        errorDiv.innerHTML = `Error: ${err.message || 'Failed to check project'}`;
+        errorDiv.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Check Project';
+      }
+    }
+    window.doRugCheck = doRugCheck;
+
+    function renderRugCheckResults(data) {
+      try {
+        console.log('[RugCheck] Rendering results:', JSON.stringify(data, null, 2));
+
+        if (!data) {
+          throw new Error('No data received from server');
+        }
+
+        // Update score circle
+        const scoreCircle = document.getElementById('trustScoreCircle');
+        const scoreNumber = document.getElementById('trustScoreNumber');
+        const scoreGrade = document.getElementById('trustScoreGrade');
+
+        const grade = (data.grade || 'F').toString();
+        const verdict = (data.verdict || 'UNKNOWN').toString();
+
+        scoreNumber.textContent = data.trustScore ?? 0;
+        scoreGrade.textContent = grade;
+
+      // Set grade class for colors
+      scoreCircle.className = 'trust-score-circle';
+      scoreCircle.classList.add(`grade-${grade.toLowerCase()}`);
+
+      // Update verdict banner
+      const verdictBanner = document.getElementById('verdictBanner');
+      const verdictText = document.getElementById('verdictText');
+
+      verdictText.textContent = `${data.verdictEmoji || ''} ${verdict}`;
+      verdictBanner.className = 'verdict-banner';
+      verdictBanner.classList.add(verdict.toLowerCase().replace(' ', '-'));
+
+      // Update quick stats
+      const quickStats = document.getElementById('quickStats');
+      const checks = data.checks || [];
+      const good = checks.filter(c => c.status === 'good').length;
+      const warn = checks.filter(c => c.status === 'warn').length;
+      const bad = checks.filter(c => c.status === 'bad').length;
+      const info = checks.filter(c => c.status === 'info').length;
+
+      quickStats.innerHTML = `
+        ${good > 0 ? `<div class="quick-stat good">✓ ${good} Good</div>` : ''}
+        ${warn > 0 ? `<div class="quick-stat warn">⚠ ${warn} Warnings</div>` : ''}
+        ${bad > 0 ? `<div class="quick-stat bad">✗ ${bad} Red Flags</div>` : ''}
+        ${info > 0 ? `<div class="quick-stat info">ℹ ${info} Info</div>` : ''}
+      `;
+
+      // Update checks list
+      const checksList = document.getElementById('checksList');
+      const statusIcons = {
+        good: '✓',
+        warn: '⚠',
+        bad: '✗',
+        info: 'ℹ'
+      };
+
+      checksList.innerHTML = checks.map(check => `
+        <div class="check-item ${check.status}">
+          <span class="check-icon">${statusIcons[check.status] || '•'}</span>
+          <div class="check-content">
+            <div class="check-name">${escapeHtml(check.name)}</div>
+            <div class="check-explanation">${escapeHtml(check.explanation)}</div>
+          </div>
+        </div>
+      `).join('');
+
+      // Update summary
+      document.getElementById('summaryText').textContent = data.summary || 'No summary available';
+
+      // Update metrics grid
+      const metricsGrid = document.getElementById('metricsGrid');
+      const m = data.metrics || {};
+
+      const ageDays = m.repoAgeDays || 0;
+      metricsGrid.innerHTML = `
+        <div class="metric-card">
+          <div class="metric-value">${ageDays < 365 ? ageDays + 'd' : Math.floor(ageDays / 365) + 'y'}</div>
+          <div class="metric-label">Age</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value">${formatNumber(m.commitCount || 0)}</div>
+          <div class="metric-label">Commits</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value">${m.contributorCount || 0}</div>
+          <div class="metric-label">Contributors</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value">${formatNumber(m.stars || 0)}</div>
+          <div class="metric-label">Stars</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value">${formatNumber(m.forks || 0)}</div>
+          <div class="metric-label">Forks</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value">${m.codeFileCount || 0}</div>
+          <div class="metric-label">Code Files</div>
+        </div>
+      `;
+      } catch (err) {
+        console.error('[RugCheck] Error in renderRugCheckResults:', err);
+        console.error('[RugCheck] Data that caused error:', data);
+        throw err; // Re-throw to be caught by doRugCheck
+      }
+    }
+
+    function formatNumber(num) {
+      if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+      if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+      return num.toString();
     }
 
     // ========== INIT ==========
