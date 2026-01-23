@@ -18,10 +18,12 @@
 import { CoordinatorAgent } from './coordinator-agent.js';
 import { ScannerAgent } from './scanner-agent.js';
 import { AnalystAgent } from './analyst-agent.js';
+import { FixerAgent } from './fixer-agent.js';
 
 const COORDINATOR_PORT = 3009;
 const SCANNER_PORT = 3010;
 const ANALYST_PORT = 3011;
+const FIXER_PORT = 3012;
 
 async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -57,12 +59,16 @@ async function main() {
     port: ANALYST_PORT,
     coordinatorUrl: `http://localhost:${COORDINATOR_PORT}`,
   });
+  const fixer = new FixerAgent({
+    port: FIXER_PORT,
+    coordinatorUrl: `http://localhost:${COORDINATOR_PORT}`,
+  });
 
   try {
     // Start all agents
     console.log('Starting SLOP agents...\n');
 
-    await Promise.all([coordinator.start(), scanner.start(), analyst.start()]);
+    await Promise.all([coordinator.start(), scanner.start(), analyst.start(), fixer.start()]);
 
     await sleep(500); // Let agents fully initialize
 
@@ -91,6 +97,19 @@ async function main() {
           id: 'analyst-agent',
           name: 'Analyst Agent',
           url: `http://localhost:${ANALYST_PORT}`,
+        },
+      }),
+    });
+
+    await fetch(`http://localhost:${COORDINATOR_PORT}/tools`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tool: 'register-agent',
+        arguments: {
+          id: 'fixer-agent',
+          name: 'Fixer Agent',
+          url: `http://localhost:${FIXER_PORT}`,
         },
       }),
     });
@@ -152,6 +171,20 @@ async function main() {
         console.log(`  False positives removed: ${triageStage.result.summary.falsePositives}`);
         console.log(`  Recommended for fix: ${triageStage.result.summary.recommendedForFix}`);
       }
+
+      // Show fix summary if available
+      const fixStage = stages.find((s: { tool: string }) => s.tool === 'suggest-fixes-batch');
+      if (fixStage && fixStage.result) {
+        console.log(`\nFix summary:`);
+        console.log(`  Fixable: ${fixStage.result.fixable}`);
+        console.log(`  Unfixable: ${fixStage.result.unfixable}`);
+        console.log(`  Version bumps: ${fixStage.result.summary.versionBumps}`);
+        console.log(`  Code changes: ${fixStage.result.summary.codeChanges}`);
+        if (fixStage.result.allCommands && fixStage.result.allCommands.length > 0) {
+          console.log(`\nQuick fix command:`);
+          console.log(`  ${fixStage.result.allCommands[0]}`);
+        }
+      }
     } else {
       console.log(`\n✗ Pipeline failed: ${pipelineResult.result.error}`);
     }
@@ -185,11 +218,12 @@ async function main() {
 ║                                                                               ║
 ║   Demo complete! The agents communicated via SLOP protocol:                   ║
 ║                                                                               ║
-║   1. Coordinator registered Scanner and Analyst agents                        ║
+║   1. Coordinator registered Scanner, Analyst, and Fixer agents                ║
 ║   2. Coordinator called Scanner → Scanner ran security tools                  ║
 ║   3. Coordinator called Analyst → Analyst triaged findings                    ║
 ║   4. Analyst deduplicated and prioritized findings                            ║
-║   5. All results stored in shared memory                                      ║
+║   5. Coordinator called Fixer → Fixer generated fix suggestions               ║
+║   6. All results stored in shared memory                                      ║
 ║                                                                               ║
 ║   Each agent runs as a standalone SLOP server that can be:                    ║
 ║   - Deployed independently                                                    ║
@@ -203,12 +237,12 @@ async function main() {
 
     // Cleanup
     console.log('Shutting down agents...');
-    await Promise.all([coordinator.stop(), scanner.stop(), analyst.stop()]);
+    await Promise.all([coordinator.stop(), scanner.stop(), analyst.stop(), fixer.stop()]);
     console.log('Done.\n');
   } catch (error) {
     console.error('Demo error:', error);
     // Cleanup on error
-    await Promise.all([coordinator.stop(), scanner.stop(), analyst.stop()]).catch(() => {});
+    await Promise.all([coordinator.stop(), scanner.stop(), analyst.stop(), fixer.stop()]).catch(() => {});
     process.exit(1);
   }
 }

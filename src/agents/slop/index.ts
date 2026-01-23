@@ -9,3 +9,4 @@ export * from './base.js';
 export { ScannerAgent } from './scanner-agent.js';
 export { AnalystAgent } from './analyst-agent.js';
 export { CoordinatorAgent } from './coordinator-agent.js';
+export { FixerAgent } from './fixer-agent.js';
