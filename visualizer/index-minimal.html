@@ -3257,42 +3257,53 @@
 
     function renderRugCheckResults(data) {
       try {
-        console.log('[RugCheck] Rendering results:', JSON.stringify(data, null, 2));
+        console.log('[RugCheck] Rendering results:', data);
 
-        if (!data) {
-          throw new Error('No data received from server');
+        if (!data || typeof data !== 'object') {
+          throw new Error('Invalid data received from server');
         }
+
+        // Safely extract values with defaults
+        const trustScore = typeof data.trustScore === 'number' ? data.trustScore : 0;
+        const grade = String(data.grade || 'F');
+        const verdict = String(data.verdict || 'UNKNOWN');
+        const verdictEmoji = String(data.verdictEmoji || '');
+        const summary = String(data.summary || '');
+        const checks = Array.isArray(data.checks) ? data.checks : [];
+        const metrics = data.metrics && typeof data.metrics === 'object' ? data.metrics : {};
+
+        console.log('[RugCheck] Parsed - grade:', grade, 'verdict:', verdict, 'score:', trustScore);
 
         // Update score circle
         const scoreCircle = document.getElementById('trustScoreCircle');
         const scoreNumber = document.getElementById('trustScoreNumber');
         const scoreGrade = document.getElementById('trustScoreGrade');
 
-        const grade = (data.grade || 'F').toString();
-        const verdict = (data.verdict || 'UNKNOWN').toString();
+        if (scoreNumber) scoreNumber.textContent = trustScore;
+        if (scoreGrade) scoreGrade.textContent = grade;
 
-        scoreNumber.textContent = data.trustScore ?? 0;
-        scoreGrade.textContent = grade;
-
-      // Set grade class for colors
-      scoreCircle.className = 'trust-score-circle';
-      scoreCircle.classList.add(`grade-${grade.toLowerCase()}`);
+        // Set grade class for colors
+        if (scoreCircle) {
+          scoreCircle.className = 'trust-score-circle';
+          scoreCircle.classList.add('grade-' + grade.toLowerCase());
+        }
 
       // Update verdict banner
       const verdictBanner = document.getElementById('verdictBanner');
       const verdictText = document.getElementById('verdictText');
 
-      verdictText.textContent = `${data.verdictEmoji || ''} ${verdict}`;
-      verdictBanner.className = 'verdict-banner';
-      verdictBanner.classList.add(verdict.toLowerCase().replace(' ', '-'));
+      if (verdictText) verdictText.textContent = verdictEmoji + ' ' + verdict;
+      if (verdictBanner) {
+        verdictBanner.className = 'verdict-banner';
+        verdictBanner.classList.add(verdict.toLowerCase().replace(/ /g, '-'));
+      }
 
       // Update quick stats
       const quickStats = document.getElementById('quickStats');
-      const checks = data.checks || [];
-      const good = checks.filter(c => c.status === 'good').length;
-      const warn = checks.filter(c => c.status === 'warn').length;
-      const bad = checks.filter(c => c.status === 'bad').length;
-      const info = checks.filter(c => c.status === 'info').length;
+      const good = checks.filter(c => c && c.status === 'good').length;
+      const warn = checks.filter(c => c && c.status === 'warn').length;
+      const bad = checks.filter(c => c && c.status === 'bad').length;
+      const info = checks.filter(c => c && c.status === 'info').length;
 
       quickStats.innerHTML = `
         ${good > 0 ? `<div class="quick-stat good">✓ ${good} Good</div>` : ''}
@@ -3310,50 +3321,67 @@
         info: 'ℹ'
       };
 
-      checksList.innerHTML = checks.map(check => `
-        <div class="check-item ${check.status}">
-          <span class="check-icon">${statusIcons[check.status] || '•'}</span>
-          <div class="check-content">
-            <div class="check-name">${escapeHtml(check.name)}</div>
-            <div class="check-explanation">${escapeHtml(check.explanation)}</div>
-          </div>
-        </div>
-      `).join('');
+      if (checksList) {
+        checksList.innerHTML = checks.map(check => {
+          if (!check) return '';
+          const status = check.status || 'info';
+          const name = check.name || 'Unknown';
+          const explanation = check.explanation || '';
+          return `
+            <div class="check-item ${status}">
+              <span class="check-icon">${statusIcons[status] || '•'}</span>
+              <div class="check-content">
+                <div class="check-name">${escapeHtml(name)}</div>
+                <div class="check-explanation">${escapeHtml(explanation)}</div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
 
       // Update summary
-      document.getElementById('summaryText').textContent = data.summary || 'No summary available';
+      const summaryEl = document.getElementById('summaryText');
+      if (summaryEl) summaryEl.textContent = summary || 'No summary available';
 
       // Update metrics grid
       const metricsGrid = document.getElementById('metricsGrid');
-      const m = data.metrics || {};
+      const m = metrics;
 
-      const ageDays = m.repoAgeDays || 0;
-      metricsGrid.innerHTML = `
-        <div class="metric-card">
-          <div class="metric-value">${ageDays < 365 ? ageDays + 'd' : Math.floor(ageDays / 365) + 'y'}</div>
-          <div class="metric-label">Age</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-value">${formatNumber(m.commitCount || 0)}</div>
-          <div class="metric-label">Commits</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-value">${m.contributorCount || 0}</div>
-          <div class="metric-label">Contributors</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-value">${formatNumber(m.stars || 0)}</div>
-          <div class="metric-label">Stars</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-value">${formatNumber(m.forks || 0)}</div>
-          <div class="metric-label">Forks</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-value">${m.codeFileCount || 0}</div>
-          <div class="metric-label">Code Files</div>
-        </div>
-      `;
+      if (metricsGrid) {
+        const ageDays = Number(m.repoAgeDays) || 0;
+        const commits = Number(m.commitCount) || 0;
+        const contributors = Number(m.contributorCount) || 0;
+        const stars = Number(m.stars) || 0;
+        const forks = Number(m.forks) || 0;
+        const codeFiles = Number(m.codeFileCount) || 0;
+
+        metricsGrid.innerHTML = `
+          <div class="metric-card">
+            <div class="metric-value">${ageDays < 365 ? ageDays + 'd' : Math.floor(ageDays / 365) + 'y'}</div>
+            <div class="metric-label">Age</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">${formatNumber(commits)}</div>
+            <div class="metric-label">Commits</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">${contributors}</div>
+            <div class="metric-label">Contributors</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">${formatNumber(stars)}</div>
+            <div class="metric-label">Stars</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">${formatNumber(forks)}</div>
+            <div class="metric-label">Forks</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">${codeFiles}</div>
+            <div class="metric-label">Code Files</div>
+          </div>
+        `;
+      }
       } catch (err) {
         console.error('[RugCheck] Error in renderRugCheckResults:', err);
         console.error('[RugCheck] Data that caused error:', data);
