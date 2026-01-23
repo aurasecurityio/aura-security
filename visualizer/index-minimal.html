@@ -2600,7 +2600,10 @@
     }
 
     // ========== FIXER AGENT INTEGRATION ==========
-    const FIXER_AGENT_URL = 'http://localhost:3012';
+    // Use same host as page, but port 3012 for Fixer Agent
+    const FIXER_AGENT_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? 'http://localhost:3012'
+      : `http://${window.location.hostname}:3012`;
     let currentFixesData = null;
 
     function showFixesSection(show) {
