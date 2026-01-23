@@ -9,6 +9,7 @@ import { LocalScanner, scanRemoteGit } from './integrations/local-scanner.js';
 import type { LocalScanResult, SecretFinding, PackageFinding } from './integrations/local-scanner.js';
 import { auraScan, getAuraState, getAvailableAgents } from './integrations/aura-scanner.js';
 import { getWebSocketServer, type AuditorWebSocket } from './websocket/index.js';
+import { performTrustScan } from './integrations/trust-scanner.js';
 
 const PORT = parseInt(process.env.AURA_PORT ?? '3000', 10);
 const WS_PORT = parseInt(process.env.WS_PORT ?? '3001', 10);
@@ -803,6 +804,40 @@ async function main(): Promise<void> {
     }
   });
 
+  // Register Trust Scan tool (Rug Check for crypto investors)
+  server.registerTool({
+    name: 'trust-scan',
+    description: 'Rug Check - Verify if a GitHub repository is legitimate (for crypto investors)',
+    parameters: {
+      type: 'object',
+      required: ['gitUrl'],
+      properties: {
+        gitUrl: { type: 'string', description: 'GitHub repository URL to check' }
+      }
+    },
+    handler: async (args) => {
+      try {
+        const gitUrl = args.gitUrl as string;
+        console.log(`[AURA] Starting Rug Check for: ${gitUrl}`);
+
+        const result = await performTrustScan(gitUrl);
+
+        console.log(`[AURA] Rug Check complete: ${result.trustScore}/100 (${result.verdict})`);
+
+        return result;
+      } catch (err) {
+        console.error('[AURA] Rug Check error:', err);
+        return {
+          error: err instanceof Error ? err.message : 'Unknown error',
+          trustScore: 0,
+          grade: 'F',
+          verdict: 'ERROR',
+          summary: 'Failed to scan repository. Please check the URL and try again.'
+        };
+      }
+    }
+  });
+
   // Start HTTP server
   await server.start();
   console.log(`[AURA] Auditor listening on http://127.0.0.1:${PORT}`);
@@ -892,3 +927,7 @@ export type { NotificationConfig, NotificationPayload } from './integrations/not
 // WebSocket exports
 export { AuditorWebSocket, getWebSocketServer, closeWebSocketServer } from './websocket/index.js';
 export type { WSMessage, AuditStartedPayload, AuditCompletedPayload, FindingPayload } from './websocket/index.js';
+
+// Trust Scanner exports (Rug Check)
+export { performTrustScan } from './integrations/trust-scanner.js';
+export type { TrustScanResult, TrustCheck, TrustMetrics } from './integrations/trust-scanner.js';
