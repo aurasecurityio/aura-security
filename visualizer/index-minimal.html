@@ -1281,10 +1281,11 @@
       selectedSeverity: null // 'critical', 'high', 'medium', 'low'
     };
 
-    // Auto-detect API URL: use localhost for local dev, same origin for deployed
+    // Auto-detect API URL: use localhost for local dev, port 3000 for deployed
     const isLocal = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
-    // Local: direct to port 3000, AWS: use nginx proxy on same origin
-    const AURA_URL = isLocal ? 'http://127.0.0.1:3000' : window.location.origin;
+    const AURA_URL = isLocal
+      ? 'http://127.0.0.1:3000'
+      : `http://${window.location.hostname}:3000`;
 
     // ========== THREE.JS SETUP ==========
     let scene, camera, renderer, controls;
