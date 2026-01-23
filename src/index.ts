@@ -6,7 +6,7 @@ import { AuraClient } from './aura/client.js';
 import { AuditorPipeline } from './auditor/pipeline.js';
 import { SchemaValidator, ValidationError } from './auditor/validator.js';
 import { LocalScanner, scanRemoteGit } from './integrations/local-scanner.js';
-import type { LocalScanResult, SecretFinding } from './integrations/local-scanner.js';
+import type { LocalScanResult, SecretFinding, PackageFinding } from './integrations/local-scanner.js';
 import { auraScan, getAuraState, getAvailableAgents } from './integrations/aura-scanner.js';
 import { getWebSocketServer, type AuditorWebSocket } from './websocket/index.js';
 
@@ -377,6 +377,31 @@ async function main(): Promise<void> {
             console.log(`[AURA] Remote scan complete in ${remoteResult.cloneDuration + remoteResult.scanDuration}ms`);
             console.log(`[AURA] Found: ${remoteResult.secrets.length} secrets, ${remoteResult.packages.length} vulns`);
 
+            // Save to database and calculate score
+            try {
+              const db = server.getDatabase();
+              const auditId = db.saveAudit('code', gitUrl, remoteResult as LocalScanResult);
+              console.log(`[AURA] Remote scan saved to database: ${auditId}`);
+
+              // Calculate and save security score
+              const scoreCounts = {
+                critical: (remoteResult.secrets?.filter((s: SecretFinding) => s.severity === 'critical').length || 0) +
+                          (remoteResult.packages?.filter((p: PackageFinding) => p.severity === 'critical').length || 0),
+                high: (remoteResult.secrets?.filter((s: SecretFinding) => s.severity === 'high').length || 0) +
+                      (remoteResult.packages?.filter((p: PackageFinding) => p.severity === 'high').length || 0),
+                medium: (remoteResult.secrets?.filter((s: SecretFinding) => s.severity === 'medium').length || 0) +
+                        (remoteResult.packages?.filter((p: PackageFinding) => p.severity === 'medium').length || 0) +
+                        (remoteResult.sastFindings?.length || 0),
+                low: (remoteResult.secrets?.filter((s: SecretFinding) => s.severity === 'low').length || 0) +
+                     (remoteResult.packages?.filter((p: PackageFinding) => p.severity === 'low').length || 0) +
+                     (remoteResult.envFiles?.length || 0)
+              };
+              const score = db.saveScore(gitUrl, auditId, scoreCounts);
+              console.log(`[AURA] Security score: ${score.score} (${score.grade})`);
+            } catch (dbErr) {
+              console.error('[AURA] Failed to save remote scan to database:', dbErr);
+            }
+
             // Convert to audit input and run through pipeline
             const scanner = new LocalScanner({ targetPath: remoteResult.path });
             const auditInput = scanner.toAuditorInput(remoteResult);
@@ -538,6 +563,22 @@ async function main(): Promise<void> {
           const db = server.getDatabase();
           auditId = db.saveAudit('code', scanResult.path, scanResult as LocalScanResult);
           console.log(`[AURA] Scan result saved to database: ${auditId}`);
+
+          // Calculate and save security score
+          const scoreCounts = {
+            critical: (scanResult.secrets?.filter((s: SecretFinding) => s.severity === 'critical').length || 0) +
+                      (scanResult.packages?.filter((p: PackageFinding) => p.severity === 'critical').length || 0),
+            high: (scanResult.secrets?.filter((s: SecretFinding) => s.severity === 'high').length || 0) +
+                  (scanResult.packages?.filter((p: PackageFinding) => p.severity === 'high').length || 0),
+            medium: (scanResult.secrets?.filter((s: SecretFinding) => s.severity === 'medium').length || 0) +
+                    (scanResult.packages?.filter((p: PackageFinding) => p.severity === 'medium').length || 0) +
+                    (scanResult.sastFindings?.length || 0),
+            low: (scanResult.secrets?.filter((s: SecretFinding) => s.severity === 'low').length || 0) +
+                 (scanResult.packages?.filter((p: PackageFinding) => p.severity === 'low').length || 0) +
+                 (scanResult.envFiles?.length || 0)
+          };
+          const score = db.saveScore(scanResult.path, auditId, scoreCounts);
+          console.log(`[AURA] Security score: ${score.score} (${score.grade})`);
         } catch (dbErr) {
           console.error('[AURA] Failed to save to database:', dbErr);
         }
@@ -664,6 +705,16 @@ async function main(): Promise<void> {
             agents: result.aura.agents
           } as any);
           console.log(`[AURA] Aura scan saved to database: ${auditId}`);
+
+          // Save security score
+          const scoreCounts = {
+            critical: result.aura.summary.bySeverity['critical'] || 0,
+            high: result.aura.summary.bySeverity['high'] || 0,
+            medium: result.aura.summary.bySeverity['medium'] || 0,
+            low: result.aura.summary.bySeverity['low'] || 0
+          };
+          const score = db.saveScore(targetPath, auditId, scoreCounts);
+          console.log(`[AURA] Security score: ${score.score} (${score.grade})`);
         } catch (dbErr) {
           console.error('[AURA] Database save error:', dbErr);
           auditId = `aura-${Date.now()}`;

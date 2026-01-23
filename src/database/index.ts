@@ -14,6 +14,7 @@ import { existsSync, mkdirSync } from 'fs';
 import type { AuditorOutput } from '../types/events.js';
 import type { LocalScanResult } from '../integrations/local-scanner.js';
 import type { AWSScanResult } from '../integrations/aws-scanner.js';
+import { calculateSecurityScore, type SecurityScore, type ScoreHistoryEntry, type ScoreTrend } from '../scoring/index.js';
 
 // ============ TYPES ============
 
@@ -163,11 +164,30 @@ export class AuditorDatabase {
       )
     `);
 
+    // Score history table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS score_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        target TEXT NOT NULL,
+        audit_id TEXT NOT NULL,
+        score REAL NOT NULL,
+        grade TEXT NOT NULL,
+        critical INTEGER DEFAULT 0,
+        high INTEGER DEFAULT 0,
+        medium INTEGER DEFAULT 0,
+        low INTEGER DEFAULT 0,
+        timestamp TEXT NOT NULL,
+        FOREIGN KEY (audit_id) REFERENCES audits(id)
+      )
+    `);
+
     // Create indexes
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_audits_timestamp ON audits(timestamp DESC);
       CREATE INDEX IF NOT EXISTS idx_audits_type ON audits(type);
       CREATE INDEX IF NOT EXISTS idx_notifications_audit ON notifications(audit_id);
+      CREATE INDEX IF NOT EXISTS idx_score_history_target ON score_history(target);
+      CREATE INDEX IF NOT EXISTS idx_score_history_timestamp ON score_history(timestamp DESC);
     `);
 
     // Initialize default settings
@@ -485,6 +505,152 @@ export class AuditorDatabase {
         low: sevRow.low || 0,
       },
     };
+  }
+
+  // ============ SCORE METHODS ============
+
+  saveScore(
+    target: string,
+    auditId: string,
+    counts: { critical: number; high: number; medium: number; low: number }
+  ): SecurityScore {
+    const score = calculateSecurityScore(counts);
+    const timestamp = new Date().toISOString();
+
+    const stmt = this.db.prepare(`
+      INSERT INTO score_history (target, audit_id, score, grade, critical, high, medium, low, timestamp)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      target,
+      auditId,
+      score.score,
+      score.grade,
+      counts.critical,
+      counts.high,
+      counts.medium,
+      counts.low,
+      timestamp
+    );
+
+    console.log(`[DB] Saved score: ${score.score} (${score.grade}) for ${target}`);
+    return score;
+  }
+
+  getScoreHistory(target?: string, limit = 50): ScoreHistoryEntry[] {
+    let query = `
+      SELECT id, target, audit_id, score, grade, critical, high, medium, low, timestamp
+      FROM score_history
+    `;
+    const params: any[] = [];
+
+    if (target) {
+      query += ' WHERE target = ?';
+      params.push(target);
+    }
+
+    query += ' ORDER BY timestamp DESC LIMIT ?';
+    params.push(limit);
+
+    const stmt = this.db.prepare(query);
+    const rows = stmt.all(...params) as any[];
+
+    return rows.map(row => ({
+      id: row.id,
+      target: row.target,
+      auditId: row.audit_id,
+      score: row.score,
+      grade: row.grade,
+      critical: row.critical,
+      high: row.high,
+      medium: row.medium,
+      low: row.low,
+      timestamp: row.timestamp,
+    }));
+  }
+
+  getLatestScore(target?: string): ScoreHistoryEntry | null {
+    let query = `
+      SELECT id, target, audit_id, score, grade, critical, high, medium, low, timestamp
+      FROM score_history
+    `;
+    const params: any[] = [];
+
+    if (target) {
+      query += ' WHERE target = ?';
+      params.push(target);
+    }
+
+    query += ' ORDER BY timestamp DESC LIMIT 1';
+
+    const stmt = this.db.prepare(query);
+    const row = stmt.get(...params) as any;
+
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      target: row.target,
+      auditId: row.audit_id,
+      score: row.score,
+      grade: row.grade,
+      critical: row.critical,
+      high: row.high,
+      medium: row.medium,
+      low: row.low,
+      timestamp: row.timestamp,
+    };
+  }
+
+  getScoreTrend(target?: string, limit = 10): ScoreTrend {
+    const history = this.getScoreHistory(target, limit);
+
+    if (history.length === 0) {
+      return {
+        currentScore: 100,
+        previousScore: null,
+        change: 0,
+        direction: 'same',
+        history: []
+      };
+    }
+
+    const current = history[0];
+    const previous = history.length > 1 ? history[1] : null;
+    const change = previous ? current.score - previous.score : 0;
+
+    let direction: 'up' | 'down' | 'same' = 'same';
+    if (change > 0) direction = 'up';
+    else if (change < 0) direction = 'down';
+
+    return {
+      currentScore: current.score,
+      previousScore: previous?.score || null,
+      change: Math.abs(change),
+      direction,
+      history: history.map(h => ({ timestamp: h.timestamp, score: h.score }))
+    };
+  }
+
+  getAggregateScore(): SecurityScore & { trend: ScoreTrend } {
+    // Get the latest score from score_history (most recent scan)
+    const latest = this.getLatestScore();
+    const trend = this.getScoreTrend(undefined, 10);
+
+    if (latest) {
+      const score = calculateSecurityScore({
+        critical: latest.critical,
+        high: latest.high,
+        medium: latest.medium,
+        low: latest.low
+      });
+      return { ...score, trend };
+    }
+
+    // No scores yet - return perfect score
+    const score = calculateSecurityScore({ critical: 0, high: 0, medium: 0, low: 0 });
+    return { ...score, trend };
   }
 
   // ============ CLEANUP ============
