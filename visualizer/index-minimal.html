@@ -1281,11 +1281,11 @@
       selectedSeverity: null // 'critical', 'high', 'medium', 'low'
     };
 
-    // Auto-detect API URL: use localhost for local dev, port 3000 for deployed
+    // Auto-detect API URL: localhost uses port 3000, production uses nginx proxy (same origin)
     const isLocal = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
     const AURA_URL = isLocal
       ? 'http://127.0.0.1:3000'
-      : `http://${window.location.hostname}:3000`;
+      : window.location.origin;  // nginx proxies /tools, /info, /score, etc. to port 3000
 
     // ========== THREE.JS SETUP ==========
     let scene, camera, renderer, controls;
@@ -2601,10 +2601,10 @@
     }
 
     // ========== FIXER AGENT INTEGRATION ==========
-    // Use same host as page, but port 3012 for Fixer Agent
+    // Fixer Agent: localhost uses port 3012, production uses nginx proxy at /fixer
     const FIXER_AGENT_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
       ? 'http://localhost:3012'
-      : `http://${window.location.hostname}:3012`;
+      : `${window.location.origin}/fixer`;
     let currentFixesData = null;
 
     function showFixesSection(show) {
