@@ -328,20 +328,28 @@ export class RedTeamAgent extends SLOPAgent {
 
     logs.push(`[RedTeam] Starting validation for ${finding.id}: ${finding.title}`);
 
+    // Normalize finding type (handle different naming conventions)
+    const normalizedType = (finding.type || '').toLowerCase();
+    const isSecret = normalizedType === 'secret' || normalizedType === 'secrets';
+    const isVuln = normalizedType === 'vulnerability' || normalizedType === 'vuln' || normalizedType === 'package';
+    const isCode = normalizedType === 'code-issue' || normalizedType === 'code' || normalizedType === 'sast';
+    const isIac = normalizedType === 'iac' || normalizedType === 'infrastructure';
+    const isDocker = normalizedType === 'docker' || normalizedType === 'container';
+
     // Validate based on finding type
-    if (finding.type === 'secret') {
+    if (isSecret) {
       const secretResult = await this.analyzeSecret(finding);
       exploitable = secretResult.likelyValid;
       confidence = secretResult.confidence;
       evidence.push(...secretResult.evidence);
       logs.push(...secretResult.logs);
-    } else if (finding.type === 'vulnerability') {
+    } else if (isVuln) {
       const vulnResult = await this.analyzeVulnerability(finding, aggressive);
       exploitable = vulnResult.likelyExploitable;
       confidence = vulnResult.confidence;
       evidence.push(...vulnResult.evidence);
       logs.push(...vulnResult.logs);
-    } else if (finding.type === 'code-issue') {
+    } else if (isCode || isIac || isDocker) {
       const codeResult = await this.analyzeCodeIssue(finding);
       exploitable = codeResult.likelyExploitable;
       confidence = codeResult.confidence;
@@ -349,7 +357,7 @@ export class RedTeamAgent extends SLOPAgent {
       logs.push(...codeResult.logs);
     } else {
       confidence = 50;
-      logs.push(`[RedTeam] No specific validation for ${finding.type}, using heuristics`);
+      logs.push(`[RedTeam] No specific validation for ${finding.type} (normalized: ${normalizedType}), using heuristics`);
     }
 
     // Determine risk level
