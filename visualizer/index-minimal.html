@@ -1806,13 +1806,22 @@
     <div class="fixes-section" id="fixesSection" style="display: none;">
       <div class="fixes-header">
         <span class="fixes-title">🔧 Fix Suggestions</span>
-        <button class="btn btn-fix" id="generateFixesBtn" onclick="generateFixes()">
-          Generate Fixes
-        </button>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-fix" id="generateFixesBtn" onclick="generateFixes()">
+            Generate Fixes
+          </button>
+          <button class="btn" id="validateExploitBtn" onclick="validateExploitability()" style="background: var(--critical-subtle); color: var(--critical);">
+            ⚡ Validate Exploitability
+          </button>
+        </div>
       </div>
 
       <div id="fixesContent">
         <!-- Will be populated by JavaScript -->
+      </div>
+
+      <div id="validationContent" style="margin-top: 16px; display: none;">
+        <!-- Will be populated by Red Team validation -->
       </div>
     </div>
   </div>
@@ -3587,6 +3596,82 @@
       alert('Report generation coming soon! This will generate a detailed attack path report in Markdown format.');
     }
     window.generateReport = generateReport;
+
+    // ========== RED TEAM AGENT INTEGRATION ==========
+    // Red Team Agent: localhost uses port 4006, production uses nginx proxy at /redteam
+    const RED_TEAM_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? 'http://localhost:4006'
+      : `${window.location.origin}/redteam`;
+
+    async function validateExploitability() {
+      const repo = state.repos.find(r => r.id === state.selectedRepo);
+      if (!repo || !repo.findings || repo.findings.length === 0) {
+        alert('No findings to validate. Run a scan first.');
+        return;
+      }
+
+      const container = document.getElementById('validationContent');
+      const btn = document.getElementById('validateExploitBtn');
+
+      btn.disabled = true;
+      btn.textContent = '⚡ Validating...';
+      container.style.display = 'block';
+      container.innerHTML = '<div style="text-align: center; padding: 20px;"><div class="loader"></div><br>Testing exploitability of findings...</div>';
+
+      try {
+        const response = await fetch(`${RED_TEAM_URL}/tools`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tool: 'bulk-validate',
+            arguments: {
+              findings: repo.findings.slice(0, 10), // Limit to first 10 for performance
+              maxConcurrent: 3
+            }
+          })
+        });
+
+        const data = await response.json();
+        const results = data.result?.results || data.result || [];
+
+        if (results.length === 0) {
+          container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px;">No validation results</div>';
+        } else {
+          container.innerHTML = `
+            <div style="font-weight: 600; margin-bottom: 12px;">🎯 Exploitability Results</div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              ${results.map(r => {
+                const exploitable = r.exploitable || r.isExploitable;
+                const severity = exploitable ? 'critical' : 'success';
+                const icon = exploitable ? '⚠️' : '✅';
+                return `
+                  <div style="background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 6px; padding: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                      <span>${icon} ${r.finding?.type || r.findingType || 'Finding'}</span>
+                      <span style="padding: 2px 8px; border-radius: 4px; font-size: 11px; background: var(--${severity}-subtle); color: var(--${severity});">
+                        ${exploitable ? 'EXPLOITABLE' : 'NOT EXPLOITABLE'}
+                      </span>
+                    </div>
+                    ${r.reason || r.explanation ? `<div style="font-size: 12px; color: var(--text-secondary); margin-top: 6px;">${r.reason || r.explanation}</div>` : ''}
+                    ${r.poc ? `<div style="font-size: 11px; color: var(--accent); margin-top: 4px;">POC Available</div>` : ''}
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          `;
+        }
+
+        btn.textContent = '⚡ Validate Exploitability';
+        btn.disabled = false;
+
+      } catch (error) {
+        console.error('Validation error:', error);
+        container.innerHTML = `<div style="text-align: center; color: var(--critical); padding: 20px;">Error: ${error.message}</div>`;
+        btn.textContent = '⚡ Validate Exploitability';
+        btn.disabled = false;
+      }
+    }
+    window.validateExploitability = validateExploitability;
 
     // ========== FIXER AGENT INTEGRATION ==========
     // Fixer Agent: localhost uses port 3012, production uses nginx proxy at /fixer
