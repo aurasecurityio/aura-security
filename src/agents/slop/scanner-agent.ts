@@ -15,7 +15,7 @@ const SCANNER_TOOLS: SLOPTool[] = [
     description: 'Run all available security scanners on a target',
     parameters: {
       target: { type: 'string', description: 'Path or Git URL to scan', required: true },
-      scanners: { type: 'array', description: 'Which scanners to run (gitleaks, trivy, semgrep, npm-audit)', required: false },
+      scanners: { type: 'array', description: 'Which scanners to run (gitleaks, trivy, semgrep, npm-audit, bandit, checkov, osv-scanner)', required: false },
     },
   },
   {
@@ -35,6 +35,27 @@ const SCANNER_TOOLS: SLOPTool[] = [
   {
     name: 'scan-code',
     description: 'Run static analysis using Semgrep',
+    parameters: {
+      target: { type: 'string', description: 'Path to scan', required: true },
+    },
+  },
+  {
+    name: 'scan-python',
+    description: 'Scan Python code for security issues using Bandit',
+    parameters: {
+      target: { type: 'string', description: 'Path to scan', required: true },
+    },
+  },
+  {
+    name: 'scan-iac',
+    description: 'Scan Infrastructure as Code using Checkov',
+    parameters: {
+      target: { type: 'string', description: 'Path to scan', required: true },
+    },
+  },
+  {
+    name: 'scan-osv',
+    description: 'Scan for vulnerabilities using OSV database',
     parameters: {
       target: { type: 'string', description: 'Path to scan', required: true },
     },
@@ -76,6 +97,12 @@ export class ScannerAgent extends SLOPAgent {
           return { result: await this.runTrivy(call.arguments.target as string) };
         case 'scan-code':
           return { result: await this.runSemgrep(call.arguments.target as string) };
+        case 'scan-python':
+          return { result: await this.runBandit(call.arguments.target as string) };
+        case 'scan-iac':
+          return { result: await this.runCheckov(call.arguments.target as string) };
+        case 'scan-osv':
+          return { result: await this.runOsvScanner(call.arguments.target as string) };
         case 'check-tools':
           return { result: await this.checkAvailableTools() };
         default:
@@ -87,13 +114,14 @@ export class ScannerAgent extends SLOPAgent {
   }
 
   private async checkAvailableTools(): Promise<{ available: string[]; missing: string[] }> {
-    const tools = ['gitleaks', 'trivy', 'semgrep', 'npm'];
+    const tools = ['gitleaks', 'trivy', 'semgrep', 'npm', 'bandit', 'checkov', 'osv-scanner', 'nuclei'];
     const available: string[] = [];
     const missing: string[] = [];
 
     for (const tool of tools) {
       try {
-        execSync(`which ${tool} || where ${tool}`, { stdio: 'ignore' });
+        // Check in PATH and common locations
+        execSync(`which ${tool} || test -f /home/ubuntu/.local/bin/${tool} || where ${tool} 2>/dev/null`, { stdio: 'ignore' });
         available.push(tool);
         this.availableTools.add(tool);
       } catch {
@@ -108,7 +136,7 @@ export class ScannerAgent extends SLOPAgent {
     await this.checkAvailableTools();
     const findings: Finding[] = [];
 
-    const enabledScanners = scanners || ['gitleaks', 'trivy', 'semgrep', 'npm-audit'];
+    const enabledScanners = scanners || ['gitleaks', 'trivy', 'semgrep', 'npm-audit', 'bandit', 'checkov', 'osv-scanner'];
 
     // Run scanners in parallel
     const scanPromises: Promise<Finding[]>[] = [];
@@ -124,6 +152,15 @@ export class ScannerAgent extends SLOPAgent {
     }
     if (enabledScanners.includes('npm-audit') && this.availableTools.has('npm')) {
       scanPromises.push(this.runNpmAudit(target));
+    }
+    if (enabledScanners.includes('bandit') && this.availableTools.has('bandit')) {
+      scanPromises.push(this.runBandit(target));
+    }
+    if (enabledScanners.includes('checkov') && this.availableTools.has('checkov')) {
+      scanPromises.push(this.runCheckov(target));
+    }
+    if (enabledScanners.includes('osv-scanner') && this.availableTools.has('osv-scanner')) {
+      scanPromises.push(this.runOsvScanner(target));
     }
 
     const results = await Promise.allSettled(scanPromises);
@@ -299,6 +336,143 @@ export class ScannerAgent extends SLOPAgent {
     }
 
     return findings;
+  }
+
+  private async runBandit(target: string): Promise<Finding[]> {
+    const findings: Finding[] = [];
+
+    try {
+      const result = await this.executeCommand('/home/ubuntu/.local/bin/bandit', ['-r', '-f', 'json', target]);
+
+      if (result.stdout) {
+        const banditResult = JSON.parse(result.stdout);
+
+        for (const r of banditResult.results || []) {
+          findings.push({
+            id: `bandit-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            type: 'code-issue',
+            severity: this.mapBanditSeverity(r.issue_severity),
+            title: r.issue_text,
+            description: `${r.test_name}: ${r.issue_text}`,
+            file: r.filename,
+            line: r.line_number,
+            cwe: r.issue_cwe?.id ? `CWE-${r.issue_cwe.id}` : undefined,
+            metadata: {
+              test_id: r.test_id,
+              test_name: r.test_name,
+              confidence: r.issue_confidence,
+            },
+          });
+        }
+        console.log(`[Scanner] Bandit found ${findings.length} Python security issues`);
+      }
+    } catch (error) {
+      console.log('[Scanner] Bandit scan error:', error);
+    }
+
+    return findings;
+  }
+
+  private async runCheckov(target: string): Promise<Finding[]> {
+    const findings: Finding[] = [];
+
+    try {
+      const result = await this.executeCommand('/home/ubuntu/.local/bin/checkov', ['-d', target, '-o', 'json', '--quiet']);
+
+      if (result.stdout) {
+        // Checkov outputs multiple JSON objects, find the one with results
+        const lines = result.stdout.split('\n').filter(l => l.trim().startsWith('{'));
+        for (const line of lines) {
+          try {
+            const checkovResult = JSON.parse(line);
+            const failed = checkovResult.results?.failed_checks || [];
+
+            for (const check of failed) {
+              findings.push({
+                id: `checkov-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+                type: 'iac',
+                severity: this.mapCheckovSeverity(check.check_result?.result || 'FAILED'),
+                title: check.check_id,
+                description: check.check_name || check.check_id,
+                file: check.file_path,
+                line: check.file_line_range?.[0],
+                metadata: {
+                  check_id: check.check_id,
+                  resource: check.resource,
+                  guideline: check.guideline,
+                },
+              });
+            }
+          } catch {
+            // Skip invalid JSON lines
+          }
+        }
+        console.log(`[Scanner] Checkov found ${findings.length} IaC issues`);
+      }
+    } catch (error) {
+      console.log('[Scanner] Checkov scan error:', error);
+    }
+
+    return findings;
+  }
+
+  private async runOsvScanner(target: string): Promise<Finding[]> {
+    const findings: Finding[] = [];
+
+    try {
+      const result = await this.executeCommand('osv-scanner', ['--json', '-r', target]);
+
+      if (result.stdout) {
+        const osvResult = JSON.parse(result.stdout);
+
+        for (const r of osvResult.results || []) {
+          for (const pkg of r.packages || []) {
+            for (const v of pkg.vulnerabilities || []) {
+              findings.push({
+                id: `osv-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+                type: 'vulnerability',
+                severity: this.mapOsvSeverity(v.database_specific?.severity || v.severity?.[0]?.type),
+                title: v.id,
+                description: v.summary || v.details?.substring(0, 200) || v.id,
+                package: pkg.package?.name,
+                version: pkg.package?.version,
+                cve: v.aliases?.find((a: string) => a.startsWith('CVE-')),
+                metadata: {
+                  osv_id: v.id,
+                  aliases: v.aliases,
+                  references: v.references?.map((r: { url: string }) => r.url),
+                },
+              });
+            }
+          }
+        }
+        console.log(`[Scanner] OSV-Scanner found ${findings.length} vulnerabilities`);
+      }
+    } catch (error) {
+      console.log('[Scanner] OSV-Scanner error:', error);
+    }
+
+    return findings;
+  }
+
+  private mapBanditSeverity(severity: string): 'critical' | 'high' | 'medium' | 'low' {
+    const s = (severity || '').toUpperCase();
+    if (s === 'HIGH') return 'high';
+    if (s === 'MEDIUM') return 'medium';
+    return 'low';
+  }
+
+  private mapCheckovSeverity(_result: string): 'critical' | 'high' | 'medium' | 'low' {
+    // Checkov doesn't provide severity, all failures are treated as medium
+    return 'medium';
+  }
+
+  private mapOsvSeverity(severity: string): 'critical' | 'high' | 'medium' | 'low' {
+    const s = (severity || '').toUpperCase();
+    if (s === 'CRITICAL') return 'critical';
+    if (s === 'HIGH') return 'high';
+    if (s === 'MODERATE' || s === 'MEDIUM') return 'medium';
+    return 'low';
   }
 
   private executeCommand(command: string, args: string[], options: { cwd?: string } = {}): Promise<{ stdout: string; stderr: string }> {
