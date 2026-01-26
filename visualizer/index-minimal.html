@@ -627,6 +627,124 @@
 
     #rugcheck-panel.active { display: block; }
 
+    /* Intel Panel - CVE Alerts */
+    #intel-panel {
+      top: 72px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 700px;
+      max-width: calc(100% - 40px);
+      max-height: calc(100vh - 88px);
+      overflow-y: auto;
+      display: none;
+    }
+
+    #intel-panel.active { display: block; }
+
+    .intel-header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .intel-title {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .intel-subtitle {
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+
+    .intel-search {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .intel-search input {
+      flex: 1;
+      padding: 12px 16px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 14px;
+    }
+
+    .intel-search button {
+      padding: 12px 20px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    .cve-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .cve-card {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .cve-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .cve-id {
+      font-weight: 600;
+      color: var(--accent);
+      font-family: monospace;
+    }
+
+    .cve-cvss {
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .cve-cvss.critical { background: var(--critical-subtle); color: var(--critical); }
+    .cve-cvss.high { background: var(--high-subtle); color: var(--high); }
+    .cve-cvss.medium { background: var(--warning-subtle); color: var(--warning); }
+    .cve-cvss.low { background: var(--success-subtle); color: var(--success); }
+
+    .cve-title {
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    .cve-meta {
+      display: flex;
+      gap: 16px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .trending-header {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 24px 0 12px 0;
+      color: var(--text-primary);
+    }
+
     .rugcheck-header {
       text-align: center;
       margin-bottom: 24px;
@@ -1397,6 +1515,7 @@
       <button class="nav-tab active" onclick="showView('scan')">Scan</button>
       <button class="nav-tab" onclick="showView('reports')">Reports</button>
       <button class="nav-tab" onclick="showView('rugcheck')">Rug Check</button>
+      <button class="nav-tab" onclick="showView('intel')">🔔 Intel</button>
     </div>
 
     <div class="header-stats">
@@ -1634,6 +1753,39 @@
 
     <div id="rugcheckError" style="display: none; text-align: center; padding: 20px; color: var(--critical);">
       <!-- Error message -->
+    </div>
+  </div>
+
+  <!-- Intel Panel - CVE Alerts -->
+  <div id="intel-panel" class="panel">
+    <div class="intel-header">
+      <div class="intel-title">
+        <span>🔔</span> Threat Intelligence
+      </div>
+      <div class="intel-subtitle">Real-time CVE monitoring and security advisories</div>
+    </div>
+
+    <div class="intel-search">
+      <input type="text" id="cveSearch" placeholder="Search CVE (e.g., CVE-2021-44228) or package (e.g., log4j)">
+      <button onclick="searchCVE()">Search</button>
+    </div>
+
+    <div id="cveSearchResults" style="display: none;">
+      <!-- Search results populated by JS -->
+    </div>
+
+    <div class="trending-header">🔥 Trending Vulnerabilities</div>
+    <div class="cve-list" id="trendingCVEs">
+      <div style="text-align: center; color: var(--text-muted); padding: 20px;">
+        Loading trending CVEs...
+      </div>
+    </div>
+
+    <div class="trending-header" style="margin-top: 32px;">📦 Package Advisories</div>
+    <div class="cve-list" id="packageAdvisories">
+      <div style="text-align: center; color: var(--text-muted); padding: 20px;">
+        Enter a package name above to check for advisories
+      </div>
     </div>
   </div>
 
@@ -2303,9 +2455,11 @@
       document.getElementById('details-panel').style.display = view === 'scan' ? 'block' : 'none';
       document.getElementById('reports-panel').classList.toggle('active', view === 'reports');
       document.getElementById('rugcheck-panel').classList.toggle('active', view === 'rugcheck');
+      document.getElementById('intel-panel').classList.toggle('active', view === 'intel');
       document.getElementById('view-info').style.display = view === 'scan' ? 'block' : 'none';
 
       if (view === 'reports') updateReportsTable();
+      if (view === 'intel') loadTrendingCVEs();
     }
     window.showView = showView;
 
@@ -2984,6 +3138,130 @@
     async function refreshScore() {
       const scoreData = await fetchSecurityScore();
       updateScoreDisplay(scoreData);
+    }
+
+    // ========== INTEL AGENT INTEGRATION ==========
+    // Intel Agent: localhost uses port 4008, production uses nginx proxy at /intel
+    const INTEL_AGENT_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? 'http://localhost:4008'
+      : `${window.location.origin}/intel`;
+
+    async function loadTrendingCVEs() {
+      const container = document.getElementById('trendingCVEs');
+      try {
+        const response = await fetch(`${INTEL_AGENT_URL}/tools`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tool: 'get-trending', arguments: { limit: 10 } })
+        });
+        const data = await response.json();
+        const cves = data.result?.cves || data.result || [];
+
+        if (cves.length === 0) {
+          container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px;">No trending CVEs available</div>';
+          return;
+        }
+
+        container.innerHTML = cves.map(cve => `
+          <div class="cve-card">
+            <div class="cve-card-header">
+              <span class="cve-id">${cve.id || cve.cveId}</span>
+              <span class="cve-cvss ${getCvssSeverity(cve.cvssScore || cve.cvss)}">${cve.cvssScore || cve.cvss || 'N/A'}</span>
+            </div>
+            <div class="cve-title">${cve.description || cve.title || 'No description'}</div>
+            <div class="cve-meta">
+              <span>Published: ${cve.published || 'Unknown'}</span>
+              ${cve.exploitAvailable ? '<span style="color: var(--critical);">⚠️ Exploit Available</span>' : ''}
+            </div>
+          </div>
+        `).join('');
+      } catch (error) {
+        container.innerHTML = `<div style="text-align: center; color: var(--critical); padding: 20px;">Error loading CVEs: ${error.message}</div>`;
+      }
+    }
+
+    async function searchCVE() {
+      const query = document.getElementById('cveSearch').value.trim();
+      if (!query) return;
+
+      const container = document.getElementById('cveSearchResults');
+      container.style.display = 'block';
+      container.innerHTML = '<div style="text-align: center; padding: 20px;">Searching...</div>';
+
+      try {
+        let response;
+        if (query.toUpperCase().startsWith('CVE-')) {
+          response = await fetch(`${INTEL_AGENT_URL}/tools`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tool: 'check-cve', arguments: { cveId: query.toUpperCase() } })
+          });
+        } else {
+          response = await fetch(`${INTEL_AGENT_URL}/tools`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tool: 'check-package', arguments: { package: query } })
+          });
+        }
+
+        const data = await response.json();
+        const result = data.result;
+
+        if (result.error || !result) {
+          container.innerHTML = `<div style="text-align: center; padding: 20px; color: var(--text-muted);">No results found for "${query}"</div>`;
+          return;
+        }
+
+        if (result.id || result.cveId) {
+          // Single CVE result
+          container.innerHTML = `
+            <div class="cve-card" style="margin-bottom: 20px;">
+              <div class="cve-card-header">
+                <span class="cve-id">${result.id || result.cveId}</span>
+                <span class="cve-cvss ${getCvssSeverity(result.cvssScore || result.cvss)}">${result.cvssScore || result.cvss || 'N/A'}</span>
+              </div>
+              <div class="cve-title">${result.description || result.title || 'No description'}</div>
+              <div class="cve-meta">
+                <span>Severity: ${result.severity || 'Unknown'}</span>
+                ${result.exploitAvailable ? '<span style="color: var(--critical);">⚠️ Exploit Available</span>' : ''}
+              </div>
+            </div>
+          `;
+        } else if (result.vulnerabilities || result.advisories) {
+          // Package vulnerabilities
+          const vulns = result.vulnerabilities || result.advisories || [];
+          container.innerHTML = `
+            <div style="margin-bottom: 12px; font-weight: 600;">Found ${vulns.length} vulnerabilities for "${query}"</div>
+            ${vulns.map(v => `
+              <div class="cve-card">
+                <div class="cve-card-header">
+                  <span class="cve-id">${v.id || v.cveId || v.ghsaId || 'Unknown'}</span>
+                  <span class="cve-cvss ${getCvssSeverity(v.cvssScore || v.severity)}">${v.cvssScore || v.severity || 'N/A'}</span>
+                </div>
+                <div class="cve-title">${v.summary || v.description || 'No description'}</div>
+              </div>
+            `).join('')}
+          `;
+        }
+      } catch (error) {
+        container.innerHTML = `<div style="text-align: center; color: var(--critical); padding: 20px;">Error: ${error.message}</div>`;
+      }
+    }
+    window.searchCVE = searchCVE;
+
+    function getCvssSeverity(score) {
+      if (typeof score === 'string') {
+        const s = score.toLowerCase();
+        if (s === 'critical') return 'critical';
+        if (s === 'high') return 'high';
+        if (s === 'medium' || s === 'moderate') return 'medium';
+        return 'low';
+      }
+      const n = parseFloat(score);
+      if (n >= 9) return 'critical';
+      if (n >= 7) return 'high';
+      if (n >= 4) return 'medium';
+      return 'low';
     }
 
     // ========== FIXER AGENT INTEGRATION ==========
