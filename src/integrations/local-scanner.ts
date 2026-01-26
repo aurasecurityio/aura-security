@@ -332,8 +332,10 @@ function runSemgrep(targetPath: string): Array<{ file: string; line: number; rul
       '--config', 'auto',
       '--json',
       '--quiet',
+      '--timeout', '30',           // 30 second timeout per file
+      '--max-target-bytes', '500000', // Skip files > 500KB
       targetPath
-    ], { encoding: 'utf-8', timeout: 300000, maxBuffer: 50 * 1024 * 1024 });
+    ], { encoding: 'utf-8', timeout: 60000, maxBuffer: 50 * 1024 * 1024 }); // 60 second total timeout
 
     if (result.stdout) {
       try {
