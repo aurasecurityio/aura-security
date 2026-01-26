@@ -1,0 +1,26 @@
+[Unit]
+Description=Aura Security Swarm - Multi-Agent System
+After=network.target aura-api.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/var/www/aura-security
+ExecStart=/usr/bin/node dist/agents/slop/swarm.js --full
+Restart=on-failure
+RestartSec=10
+Environment=NODE_ENV=production
+Environment=GITHUB_TOKEN=
+Environment=GITLAB_TOKEN=
+
+# Agent Ports
+# 4000 - Coordinator
+# 4001 - Scanner Agent
+# 4002 - Grader Agent
+# 4003 - Fixer Agent
+# 4004 - Scout Agent
+# 4005 - Chain Mapper Agent
+# 4006 - Red Team Agent
+
+[Install]
+WantedBy=multi-user.target

@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+  # Main Aura Security API + Visualizer
   aura-security:
     build: .
     container_name: aura-security
@@ -9,19 +10,13 @@ services:
       - "3001:3001"   # WebSocket server
       - "8080:8080"   # 3D Visualizer
     volumes:
-      # Persist database and settings
       - aura-data:/data/.aura-security
-      # Mount local projects for scanning (optional)
       - ./test-repos:/projects:ro
     environment:
       - NODE_ENV=production
       - AURA_PORT=3000
       - WS_PORT=3001
       - VISUALIZER_PORT=8080
-      # AWS credentials (optional - for AWS scanning)
-      # - AWS_ACCESS_KEY_ID=
-      # - AWS_SECRET_ACCESS_KEY=
-      # - AWS_DEFAULT_REGION=us-east-1
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/info"]
@@ -29,6 +24,36 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+
+  # Multi-Agent Swarm (Phase 1 + 2)
+  aura-swarm:
+    build: .
+    container_name: aura-swarm
+    command: ["node", "dist/agents/slop/swarm.js", "--full"]
+    ports:
+      - "4000:4000"   # Coordinator
+      - "4001:4001"   # Scanner Agent
+      - "4002:4002"   # Grader Agent
+      - "4003:4003"   # Fixer Agent
+      - "4004:4004"   # Scout Agent
+      - "4005:4005"   # Chain Mapper Agent
+      - "4006:4006"   # Red Team Agent
+    volumes:
+      - aura-data:/data/.aura-security
+      - ./test-repos:/projects:ro
+    environment:
+      - NODE_ENV=production
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - GITLAB_TOKEN=${GITLAB_TOKEN:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/info"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      - aura-security
 
   # Optional: Nginx reverse proxy with SSL
   # nginx:
