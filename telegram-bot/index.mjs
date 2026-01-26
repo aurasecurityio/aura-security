@@ -1433,9 +1433,9 @@ function formatScanResult(apiResponse, gitUrl) {
   if (totalFindings === 0) {
     msg += `\u2728 _No security issues detected!_`;
   } else if (secrets > 0) {
-    msg += `\u{1F6A8} _CRITICAL: Exposed secrets found! Do not use this code._`;
+    msg += `\u26A0\uFE0F _CAUTION: Exposed secrets detected. Review code before use._`;
   } else if (vulns > 5) {
-    msg += `\u26A0\uFE0F _Multiple vulnerabilities. Update dependencies before using._`;
+    msg += `\u26A0\uFE0F _CAUTION: Multiple vulnerabilities found. Review before use._`;
   } else {
     msg += `\u{1F4DD} _Some issues found. Review before using in production._`;
   }
