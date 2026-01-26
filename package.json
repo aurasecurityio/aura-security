@@ -1,7 +1,7 @@
 {
   "name": "aura-security",
-  "version": "0.7.0",
-  "description": "Deterministic security auditing engine with optional AI advisory layer. Run as CLI, CI step, or service. AI does not make enforcement decisions.",
+  "version": "1.0.0",
+  "description": "AI-powered security scanner with 9-agent swarm. Detect secrets, vulnerabilities, attack paths. CLI, API, or cloud dashboard at app.aurasecurity.io",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
