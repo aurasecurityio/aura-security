@@ -745,6 +745,152 @@
       color: var(--text-primary);
     }
 
+    /* Attack Paths Panel */
+    #attack-panel {
+      top: 72px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 800px;
+      max-width: calc(100% - 40px);
+      max-height: calc(100vh - 88px);
+      overflow-y: auto;
+      display: none;
+    }
+
+    #attack-panel.active { display: block; }
+
+    .attack-header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .attack-title {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .attack-subtitle {
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+
+    .attack-path-card {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+
+    .attack-path-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .attack-path-name {
+      font-weight: 600;
+      font-size: 16px;
+    }
+
+    .attack-path-risk {
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .attack-path-risk.critical { background: var(--critical-subtle); color: var(--critical); }
+    .attack-path-risk.high { background: var(--high-subtle); color: var(--high); }
+    .attack-path-risk.medium { background: var(--warning-subtle); color: var(--warning); }
+
+    .attack-path-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .attack-step {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 12px;
+      background: var(--bg-secondary);
+      border-radius: 6px;
+    }
+
+    .attack-step-num {
+      width: 24px;
+      height: 24px;
+      background: var(--accent);
+      color: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+
+    .attack-step-text {
+      font-size: 13px;
+    }
+
+    .attack-step-arrow {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 16px;
+    }
+
+    .mitre-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 12px;
+    }
+
+    .mitre-tag {
+      padding: 4px 8px;
+      background: var(--accent-subtle);
+      color: var(--accent);
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .attack-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .attack-btn {
+      padding: 8px 12px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-primary);
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .attack-btn:hover {
+      background: var(--bg-tertiary);
+    }
+
+    .attack-btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+    }
+
     .rugcheck-header {
       text-align: center;
       margin-bottom: 24px;
@@ -1516,6 +1662,7 @@
       <button class="nav-tab" onclick="showView('reports')">Reports</button>
       <button class="nav-tab" onclick="showView('rugcheck')">Rug Check</button>
       <button class="nav-tab" onclick="showView('intel')">🔔 Intel</button>
+      <button class="nav-tab" onclick="showView('attack')">⚔️ Attack Paths</button>
     </div>
 
     <div class="header-stats">
@@ -1785,6 +1932,36 @@
     <div class="cve-list" id="packageAdvisories">
       <div style="text-align: center; color: var(--text-muted); padding: 20px;">
         Enter a package name above to check for advisories
+      </div>
+    </div>
+  </div>
+
+  <!-- Attack Paths Panel -->
+  <div id="attack-panel" class="panel">
+    <div class="attack-header">
+      <div class="attack-title">
+        <span>⚔️</span> Attack Path Analysis
+      </div>
+      <div class="attack-subtitle">Trace exploitation chains through your vulnerabilities</div>
+    </div>
+
+    <div style="margin-bottom: 20px;">
+      <button class="attack-btn primary" onclick="analyzeAttackPaths()" id="analyzeAttackBtn">
+        🔍 Analyze Attack Paths from Last Scan
+      </button>
+      <span id="attackStatus" style="margin-left: 12px; color: var(--text-secondary); font-size: 13px;"></span>
+    </div>
+
+    <div id="attackPathsContainer">
+      <div style="text-align: center; color: var(--text-muted); padding: 40px;">
+        Run a scan first, then analyze attack paths to see exploitation chains
+      </div>
+    </div>
+
+    <div class="trending-header" style="margin-top: 32px;">🎯 MITRE ATT&CK Coverage</div>
+    <div id="mitreMatrix" style="margin-top: 12px;">
+      <div style="text-align: center; color: var(--text-muted); padding: 20px;">
+        MITRE mapping will appear after attack path analysis
       </div>
     </div>
   </div>
@@ -2456,10 +2633,12 @@
       document.getElementById('reports-panel').classList.toggle('active', view === 'reports');
       document.getElementById('rugcheck-panel').classList.toggle('active', view === 'rugcheck');
       document.getElementById('intel-panel').classList.toggle('active', view === 'intel');
+      document.getElementById('attack-panel').classList.toggle('active', view === 'attack');
       document.getElementById('view-info').style.display = view === 'scan' ? 'block' : 'none';
 
       if (view === 'reports') updateReportsTable();
       if (view === 'intel') loadTrendingCVEs();
+      if (view === 'attack') checkAttackPathsReady();
     }
     window.showView = showView;
 
@@ -3263,6 +3442,151 @@
       if (n >= 4) return 'medium';
       return 'low';
     }
+
+    // ========== CHAIN MAPPER AGENT INTEGRATION ==========
+    // Chain Mapper Agent: localhost uses port 4005, production uses nginx proxy at /chain
+    const CHAIN_MAPPER_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? 'http://localhost:4005'
+      : `${window.location.origin}/chain`;
+
+    let lastScanFindings = [];
+
+    function checkAttackPathsReady() {
+      const container = document.getElementById('attackPathsContainer');
+      const btn = document.getElementById('analyzeAttackBtn');
+
+      // Check if we have scan findings from the last scan
+      const repo = state.repos.find(r => r.id === state.selectedRepo);
+      if (repo && repo.findings && repo.findings.length > 0) {
+        lastScanFindings = repo.findings;
+        btn.textContent = `🔍 Analyze ${repo.findings.length} Findings`;
+        btn.disabled = false;
+      } else {
+        btn.textContent = '🔍 Analyze Attack Paths (No Scan Data)';
+        btn.disabled = true;
+      }
+    }
+
+    async function analyzeAttackPaths() {
+      const container = document.getElementById('attackPathsContainer');
+      const status = document.getElementById('attackStatus');
+      const mitreContainer = document.getElementById('mitreMatrix');
+
+      // Get findings from selected repo or last scan
+      const repo = state.repos.find(r => r.id === state.selectedRepo);
+      const findings = repo?.findings || lastScanFindings;
+
+      if (!findings || findings.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: var(--warning); padding: 40px;">No findings to analyze. Run a scan first.</div>';
+        return;
+      }
+
+      status.textContent = 'Analyzing attack paths...';
+      container.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="loader"></div><br>Tracing exploitation chains...</div>';
+
+      try {
+        // Call Chain Mapper to trace paths
+        const traceResponse = await fetch(`${CHAIN_MAPPER_URL}/tools`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tool: 'trace-path',
+            arguments: { findings: findings, maxDepth: 5 }
+          })
+        });
+        const traceData = await traceResponse.json();
+
+        // Call for MITRE mapping
+        const mitreResponse = await fetch(`${CHAIN_MAPPER_URL}/tools`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tool: 'map-mitre',
+            arguments: { findings: findings }
+          })
+        });
+        const mitreData = await mitreResponse.json();
+
+        // Render attack paths
+        const paths = traceData.result?.paths || traceData.result?.attackPaths || [];
+        if (paths.length === 0) {
+          container.innerHTML = '<div style="text-align: center; color: var(--success); padding: 40px;">✅ No exploitable attack paths found</div>';
+        } else {
+          container.innerHTML = paths.map((path, i) => `
+            <div class="attack-path-card">
+              <div class="attack-path-header">
+                <span class="attack-path-name">${path.name || `Attack Chain ${i + 1}`}</span>
+                <span class="attack-path-risk ${(path.risk || path.severity || 'high').toLowerCase()}">${path.risk || path.severity || 'HIGH'}</span>
+              </div>
+              <div class="attack-path-steps">
+                ${(path.steps || path.chain || []).map((step, j) => `
+                  <div class="attack-step">
+                    <span class="attack-step-num">${j + 1}</span>
+                    <span class="attack-step-text">${step.description || step.action || step}</span>
+                  </div>
+                  ${j < (path.steps || path.chain || []).length - 1 ? '<div class="attack-step-arrow">↓</div>' : ''}
+                `).join('')}
+              </div>
+              ${path.mitreTechniques ? `
+                <div class="mitre-tags">
+                  ${path.mitreTechniques.map(t => `<span class="mitre-tag">${t}</span>`).join('')}
+                </div>
+              ` : ''}
+              <div class="attack-actions">
+                <button class="attack-btn" onclick="simulateAttack(${i})">🎭 Simulate</button>
+                <button class="attack-btn" onclick="generateReport(${i})">📄 Report</button>
+              </div>
+            </div>
+          `).join('');
+        }
+
+        // Render MITRE matrix
+        const mitreMappings = mitreData.result?.mappings || mitreData.result?.techniques || [];
+        if (mitreMappings.length > 0) {
+          const tactics = {};
+          mitreMappings.forEach(m => {
+            const tactic = m.tactic || 'Unknown';
+            if (!tactics[tactic]) tactics[tactic] = [];
+            tactics[tactic].push(m);
+          });
+
+          mitreContainer.innerHTML = `
+            <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+              ${Object.entries(tactics).map(([tactic, techniques]) => `
+                <div style="background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 8px; padding: 12px; min-width: 150px;">
+                  <div style="font-weight: 600; color: var(--accent); margin-bottom: 8px; font-size: 12px;">${tactic}</div>
+                  ${techniques.map(t => `
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">
+                      ${t.techniqueId || ''} ${t.name || t.technique || ''}
+                    </div>
+                  `).join('')}
+                </div>
+              `).join('')}
+            </div>
+          `;
+        } else {
+          mitreContainer.innerHTML = '<div style="color: var(--text-muted); font-size: 13px;">No MITRE ATT&CK techniques mapped</div>';
+        }
+
+        status.textContent = `Found ${paths.length} attack path(s)`;
+
+      } catch (error) {
+        console.error('Attack path analysis error:', error);
+        container.innerHTML = `<div style="text-align: center; color: var(--critical); padding: 40px;">Error: ${error.message}</div>`;
+        status.textContent = 'Analysis failed';
+      }
+    }
+    window.analyzeAttackPaths = analyzeAttackPaths;
+
+    async function simulateAttack(pathIndex) {
+      alert('Attack simulation coming soon! This will run a safe, sandboxed simulation of the attack chain.');
+    }
+    window.simulateAttack = simulateAttack;
+
+    async function generateReport(pathIndex) {
+      alert('Report generation coming soon! This will generate a detailed attack path report in Markdown format.');
+    }
+    window.generateReport = generateReport;
 
     // ========== FIXER AGENT INTEGRATION ==========
     // Fixer Agent: localhost uses port 3012, production uses nginx proxy at /fixer
