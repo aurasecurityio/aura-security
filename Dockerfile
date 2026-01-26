@@ -6,8 +6,8 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install build dependencies
-RUN apk add --no-cache python3 make g++
+# Install build dependencies with pinned versions
+RUN apk add --no-cache python3=3.12.8-r1 make=4.4.1-r2 g++=14.2.0-r4
 
 # Copy package files
 COPY package*.json ./
@@ -26,13 +26,16 @@ FROM node:20-alpine AS production
 
 WORKDIR /app
 
-# Install runtime dependencies and security tools
+# Set shell to use pipefail
+SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
+
+# Install runtime dependencies and security tools with pinned versions
 RUN apk add --no-cache \
-    python3 \
-    py3-pip \
-    git \
-    curl \
-    && pip3 install --break-system-packages semgrep
+    python3=3.12.8-r1 \
+    py3-pip=24.3.1-r0 \
+    git=2.47.2-r0 \
+    curl=8.12.0-r0 \
+    && pip3 install --no-cache-dir --break-system-packages semgrep==1.102.0
 
 # Install gitleaks
 RUN wget -qO- https://github.com/gitleaks/gitleaks/releases/download/v8.18.2/gitleaks_8.18.2_linux_x64.tar.gz | tar xz -C /usr/local/bin gitleaks
@@ -69,10 +72,10 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 # Run as non-root user
 RUN addgroup -g 1001 -S aura && \
-    adduser -S slop -u 1001 -G slop && \
-    chown -R slop:slop /app /data
+    adduser -S aura -u 1001 -G aura && \
+    chown -R aura:aura /app /data
 
-USER slop
+USER aura
 
 # Start the application
 CMD ["node", "dist/index.js"]
