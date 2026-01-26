@@ -1081,6 +1081,7 @@ export interface LocalScanConfig {
   scanEnvFiles?: boolean;
   scanIaC?: boolean;              // Scan Infrastructure as Code (Terraform, K8s, CloudFormation)
   scanDockerfiles?: boolean;      // Scan Dockerfiles with hadolint
+  fastMode?: boolean;             // Skip slow scanners (semgrep, checkov) for faster results
   maxDepth?: number;
   excludePatterns?: string[];
   languages?: string[];           // Filter by languages: 'js', 'py', 'go', 'rust', 'ruby', 'php'
@@ -1441,17 +1442,20 @@ export class LocalScanner {
     }
 
     // ============ SAST SCANNING ============
-    if (shouldUsescanner('semgrep') && isToolAvailable('semgrep')) {
+    // Skip semgrep in fastMode (takes 60+ seconds)
+    if (!this.config.fastMode && shouldUsescanner('semgrep') && isToolAvailable('semgrep')) {
       console.log('[SCANNER] Using semgrep for SAST analysis');
       const semgrepFindings = runSemgrep(this.config.targetPath);
       result.sastFindings = semgrepFindings;
       toolsUsed.push('semgrep');
+    } else if (this.config.fastMode) {
+      console.log('[SCANNER] Skipping semgrep (fastMode enabled)');
     } else {
       console.log('[SCANNER] semgrep not available, skipping SAST');
     }
 
-    // C/C++ SAST with flawfinder
-    if (shouldScanLang('c') && shouldUsescanner('flawfinder') && isToolAvailable('flawfinder')) {
+    // C/C++ SAST with flawfinder - skip in fastMode
+    if (!this.config.fastMode && shouldScanLang('c') && shouldUsescanner('flawfinder') && isToolAvailable('flawfinder')) {
       console.log('[SCANNER] Using flawfinder for C/C++ SAST analysis');
       const flawfinderFindings = runFlawfinder(this.config.targetPath);
       result.sastFindings.push(...flawfinderFindings);
@@ -1459,13 +1463,16 @@ export class LocalScanner {
     }
 
     // ============ IAC SCANNING ============
-    if (this.config.scanIaC !== false) {
+    // Skip checkov in fastMode (slow)
+    if (this.config.scanIaC !== false && !this.config.fastMode) {
       if (shouldUsescanner('checkov') && isToolAvailable('checkov')) {
         console.log('[SCANNER] Using checkov for IaC scanning');
         const checkovFindings = runCheckov(this.config.targetPath);
         result.iacFindings = checkovFindings;
         toolsUsed.push('checkov');
       }
+    } else if (this.config.fastMode) {
+      console.log('[SCANNER] Skipping checkov (fastMode enabled)');
     }
 
     // ============ DOCKERFILE SCANNING ============
@@ -2196,6 +2203,7 @@ export interface RemoteScanConfig {
   depth?: number;  // Git clone depth (shallow clone)
   scanSecrets?: boolean;
   scanPackages?: boolean;
+  fastMode?: boolean;  // Skip slow scanners for faster results
 }
 
 export interface RemoteScanResult extends LocalScanResult {
@@ -2255,7 +2263,8 @@ export async function scanRemoteGit(config: RemoteScanConfig): Promise<RemoteSca
       const scanner = new LocalScanner({
         targetPath: retryDir,
         scanSecrets: config.scanSecrets ?? true,
-        scanPackages: config.scanPackages ?? true
+        scanPackages: config.scanPackages ?? true,
+        fastMode: config.fastMode ?? false
       });
 
       const scanResult = await scanner.scan();
@@ -2285,13 +2294,14 @@ export async function scanRemoteGit(config: RemoteScanConfig): Promise<RemoteSca
     const scanner = new LocalScanner({
       targetPath: tempDir,
       scanSecrets: config.scanSecrets ?? true,
-      scanPackages: config.scanPackages ?? true
+      scanPackages: config.scanPackages ?? true,
+      fastMode: config.fastMode ?? false  // Skip slow scanners when fastMode is true
     });
 
     const scanResult = await scanner.scan();
     const scanDuration = Date.now() - scanStart;
 
-    console.log(`[SCANNER] Scan completed in ${scanDuration}ms`);
+    console.log(`[SCANNER] Scan completed in ${scanDuration}ms${config.fastMode ? ' (fastMode)' : ''}`);
 
     // Cleanup temp directory
     try {

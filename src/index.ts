@@ -355,7 +355,8 @@ async function main(): Promise<void> {
         gitUrl: { type: 'string', description: 'Git URL to clone and scan' },
         scanSecrets: { type: 'boolean', default: true },
         scanPackages: { type: 'boolean', default: true },
-        scanEnvFiles: { type: 'boolean', default: true }
+        scanEnvFiles: { type: 'boolean', default: true },
+        fastMode: { type: 'boolean', default: false, description: 'Skip slow scanners (semgrep, checkov) for faster results' }
       }
     },
     handler: async (args) => {
@@ -372,7 +373,8 @@ async function main(): Promise<void> {
             const remoteResult = await scanRemoteGit({
               gitUrl,
               scanSecrets: args.scanSecrets !== false,
-              scanPackages: args.scanPackages !== false
+              scanPackages: args.scanPackages !== false,
+              fastMode: args.fastMode === true  // Skip slow scanners when true
             });
 
             console.log(`[AURA] Remote scan complete in ${remoteResult.cloneDuration + remoteResult.scanDuration}ms`);
