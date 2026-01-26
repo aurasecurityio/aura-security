@@ -168,6 +168,7 @@ async function fetchJson(url) {
 }
 
 // Call Aura Security Scanner API (internal - use callAuraScanWithRetry)
+// Uses fast mode to skip slow scanners (semgrep takes 60+ seconds)
 async function callAuraScanInternal(gitUrl, apiUrl = AURA_API_PRIMARY) {
   return new Promise((resolve, reject) => {
     const url = new URL(`${apiUrl}/tools`);
@@ -176,7 +177,8 @@ async function callAuraScanInternal(gitUrl, apiUrl = AURA_API_PRIMARY) {
       arguments: {
         gitUrl: gitUrl,
         scanSecrets: true,
-        scanPackages: true
+        scanPackages: true,
+        fastMode: true  // Skip slow scanners (semgrep, checkov)
       }
     });
 
