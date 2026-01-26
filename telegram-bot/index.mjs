@@ -24,6 +24,33 @@ const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
 
+// Deduplication: Track processed updates to prevent Telegram retry spam
+// Persists across warm Lambda invocations
+const processedUpdates = new Map(); // update_id -> timestamp
+const DEDUP_TTL_MS = 300000; // 5 minutes
+
+function isDuplicate(updateId) {
+  if (!updateId) return false;
+
+  // Clean old entries (older than TTL)
+  const now = Date.now();
+  for (const [id, timestamp] of processedUpdates) {
+    if (now - timestamp > DEDUP_TTL_MS) {
+      processedUpdates.delete(id);
+    }
+  }
+
+  // Check if we've seen this update
+  if (processedUpdates.has(updateId)) {
+    console.log(`[DEDUP] Skipping duplicate update_id: ${updateId}`);
+    return true;
+  }
+
+  // Mark as processed
+  processedUpdates.set(updateId, now);
+  return false;
+}
+
 // Retry wrapper with exponential backoff
 async function withRetry(fn, maxRetries = MAX_RETRIES, delayMs = RETRY_DELAY_MS) {
   let lastError;
@@ -2055,6 +2082,12 @@ export async function handler(event) {
 
   try {
     const body = typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
+
+    // Deduplicate: Skip if we've already processed this update
+    const updateId = body?.update_id;
+    if (isDuplicate(updateId)) {
+      return { statusCode: 200, body: 'OK - duplicate' };
+    }
 
     // Handle callback queries (button presses)
     if (body.callback_query) {
