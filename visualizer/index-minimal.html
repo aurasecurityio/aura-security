@@ -1617,6 +1617,47 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      padding: 20px;
+    }
+    .modal-content {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      width: 100%;
+      max-height: 90vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .modal-header h3 {
+      margin: 0;
+      font-size: 18px;
+    }
+    .modal-body {
+      padding: 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
   </style>
 </head>
 <body>
@@ -2001,7 +2042,8 @@
       reports: [],
       currentView: 'scan',
       drillLevel: 0,        // 0=repos, 1=severities, 2=findings
-      selectedSeverity: null // 'critical', 'high', 'medium', 'low'
+      selectedSeverity: null, // 'critical', 'high', 'medium', 'low'
+      attackPaths: []       // Cached attack paths for simulate/report
     };
 
     // Auto-detect API URL: localhost uses port 3000, production uses nginx proxy (same origin)
@@ -2830,6 +2872,9 @@
 
           log(`Complete: ${repo.secrets} secrets, ${repo.vulns} vulnerabilities`, repo.secrets > 0 ? 'error' : 'success');
         }
+        // Clear attack paths when new scan completes (force fresh analysis)
+        state.attackPaths = [];
+
         updateUI();
         refreshScore(); // Update security score after scan
         selectRepo(repo.id);
@@ -2862,6 +2907,11 @@
 
       const repo = state.repos.find(r => r.id === repoId);
       console.log('[SelectRepo] Found repo:', repo?.name, 'secrets:', repo?.secrets, 'vulns:', repo?.vulns, 'findings:', repo?.findings?.length);
+
+      // Update Attack Paths tab when repo changes
+      if (state.currentView === 'attack') {
+        checkAttackPathsReady();
+      }
 
       if (repo) {
         document.getElementById('selectedRepoInfo').classList.add('visible');
@@ -3458,21 +3508,43 @@
       ? 'http://localhost:4005'
       : `${window.location.origin}/chain`;
 
-    let lastScanFindings = [];
-
     function checkAttackPathsReady() {
       const container = document.getElementById('attackPathsContainer');
       const btn = document.getElementById('analyzeAttackBtn');
+      const status = document.getElementById('attackStatus');
 
-      // Check if we have scan findings from the last scan
+      // Always get findings from the currently selected repo
       const repo = state.repos.find(r => r.id === state.selectedRepo);
+
+      // Debug: Log all repos and their finding counts
+      console.log('[AttackPaths] All repos:', state.repos.map(r => ({
+        id: r.id,
+        name: r.name,
+        path: r.path,
+        findings: r.findings?.length || 0
+      })));
+      console.log('[AttackPaths] Selected repo ID:', state.selectedRepo);
+      console.log('[AttackPaths] Found repo:', repo?.name, 'with', repo?.findings?.length, 'findings');
+
       if (repo && repo.findings && repo.findings.length > 0) {
-        lastScanFindings = repo.findings;
-        btn.textContent = `🔍 Analyze ${repo.findings.length} Findings`;
+        const findingCount = repo.findings.length;
+        btn.textContent = `🔍 Analyze ${findingCount} Findings`;
         btn.disabled = false;
+        status.textContent = `${repo.name || repo.path}: ${findingCount} findings to analyze`;
+        // Clear previous results when switching repos
+        container.innerHTML = `<div style="text-align: center; color: var(--text-secondary); padding: 40px;">Click "Analyze" to trace attack paths for <strong>${repo.name || repo.path}</strong> (${findingCount} findings).</div>`;
+        state.attackPaths = []; // Clear cached paths
+      } else if (state.repos.length > 0) {
+        // No repo selected but repos exist - prompt user to select
+        btn.textContent = '🔍 Select a Repository First';
+        btn.disabled = true;
+        status.textContent = 'Select a scanned repository from the sidebar';
+        container.innerHTML = '<div style="text-align: center; color: var(--warning); padding: 40px;">Select a scanned repository from the sidebar to analyze attack paths.</div>';
       } else {
         btn.textContent = '🔍 Analyze Attack Paths (No Scan Data)';
         btn.disabled = true;
+        status.textContent = 'No scan data available';
+        container.innerHTML = '<div style="text-align: center; color: var(--warning); padding: 40px;">No findings to analyze. Run a scan first.</div>';
       }
     }
 
@@ -3481,12 +3553,15 @@
       const status = document.getElementById('attackStatus');
       const mitreContainer = document.getElementById('mitreMatrix');
 
-      // Get findings from selected repo or last scan
+      // Get findings from currently selected repo only
       const repo = state.repos.find(r => r.id === state.selectedRepo);
-      const findings = repo?.findings || lastScanFindings;
+      const findings = repo?.findings;
+
+      console.log('[AttackPaths] Analyzing - repo:', repo?.name, 'findings count:', findings?.length);
 
       if (!findings || findings.length === 0) {
-        container.innerHTML = '<div style="text-align: center; color: var(--warning); padding: 40px;">No findings to analyze. Run a scan first.</div>';
+        container.innerHTML = '<div style="text-align: center; color: var(--warning); padding: 40px;">No findings to analyze. Select a scanned repository first.</div>';
+        status.textContent = 'No findings available';
         return;
       }
 
@@ -3518,6 +3593,7 @@
 
         // Render attack paths
         const paths = traceData.result?.paths || traceData.result?.attackPaths || [];
+        state.attackPaths = paths; // Store for simulate/report functions
         if (paths.length === 0) {
           container.innerHTML = '<div style="text-align: center; color: var(--success); padding: 40px;">✅ No exploitable attack paths found</div>';
         } else {
@@ -3588,12 +3664,178 @@
     window.analyzeAttackPaths = analyzeAttackPaths;
 
     async function simulateAttack(pathIndex) {
-      alert('Attack simulation coming soon! This will run a safe, sandboxed simulation of the attack chain.');
+      const path = state.attackPaths[pathIndex];
+      if (!path) {
+        alert('Attack path not found. Please re-run the analysis.');
+        return;
+      }
+
+      // Create modal for simulation results
+      const modal = document.createElement('div');
+      modal.className = 'modal-overlay';
+      modal.innerHTML = `
+        <div class="modal-content" style="max-width: 700px;">
+          <div class="modal-header">
+            <h3>🎭 Attack Simulation: ${path.name || 'Attack Chain'}</h3>
+            <button onclick="this.closest('.modal-overlay').remove()" style="background: none; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer;">&times;</button>
+          </div>
+          <div class="modal-body" id="simulationResults">
+            <div style="text-align: center; padding: 40px;">
+              <div class="loader"></div>
+              <p style="margin-top: 16px; color: var(--text-secondary);">Running sandboxed simulation...</p>
+              <p style="font-size: 12px; color: var(--text-muted);">Testing ${path.nodes?.length || 0} attack steps</p>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+
+      try {
+        // Extract findings from the path nodes
+        const findings = (path.nodes || []).map(node => ({
+          id: node.findingId || node.id,
+          type: node.name || node.type,
+          severity: node.severity || 'medium',
+          description: node.description,
+          file: node.file,
+          technique: node.technique
+        }));
+
+        const response = await fetch(`${RED_TEAM_URL}/tools`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tool: 'bulk-validate',
+            arguments: {
+              findings: findings,
+              maxConcurrent: 2
+            }
+          })
+        });
+
+        const data = await response.json();
+        const results = data.result?.results || [];
+
+        const exploitable = results.filter(r => r.exploitable).length;
+        const validated = results.filter(r => r.validated).length;
+
+        document.getElementById('simulationResults').innerHTML = `
+          <div style="margin-bottom: 20px;">
+            <div style="display: flex; gap: 16px; margin-bottom: 16px;">
+              <div style="flex: 1; background: var(--bg-tertiary); padding: 16px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 28px; font-weight: bold; color: ${exploitable > 0 ? 'var(--critical)' : 'var(--success)'};">${exploitable}</div>
+                <div style="font-size: 12px; color: var(--text-secondary);">Exploitable</div>
+              </div>
+              <div style="flex: 1; background: var(--bg-tertiary); padding: 16px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 28px; font-weight: bold; color: var(--accent);">${validated}</div>
+                <div style="font-size: 12px; color: var(--text-secondary);">Validated</div>
+              </div>
+              <div style="flex: 1; background: var(--bg-tertiary); padding: 16px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 28px; font-weight: bold; color: var(--text-secondary);">${results.length - validated}</div>
+                <div style="font-size: 12px; color: var(--text-secondary);">Theoretical</div>
+              </div>
+            </div>
+            ${exploitable > 0 ? `
+              <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid var(--critical); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+                <strong style="color: var(--critical);">⚠️ Active Threat:</strong>
+                <span style="color: var(--text-secondary);">This attack chain has ${exploitable} confirmed exploitable step(s).</span>
+              </div>
+            ` : `
+              <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid var(--success); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+                <strong style="color: var(--success);">✅ Low Risk:</strong>
+                <span style="color: var(--text-secondary);">No steps in this chain were confirmed exploitable in your environment.</span>
+              </div>
+            `}
+          </div>
+          <div style="max-height: 300px; overflow-y: auto;">
+            ${results.map((r, i) => `
+              <div style="display: flex; align-items: center; gap: 12px; padding: 12px; background: var(--bg-tertiary); border-radius: 8px; margin-bottom: 8px;">
+                <span style="width: 24px; height: 24px; border-radius: 50%; background: ${r.exploitable ? 'var(--critical)' : r.validated ? 'var(--warning)' : 'var(--text-muted)'}; display: flex; align-items: center; justify-content: center; font-size: 12px;">${i + 1}</span>
+                <div style="flex: 1;">
+                  <div style="font-weight: 500;">${r.finding?.type || findings[i]?.type || 'Unknown'}</div>
+                  <div style="font-size: 12px; color: var(--text-secondary);">${r.reason || 'No details'}</div>
+                </div>
+                <span style="padding: 4px 8px; border-radius: 4px; font-size: 11px; background: ${r.exploitable ? 'var(--critical)' : r.validated ? 'var(--warning)' : 'var(--bg-secondary)'}; color: ${r.exploitable || r.validated ? 'white' : 'var(--text-secondary)'};">
+                  ${r.exploitable ? 'EXPLOITABLE' : r.validated ? 'VALIDATED' : 'THEORETICAL'}
+                </span>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      } catch (error) {
+        document.getElementById('simulationResults').innerHTML = `
+          <div style="text-align: center; padding: 40px; color: var(--critical);">
+            <div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>
+            <div>Simulation failed: ${error.message}</div>
+          </div>
+        `;
+      }
     }
     window.simulateAttack = simulateAttack;
 
     async function generateReport(pathIndex) {
-      alert('Report generation coming soon! This will generate a detailed attack path report in Markdown format.');
+      const path = state.attackPaths[pathIndex];
+      if (!path) {
+        alert('Attack path not found. Please re-run the analysis.');
+        return;
+      }
+
+      // Create modal for report
+      const modal = document.createElement('div');
+      modal.className = 'modal-overlay';
+
+      const nodes = path.nodes || [];
+      const edges = path.edges || [];
+      const techniques = path.mitreTechniques || [];
+
+      const reportContent = `# Attack Path Report: ${path.name || 'Attack Chain'}
+
+## Summary
+- **Risk Level:** ${path.risk || path.severity || 'HIGH'}
+- **Total Steps:** ${nodes.length}
+- **Success Probability:** ${path.totalProbability || 'Unknown'}%
+- **MITRE Techniques:** ${techniques.length > 0 ? techniques.join(', ') : 'None mapped'}
+
+## Attack Narrative
+${path.narrative || 'No narrative available.'}
+
+## Attack Steps
+
+${nodes.map((node, i) => `### Step ${i + 1}: ${node.name || node.type}
+- **Type:** ${node.type || 'Unknown'}
+- **Severity:** ${node.severity || 'medium'}
+- **MITRE Technique:** ${node.technique || 'N/A'}
+- **Description:** ${node.description || 'No description'}
+${node.file ? `- **File:** ${node.file}` : ''}
+`).join('\n')}
+
+## Pivot Actions
+${edges.map(edge => `- ${edge.action} (${edge.probability}% probability)`).join('\n') || 'No pivot actions recorded.'}
+
+## Recommendations
+1. Address the entry point vulnerability first (${nodes[0]?.name || 'first finding'})
+2. Implement defense-in-depth to break the chain at multiple points
+3. Monitor for indicators of compromise related to MITRE techniques: ${techniques.join(', ') || 'N/A'}
+
+---
+*Generated by Aura Security - Attack Path Analysis*
+*Report Date: ${new Date().toISOString()}*`;
+
+      modal.innerHTML = `
+        <div class="modal-content" style="max-width: 800px;">
+          <div class="modal-header">
+            <h3>📄 Attack Path Report</h3>
+            <div style="display: flex; gap: 8px;">
+              <button onclick="navigator.clipboard.writeText(this.closest('.modal-content').querySelector('pre').textContent).then(() => alert('Copied to clipboard!'))" style="background: var(--accent); border: none; color: white; padding: 8px 16px; border-radius: 4px; cursor: pointer;">📋 Copy</button>
+              <button onclick="this.closest('.modal-overlay').remove()" style="background: none; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer;">&times;</button>
+            </div>
+          </div>
+          <div class="modal-body">
+            <pre style="background: var(--bg-tertiary); padding: 16px; border-radius: 8px; overflow: auto; max-height: 500px; white-space: pre-wrap; font-size: 13px; line-height: 1.6;">${reportContent}</pre>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
     }
     window.generateReport = generateReport;
 

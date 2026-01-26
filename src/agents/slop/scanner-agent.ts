@@ -198,6 +198,26 @@ export class ScannerAgent extends SLOPAgent {
     const findings: Finding[] = [];
     const tempFile = `/tmp/gitleaks-${Date.now()}.json`;
 
+    // Patterns to exclude (false positives)
+    const excludePatterns = [
+      /\.secrets\.baseline$/,      // detect-secrets baseline files
+      /\.test\.[jt]sx?$/,          // Test files (.test.ts, .test.js, .test.tsx, .test.jsx)
+      /\.spec\.[jt]sx?$/,          // Spec files (.spec.ts, .spec.js)
+      /test\.py$/,                 // Python test files
+      /_test\.go$/,                // Go test files
+      /\.fuzz\.test\.[jt]s$/,      // Fuzz test files
+      /\/tests?\//i,               // Files in test directories
+      /\/fixtures?\//i,            // Test fixtures
+      /\/mocks?\//i,               // Mock files
+    ];
+
+    // Rule + path combinations to exclude (documentation examples)
+    const excludeRulePaths = [
+      { rule: /curl-auth-header/, path: /\.md$/ },       // curl examples in docs
+      { rule: /generic-api-key/, path: /\.md$/ },        // API key examples in docs
+      { rule: /generic-api-key/, path: /\.example$/ },   // Example files
+    ];
+
     try {
       // Gitleaks exits with code 1 when it finds leaks - that's not an error!
       const result = await this.executeCommand('gitleaks', ['detect', '--source', target, '--report-format', 'json', '--report-path', tempFile, '--no-git']);
@@ -211,7 +231,23 @@ export class ScannerAgent extends SLOPAgent {
         if (jsonContent && jsonContent.trim()) {
           const gitleaksFindings = JSON.parse(jsonContent);
           if (Array.isArray(gitleaksFindings)) {
+            let skipped = 0;
             for (const f of gitleaksFindings) {
+              const filePath = f.File || '';
+              const ruleId = f.RuleID || f.Rule || f.rule || '';
+
+              // Skip files matching exclusion patterns
+              if (excludePatterns.some(pattern => pattern.test(filePath))) {
+                skipped++;
+                continue;
+              }
+
+              // Skip rule+path combinations (documentation examples)
+              if (excludeRulePaths.some(({ rule, path }) => rule.test(ruleId) && path.test(filePath))) {
+                skipped++;
+                continue;
+              }
+
               findings.push({
                 id: `gitleaks-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
                 type: 'secret',
@@ -223,7 +259,7 @@ export class ScannerAgent extends SLOPAgent {
                 metadata: { rule: f.RuleID || f.Rule || f.rule, match: f.Match?.substring(0, 100) },
               });
             }
-            console.log(`[Scanner] Gitleaks found ${findings.length} secrets`);
+            console.log(`[Scanner] Gitleaks found ${findings.length} secrets (${skipped} filtered as false positives)`);
           }
         }
       }

@@ -133,6 +133,7 @@ const TEST_FILE_PATTERNS = [
   /\.sample$/i,
   /\.test\./i,
   /\.spec\./i,
+  /\.fuzz\.test\./i,                              // Fuzz test files
   /example\d*\.(key|pem|jwt|crt|p12|pfx)$/i,
   /test\d*\.(key|pem|jwt|crt|p12|pfx)$/i,
   /sample\d*\.(key|pem|jwt|crt|p12|pfx)$/i,
@@ -140,6 +141,10 @@ const TEST_FILE_PATTERNS = [
   /dummy[-_]?(key|secret|token|credential)/i,
   /mock[-_]?(key|secret|token|credential)/i,
   /temporary[-_]?key/i,
+  /\.secrets\.baseline$/i,                        // detect-secrets baseline files
+  /\/tests?\//i,                                  // Files in test directories
+  /\/fixtures?\//i,                               // Test fixtures
+  /\/mocks?\//i,                                  // Mock files
 ];
 
 // Rules to completely skip - too many false positives to be useful
@@ -161,6 +166,10 @@ const SKIP_RULES_IN_FILE_TYPES: Record<string, string[]> = {
   '.hpp': ['generic-api-key'],
   '.c': ['generic-api-key', 'sourcegraph-access-token'],
   '.cpp': ['generic-api-key'],
+  // Documentation often has example curl commands with placeholder auth headers
+  '.md': ['generic-api-key', 'curl-auth-header'],
+  '.rst': ['generic-api-key', 'curl-auth-header'],
+  '.txt': ['generic-api-key'],
 };
 
 // Run gitleaks for secrets detection

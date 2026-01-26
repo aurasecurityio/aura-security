@@ -1,13 +1,61 @@
 // AuraSecurity Telegram Bot - Rug Check + X Profile Check
 // Lambda function for t.me/aurasecuritychecker_bot
+//
+// RELIABILITY: This bot is mission-critical. It includes:
+// - Retry logic with exponential backoff
+// - Fallback API URLs
+// - Graceful error handling
+// - Request timeouts
 
 import https from 'https';
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const X_BEARER_TOKEN = process.env.X_BEARER_TOKEN;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-const AURA_API_URL = process.env.AURA_API_URL || 'https://app.aurasecurity.io';
+
+// Primary and fallback API URLs for reliability
+const AURA_API_PRIMARY = process.env.AURA_API_URL || 'https://app.aurasecurity.io';
+const AURA_API_FALLBACK = 'https://app.aurasecurity.io'; // Same for now, can add backup server later
+const AURA_API_URL = AURA_API_PRIMARY;
+
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
+
+// Retry configuration
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 1000;
+
+// Retry wrapper with exponential backoff
+async function withRetry(fn, maxRetries = MAX_RETRIES, delayMs = RETRY_DELAY_MS) {
+  let lastError;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      console.log(`Attempt ${attempt}/${maxRetries} failed:`, error.message);
+      if (attempt < maxRetries) {
+        const delay = delayMs * Math.pow(2, attempt - 1); // Exponential backoff
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  throw lastError;
+}
+
+// Safe message sender - never throws, always logs
+async function safeSendMessage(chatId, text, parseMode = 'Markdown') {
+  try {
+    return await sendMessage(chatId, text, parseMode);
+  } catch (error) {
+    console.error('Failed to send message:', error.message);
+    // Try plain text as fallback (in case Markdown parsing fails)
+    try {
+      return await sendMessage(chatId, text.replace(/[*_`\[\]]/g, ''), null);
+    } catch (e) {
+      console.error('Failed to send plain text fallback:', e.message);
+    }
+  }
+}
 
 // Scam/red flag keywords
 const SCAM_KEYWORDS = ['airdrop', 'giveaway', 'dm me', 'limited spots', '100x', '1000x', 'guaranteed', 'free money', 'act now', 'last chance', 'whitelist', 'presale'];
@@ -92,10 +140,10 @@ async function fetchJson(url) {
   }
 }
 
-// Call Aura Security Scanner API
-async function callAuraScan(gitUrl) {
+// Call Aura Security Scanner API (internal - use callAuraScanWithRetry)
+async function callAuraScanInternal(gitUrl, apiUrl = AURA_API_PRIMARY) {
   return new Promise((resolve, reject) => {
-    const apiUrl = new URL(`${AURA_API_URL}/tools`);
+    const url = new URL(`${apiUrl}/tools`);
     const payload = JSON.stringify({
       tool: 'scan-local',
       arguments: {
@@ -106,9 +154,9 @@ async function callAuraScan(gitUrl) {
     });
 
     const options = {
-      hostname: apiUrl.hostname,
-      port: apiUrl.port || 443,
-      path: apiUrl.pathname,
+      hostname: url.hostname,
+      port: url.port || 443,
+      path: url.pathname,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -117,7 +165,7 @@ async function callAuraScan(gitUrl) {
       }
     };
 
-    console.log('Calling Aura API:', AURA_API_URL, 'for', gitUrl);
+    console.log('Calling Aura API:', apiUrl, 'for', gitUrl);
 
     const req = https.request(options, (res) => {
       let data = '';
@@ -144,14 +192,37 @@ async function callAuraScan(gitUrl) {
     });
 
     // Set timeout for scan (can take a while)
-    req.setTimeout(120000, () => {
+    req.setTimeout(180000, () => { // Increased to 3 minutes
       req.destroy();
-      reject(new Error('Scan timed out (2 min limit)'));
+      reject(new Error('Scan timed out (3 min limit)'));
     });
 
     req.write(payload);
     req.end();
   });
+}
+
+// Call Aura API with retry and fallback
+async function callAuraScan(gitUrl) {
+  try {
+    // Try primary with retry
+    return await withRetry(() => callAuraScanInternal(gitUrl, AURA_API_PRIMARY), 2, 2000);
+  } catch (primaryError) {
+    console.error('Primary API failed after retries:', primaryError.message);
+
+    // Try fallback if different from primary
+    if (AURA_API_FALLBACK !== AURA_API_PRIMARY) {
+      console.log('Trying fallback API:', AURA_API_FALLBACK);
+      try {
+        return await withRetry(() => callAuraScanInternal(gitUrl, AURA_API_FALLBACK), 2, 2000);
+      } catch (fallbackError) {
+        console.error('Fallback API also failed:', fallbackError.message);
+      }
+    }
+
+    // All attempts failed
+    throw new Error('Scanner temporarily unavailable. Please try again in a few minutes.');
+  }
 }
 
 // Call Claude API for AI analysis
@@ -1961,6 +2032,26 @@ function formatCombinedResult(profile, xScore, gitResult) {
 // Main handler
 export async function handler(event) {
   console.log('Event:', JSON.stringify(event));
+
+  // Health check endpoint - for uptime monitoring
+  if (event.path === '/health' || event.rawPath === '/health' || event.httpMethod === 'GET') {
+    const healthCheck = {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      version: '1.1.0',
+      services: {
+        telegram: BOT_TOKEN ? 'configured' : 'missing',
+        twitter: X_BEARER_TOKEN ? 'configured' : 'missing',
+        claude: ANTHROPIC_API_KEY ? 'configured' : 'missing',
+        aura_api: AURA_API_PRIMARY
+      }
+    };
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(healthCheck)
+    };
+  }
 
   try {
     const body = typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
