@@ -60,7 +60,7 @@ export interface AgentMessage {
 // Finding types for inter-agent communication
 export interface Finding {
   id: string;
-  type: 'secret' | 'vulnerability' | 'code-issue' | 'iac' | 'docker';
+  type: string;
   severity: 'critical' | 'high' | 'medium' | 'low';
   title: string;
   description: string;
@@ -70,7 +70,50 @@ export interface Finding {
   version?: string;
   cve?: string;
   cwe?: string;
+  rule?: string;
+  scanner?: string;
+  message?: string; // Alternative to description (from some scanners)
   metadata?: Record<string, unknown>;
+}
+
+// Flexible finding type for external inputs (from scanners)
+export interface ExternalFinding {
+  id?: string;
+  type: string;
+  severity?: 'critical' | 'high' | 'medium' | 'low';
+  title?: string;
+  description?: string;
+  message?: string;
+  file?: string;
+  line?: number;
+  package?: string;
+  version?: string;
+  cve?: string;
+  cwe?: string;
+  rule?: string;
+  scanner?: string;
+  metadata?: Record<string, unknown>;
+}
+
+// Helper to convert external finding to internal format
+export function normalizeFinding(f: ExternalFinding): Finding {
+  return {
+    id: f.id || `finding-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    type: f.type,
+    severity: f.severity || 'medium',
+    title: f.title || f.type || 'Unknown Finding',
+    description: f.description || f.message || '',
+    file: f.file,
+    line: f.line,
+    package: f.package,
+    version: f.version,
+    cve: f.cve,
+    cwe: f.cwe,
+    rule: f.rule,
+    scanner: f.scanner,
+    message: f.message,
+    metadata: f.metadata,
+  };
 }
 
 export interface TriageResult {

@@ -19,6 +19,8 @@ import {
   SLOPToolCall,
   SLOPToolResult,
   Finding,
+  ExternalFinding,
+  normalizeFinding,
 } from './types.js';
 
 // Chain Mapper Types
@@ -84,7 +86,7 @@ export interface SimulationStep {
   timeEstimate: string;
 }
 
-// MITRE ATT&CK mapping for common finding types
+// MITRE ATT&CK mapping for finding categories
 const MITRE_MAPPING: Record<string, { technique: string; tactic: string }[]> = {
   'secret': [
     { technique: 'T1552.001', tactic: 'Credential Access - Credentials In Files' },
@@ -98,6 +100,16 @@ const MITRE_MAPPING: Record<string, { technique: string; tactic: string }[]> = {
     { technique: 'T1059', tactic: 'Execution - Command and Scripting Interpreter' },
     { technique: 'T1055', tactic: 'Defense Evasion - Process Injection' },
   ],
+  'injection': [
+    { technique: 'T1190', tactic: 'Initial Access - Exploit Public-Facing Application' },
+    { technique: 'T1059', tactic: 'Execution - Command and Scripting Interpreter' },
+    { technique: 'T1027', tactic: 'Defense Evasion - Obfuscated Files' },
+  ],
+  'auth': [
+    { technique: 'T1078', tactic: 'Persistence - Valid Accounts' },
+    { technique: 'T1110', tactic: 'Credential Access - Brute Force' },
+    { technique: 'T1548', tactic: 'Privilege Escalation - Abuse Elevation Control' },
+  ],
   'docker': [
     { technique: 'T1611', tactic: 'Privilege Escalation - Escape to Host' },
     { technique: 'T1610', tactic: 'Execution - Deploy Container' },
@@ -105,6 +117,15 @@ const MITRE_MAPPING: Record<string, { technique: string; tactic: string }[]> = {
   'iac': [
     { technique: 'T1538', tactic: 'Discovery - Cloud Service Dashboard' },
     { technique: 'T1580', tactic: 'Discovery - Cloud Infrastructure Discovery' },
+  ],
+  'escalation': [
+    { technique: 'T1548', tactic: 'Privilege Escalation - Abuse Elevation Control' },
+    { technique: 'T1068', tactic: 'Privilege Escalation - Exploitation for Privilege Escalation' },
+  ],
+  'data': [
+    { technique: 'T1005', tactic: 'Collection - Data from Local System' },
+    { technique: 'T1039', tactic: 'Collection - Data from Network Shared Drive' },
+    { technique: 'T1567', tactic: 'Exfiltration - Exfiltration Over Web Service' },
   ],
 };
 
@@ -241,17 +262,21 @@ export class ChainMapperAgent extends SLOPAgent {
   async handleToolCall(call: SLOPToolCall): Promise<SLOPToolResult> {
     const { tool, arguments: args } = call;
 
+    // Normalize external findings to internal format
+    const normalizeFindings = (findings: ExternalFinding[]): Finding[] =>
+      (findings || []).map(normalizeFinding);
+
     try {
       switch (tool) {
         case 'trace-path':
           return { result: await this.tracePath(
-            args.findings as Finding[],
+            normalizeFindings(args.findings as ExternalFinding[]),
             args.entryPoint as string | undefined,
             args.maxDepth as number | undefined
           )};
 
         case 'find-pivots':
-          return { result: await this.findPivots(args.findings as Finding[]) };
+          return { result: await this.findPivots(normalizeFindings(args.findings as ExternalFinding[])) };
 
         case 'simulate-attack':
           return { result: await this.simulateAttack(
@@ -261,18 +286,18 @@ export class ChainMapperAgent extends SLOPAgent {
 
         case 'generate-report':
           return { result: await this.generateReport(
-            args.findings as Finding[],
+            normalizeFindings(args.findings as ExternalFinding[]),
             args.format as string | undefined
           )};
 
         case 'analyze-blast-radius':
           return { result: await this.analyzeBlastRadius(
-            args.finding as Finding,
+            normalizeFinding(args.finding as ExternalFinding),
             args.context as Record<string, unknown> | undefined
           )};
 
         case 'map-mitre':
-          return { result: await this.mapToMitre(args.findings as Finding[]) };
+          return { result: await this.mapToMitre(normalizeFindings(args.findings as ExternalFinding[])) };
 
         default:
           return { error: `Unknown tool: ${tool}` };
@@ -295,10 +320,13 @@ export class ChainMapperAgent extends SLOPAgent {
     // Find entry points (secrets and high-severity vulns are common entries)
     const entryPoints = entryPoint
       ? findings.filter(f => f.id === entryPoint)
-      : findings.filter(f =>
-          f.type === 'secret' ||
-          (f.type === 'vulnerability' && f.severity === 'critical')
-        );
+      : findings.filter(f => {
+          const category = this.categorizeType(f.type);
+          return category === 'secret' ||
+            category === 'injection' ||
+            (category === 'vulnerability' && f.severity === 'critical') ||
+            f.severity === 'critical';
+        });
 
     if (entryPoints.length === 0 && findings.length > 0) {
       // Use highest severity as entry
@@ -546,7 +574,8 @@ export class ChainMapperAgent extends SLOPAgent {
     const allTactics = new Set<string>();
 
     for (const finding of findings) {
-      const techniques = MITRE_MAPPING[finding.type] || [];
+      const category = this.categorizeType(finding.type);
+      const techniques = MITRE_MAPPING[category] || [];
       mappings.push({ finding, techniques });
 
       for (const t of techniques) {
@@ -618,29 +647,96 @@ export class ChainMapperAgent extends SLOPAgent {
   }
 
   private findingToNode(finding: Finding, type: AttackNode['type']): AttackNode {
+    const category = this.categorizeType(finding.type);
     return {
-      id: finding.id,
+      id: finding.id || `finding-${Math.random().toString(36).slice(2, 9)}`,
       findingId: finding.id,
       type,
-      name: finding.title,
-      description: finding.description,
-      technique: MITRE_MAPPING[finding.type]?.[0]?.technique,
-      severity: finding.severity,
-      exploitability: this.severityScore(finding.severity) * 10,
+      name: finding.title || finding.type || 'Unknown Finding',
+      description: finding.description || (finding as any).message || '',
+      technique: MITRE_MAPPING[category]?.[0]?.technique,
+      severity: finding.severity || 'medium',
+      exploitability: this.severityScore(finding.severity || 'medium') * 10,
+      metadata: { originalType: finding.type, category },
     };
   }
 
   private canConnect(from: Finding, to: Finding): boolean {
-    // Define connection rules
+    const fromCategory = this.categorizeType(from.type);
+    const toCategory = this.categorizeType(to.type);
+
+    // Define connection rules between categories
     const connections: Record<string, string[]> = {
-      'secret': ['vulnerability', 'code-issue', 'iac'],
-      'vulnerability': ['code-issue', 'docker', 'secret'],
-      'code-issue': ['vulnerability', 'secret'],
-      'docker': ['vulnerability', 'iac'],
-      'iac': ['secret', 'vulnerability'],
+      'secret': ['vulnerability', 'code-issue', 'iac', 'auth', 'injection'],
+      'vulnerability': ['code-issue', 'docker', 'secret', 'escalation', 'data'],
+      'code-issue': ['vulnerability', 'secret', 'injection', 'data'],
+      'injection': ['data', 'auth', 'escalation', 'code-issue'],
+      'auth': ['data', 'escalation', 'secret'],
+      'docker': ['vulnerability', 'iac', 'escalation'],
+      'iac': ['secret', 'vulnerability', 'escalation'],
+      'escalation': ['data', 'secret', 'vulnerability'],
+      'data': ['secret'],
     };
 
-    return connections[from.type]?.includes(to.type) || false;
+    return connections[fromCategory]?.includes(toCategory) || false;
+  }
+
+  private categorizeType(type: string): string {
+    const t = type.toLowerCase();
+
+    // Secrets
+    if (t.includes('secret') || t.includes('credential') || t.includes('key') ||
+        t.includes('token') || t.includes('password') || t.includes('api-key') ||
+        t.includes('aws') || t.includes('private-key')) {
+      return 'secret';
+    }
+
+    // Injection vulnerabilities
+    if (t.includes('injection') || t.includes('sqli') || t.includes('xss') ||
+        t.includes('xxe') || t.includes('ssti') || t.includes('command-injection') ||
+        t.includes('code-injection') || t.includes('rce') || t.includes('eval')) {
+      return 'injection';
+    }
+
+    // Authentication/Authorization issues
+    if (t.includes('auth') || t.includes('bypass') || t.includes('broken-access') ||
+        t.includes('idor') || t.includes('privilege') || t.includes('session') ||
+        t.includes('jwt') || t.includes('csrf')) {
+      return 'auth';
+    }
+
+    // Docker/Container issues
+    if (t.includes('docker') || t.includes('container') || t.includes('kubernetes') ||
+        t.includes('k8s') || t.includes('helm')) {
+      return 'docker';
+    }
+
+    // Infrastructure as Code
+    if (t.includes('iac') || t.includes('terraform') || t.includes('cloudformation') ||
+        t.includes('misconfiguration') || t.includes('s3') || t.includes('cloud')) {
+      return 'iac';
+    }
+
+    // Privilege escalation
+    if (t.includes('escalation') || t.includes('privesc') || t.includes('root') ||
+        t.includes('admin') || t.includes('sudo')) {
+      return 'escalation';
+    }
+
+    // Data exposure
+    if (t.includes('data') || t.includes('leak') || t.includes('exposure') ||
+        t.includes('sensitive') || t.includes('pii') || t.includes('ssrf')) {
+      return 'data';
+    }
+
+    // Vulnerabilities (CVEs, dependencies)
+    if (t.includes('vuln') || t.includes('cve') || t.includes('dependency') ||
+        t.includes('outdated') || t.includes('package')) {
+      return 'vulnerability';
+    }
+
+    // Default to code-issue for SAST findings
+    return 'code-issue';
   }
 
   private getConnectionAction(from: Finding, to: Finding): string {
