@@ -30,7 +30,12 @@
     "demo:agents": "tsx src/agents/slop/demo.ts",
     "agent:coordinator": "tsx src/agents/slop/coordinator-agent.ts",
     "agent:scanner": "tsx src/agents/slop/scanner-agent.ts",
-    "agent:analyst": "tsx src/agents/slop/analyst-agent.ts"
+    "agent:analyst": "tsx src/agents/slop/analyst-agent.ts",
+    "swarm": "tsx src/agents/slop/swarm.ts",
+    "swarm:full": "tsx src/agents/slop/swarm.ts --full",
+    "swarm:phase2": "tsx src/agents/slop/swarm.ts --phase2",
+    "swarm:phase3": "tsx src/agents/slop/swarm.ts --phase3",
+    "swarm:scan": "tsx src/agents/slop/swarm.ts --scan"
   },
   "keywords": [
     "security",
