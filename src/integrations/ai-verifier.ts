@@ -26,10 +26,16 @@ const AI_LIBRARIES = {
 // Model file extensions
 const MODEL_EXTENSIONS = ['.pt', '.pth', '.onnx', '.safetensors', '.bin', '.gguf', '.ggml', '.h5', '.keras', '.pkl'];
 
-// AI-related file patterns
-const AI_FILE_PATTERNS = [
-  /model/i, /train/i, /inference/i, /predict/i, /embed/i,
+// Strong AI file patterns (definitely ML/AI related)
+const STRONG_AI_PATTERNS = [
   /llm/i, /gpt/i, /bert/i, /transformer/i, /neural/i,
+  /diffusion/i, /embedding/i, /vector.*store/i, /rag/i,
+  /fine.*tun/i, /lora/i, /qlora/i, /tokeniz/i
+];
+
+// Weak AI file patterns (could be generic software terms)
+const WEAK_AI_PATTERNS = [
+  /model/i, /train/i, /inference/i, /predict/i, /embed/i,
   /agent/i, /chat/i, /completion/i, /prompt/i
 ];
 
@@ -183,15 +189,26 @@ export async function performAIVerification(gitUrl: string): Promise<AIVerifyRes
     }
   }
 
-  // Check for AI-related code files
+  // Check for AI-related code files (separate strong vs weak matches)
   const codeFiles = files.filter(f =>
     f.path.endsWith('.py') || f.path.endsWith('.ts') || f.path.endsWith('.js') || f.path.endsWith('.rs')
   );
 
+  let strongAIFileCount = 0;
+  let weakAIFileCount = 0;
+
   for (const file of codeFiles) {
-    if (AI_FILE_PATTERNS.some(p => p.test(file.path))) {
+    const isStrongMatch = STRONG_AI_PATTERNS.some(p => p.test(file.path));
+    const isWeakMatch = WEAK_AI_PATTERNS.some(p => p.test(file.path));
+
+    if (isStrongMatch) {
       evidence.aiCodeFiles.push(file.path);
+      strongAIFileCount++;
+    } else if (isWeakMatch) {
+      // Only count weak matches as AI files if we have AI libraries
+      weakAIFileCount++;
     }
+
     if (/train/i.test(file.path)) {
       evidence.trainingScripts = true;
     }
@@ -236,7 +253,17 @@ export async function performAIVerification(gitUrl: string): Promise<AIVerifyRes
     greenFlags.push(`Contains ${evidence.modelFiles.length} model file(s)`);
   }
 
-  // AI code files
+  // AI code files (only strong matches count fully)
+  // Add weak matches to evidence only if we have AI libraries
+  if (evidence.aiLibraries.length > 0 && weakAIFileCount > 0) {
+    // We have AI libraries, so weak file patterns are likely real AI code
+    for (const file of codeFiles) {
+      if (WEAK_AI_PATTERNS.some(p => p.test(file.path)) && !evidence.aiCodeFiles.includes(file.path)) {
+        evidence.aiCodeFiles.push(file.path);
+      }
+    }
+  }
+
   if (evidence.aiCodeFiles.length >= 5) {
     aiScore += 20;
     greenFlags.push(`${evidence.aiCodeFiles.length} AI-related code files`);
@@ -307,8 +334,9 @@ export async function performAIVerification(gitUrl: string): Promise<AIVerifyRes
   } else if (aiScore >= 30) {
     verdict = 'UNCERTAIN';
     verdictEmoji = '🟡';
-  } else if (hasAIInName && aiScore < 30) {
-    // Only call it "HYPE ONLY" if the repo CLAIMS to be AI but has no evidence
+  } else if (hasAIInName && aiScore < 30 && evidence.aiLibraries.length === 0 && strongAIFileCount === 0) {
+    // Only call it "HYPE ONLY" if the repo CLAIMS to be AI but has NO real evidence
+    // (no AI libraries AND no strong AI file patterns like llm/gpt/bert/transformer)
     verdict = 'HYPE ONLY';
     verdictEmoji = '🟠';
   } else {
@@ -332,10 +360,13 @@ export async function performAIVerification(gitUrl: string): Promise<AIVerifyRes
     summary = 'Claims to be AI but lacks actual AI libraries or code. Potential red flag for AI-branded projects. ';
     if (redFlags.length > 0) summary += redFlags[0] + '. ';
   } else {
-    // NOT AI - neutral message
-    summary = 'This is not an AI/ML project. No AI libraries or models detected. ';
-    if (evidence.aiCodeFiles.length > 0) {
-      summary += `Found ${evidence.aiCodeFiles.length} files with AI-related names (likely unrelated to ML). `;
+    // NOT AI - neutral message for non-AI projects
+    summary = 'This project is not primarily an AI/ML project. ';
+    if (evidence.aiLibraries.length === 0) {
+      summary += 'No ML libraries detected. ';
+    }
+    if (weakAIFileCount > 0) {
+      summary += `Has ${weakAIFileCount} files with generic names (agent/model/chat - common in non-AI software). `;
     }
   }
 
