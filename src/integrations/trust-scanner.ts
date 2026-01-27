@@ -513,12 +513,22 @@ function scanForSecrets(content: string): number {
  * Main trust scan function
  */
 export async function performTrustScan(gitUrl: string): Promise<TrustScanResult> {
+  // Security: Validate URL doesn't contain dangerous characters
+  if (/[;&|`$(){}[\]<>\s]/.test(gitUrl)) {
+    throw new Error('Invalid characters in URL');
+  }
+
   const parsed = parseGitHubUrl(gitUrl);
   if (!parsed) {
     throw new Error('Invalid GitHub URL. Use format: https://github.com/owner/repo');
   }
 
   const { owner, repo } = parsed;
+
+  // Security: Validate owner/repo names are alphanumeric with hyphens/underscores only
+  if (!/^[\w\-\.]+$/.test(owner) || !/^[\w\-\.]+$/.test(repo)) {
+    throw new Error('Invalid repository name');
+  }
   const headers: Record<string, string> = {
     'User-Agent': 'AuraSecurity-RugCheck',
     'Accept': 'application/vnd.github.v3+json',

@@ -2213,9 +2213,37 @@ export interface RemoteScanResult extends LocalScanResult {
   scanDuration: number;
 }
 
+// Validate Git URL to prevent injection attacks
+function isValidGitUrl(url: string): boolean {
+  // Only allow HTTPS URLs from known Git providers
+  const validPatterns = [
+    /^https:\/\/github\.com\/[\w\-\.]+\/[\w\-\.]+(?:\.git)?$/,
+    /^https:\/\/gitlab\.com\/[\w\-\.]+\/[\w\-\.]+(?:\.git)?$/,
+    /^https:\/\/bitbucket\.org\/[\w\-\.]+\/[\w\-\.]+(?:\.git)?$/,
+  ];
+
+  // Block dangerous patterns
+  const dangerousPatterns = [
+    /[;&|`$(){}[\]<>]/,  // Shell metacharacters
+    /\.\./,              // Path traversal
+    /\s/,                // Whitespace
+  ];
+
+  if (dangerousPatterns.some(p => p.test(url))) {
+    return false;
+  }
+
+  return validPatterns.some(p => p.test(url));
+}
+
 // Clone a git repo and scan it
 export async function scanRemoteGit(config: RemoteScanConfig): Promise<RemoteScanResult> {
   const { gitUrl, branch = 'main', depth = 1 } = config;
+
+  // Security: Validate Git URL before cloning
+  if (!isValidGitUrl(gitUrl)) {
+    throw new Error('Invalid Git URL. Only HTTPS URLs from GitHub, GitLab, or Bitbucket are allowed.');
+  }
 
   console.log(`[SCANNER] Cloning remote repo: ${gitUrl}`);
 
