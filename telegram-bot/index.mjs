@@ -2307,10 +2307,12 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         `*Commands:*\n` +
         `/rugcheck <github-url> - Trust score for repo\n` +
         `/scan <github-url> - Full security scan\n` +
+        `/scamcheck <github-url> - Detect scam patterns\n` +
         `/devcheck <@username> - Full dev audit (identity + security)\n` +
         `/xcheck <@username> - Same as devcheck\n\n` +
         `*Example:*\n` +
         `/scan https://github.com/ethereum/go-ethereum\n` +
+        `/scamcheck https://github.com/owner/repo\n` +
         `/devcheck @VitalikButerin\n\n` +
         `_Powered by [AuraSecurity](https://aurasecurity.io)_`
       );
@@ -2322,6 +2324,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         `*Commands:*\n` +
         `/rugcheck <url> - Trust score for repo\n` +
         `/scan <url> - Full security scan (secrets, vulns)\n` +
+        `/scamcheck <url> - Detect rug pulls & scam patterns\n` +
         `/devcheck <@user> - Full dev audit (identity + security)\n` +
         `/xcheck <@user> - Same as devcheck\n\n` +
         `*What I check:*\n\n` +
@@ -2511,6 +2514,83 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         await sendMessage(chatId, result.text, 'Markdown', { inline_keyboard: buttons });
       } catch (err) {
         await sendMessage(chatId, `\u274C Error: ${err.message}`);
+      }
+    }
+    // /scamcheck command - Detect scam patterns
+    else if (text.startsWith('/scamcheck')) {
+      const url = text.replace(/^\/scamcheck(@[a-zA-Z0-9_]+)?/i, '').trim();
+
+      if (!url) {
+        await sendMessage(chatId, `\u274C Please provide a GitHub URL.\n\n*Example:*\n/scamcheck https://github.com/owner/repo`);
+        return { statusCode: 200, body: 'OK' };
+      }
+
+      if (!url.includes('github.com')) {
+        await sendMessage(chatId, `\u274C Only GitHub URLs are supported.`);
+        return { statusCode: 200, body: 'OK' };
+      }
+
+      await sendMessage(chatId, `\u{1F50D} Scanning for scam patterns...\n_Checking for rug pulls, honeypots, wallet drainers..._`);
+
+      try {
+        const result = await withRetry(async () => {
+          const response = await fetch(`${AURA_API_URL}/tools`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tool: 'scam-scan', arguments: { gitUrl: url } })
+          });
+          if (!response.ok) throw new Error(`API error: ${response.status}`);
+          return response.json();
+        });
+
+        const scam = result.result || result;
+
+        // Format scam check result
+        let emoji = '\u2705'; // ✅
+        if (scam.isLikelyScam || scam.riskLevel === 'critical') {
+          emoji = '\u{1F6A8}'; // 🚨
+        } else if (scam.riskLevel === 'high') {
+          emoji = '\u26A0\uFE0F'; // ⚠️
+        } else if (scam.riskLevel === 'medium') {
+          emoji = '\u{1F7E1}'; // 🟡
+        }
+
+        let text = `${emoji} *Scam Check: ${scam.repoName || 'Unknown'}*\n\n`;
+        text += `*Scam Score:* ${scam.scamScore || 0}/100\n`;
+        text += `*Risk Level:* ${(scam.riskLevel || 'unknown').toUpperCase()}\n`;
+        text += `*Likely Scam:* ${scam.isLikelyScam ? '\u{1F6A8} YES' : '\u2705 NO'}\n\n`;
+
+        if (scam.summary) {
+          text += `*Summary:* ${scam.summary}\n\n`;
+        }
+
+        // Show red flags
+        const redFlags = scam.redFlags || [];
+        if (redFlags.length > 0) {
+          text += `*Red Flags Found:*\n`;
+          redFlags.slice(0, 5).forEach(flag => {
+            text += `\u274C ${flag}\n`;
+          });
+          text += '\n';
+        }
+
+        // Show matched patterns
+        const matches = scam.matches || [];
+        if (matches.length > 0) {
+          text += `*Known Scam Patterns Matched:*\n`;
+          matches.slice(0, 3).forEach(m => {
+            text += `\u{1F6A9} *${m.signatureName}* (${m.severity})\n`;
+            text += `   ${m.description}\n`;
+          });
+          text += '\n';
+        }
+
+        text += `_Always DYOR! Not financial advice._`;
+
+        await sendMessage(chatId, text);
+      } catch (err) {
+        console.error('Scam check error:', err);
+        await sendMessage(chatId, `\u274C Scam check failed: ${err.message}`);
       }
     }
     // Auto-detect URLs/usernames

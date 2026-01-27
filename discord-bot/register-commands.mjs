@@ -78,6 +78,18 @@ const commands = [
     ]
   },
   {
+    name: 'scamcheck',
+    description: 'Detect known scam patterns, rug pull templates, and honeypot code',
+    options: [
+      {
+        name: 'repo',
+        description: 'GitHub repository URL (e.g., https://github.com/owner/repo)',
+        type: 3,
+        required: true
+      }
+    ]
+  },
+  {
     name: 'compare',
     description: 'Compare two repos side-by-side - which one to ape?',
     options: [

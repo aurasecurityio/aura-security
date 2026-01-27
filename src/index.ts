@@ -44,6 +44,7 @@ import { getWebSocketServer, type AuditorWebSocket } from './websocket/index.js'
 import { performTrustScan } from './integrations/trust-scanner.js';
 import { performXScan } from './integrations/x-scanner.js';
 import { performAIVerification } from './integrations/ai-verifier.js';
+import { detectScamPatterns, quickScamScan } from './integrations/scam-detector.js';
 
 const PORT = parseInt(process.env.AURA_PORT ?? '3000', 10);
 const WS_PORT = parseInt(process.env.WS_PORT ?? '3001', 10);
@@ -942,6 +943,140 @@ async function main(): Promise<void> {
     }
   });
 
+  // Register Scam Detection tool
+  server.registerTool({
+    name: 'scam-scan',
+    description: 'Detect known scam patterns, rug pull templates, and code similarity to known scams',
+    parameters: {
+      type: 'object',
+      required: ['gitUrl'],
+      properties: {
+        gitUrl: { type: 'string', description: 'GitHub repository URL to scan for scam patterns' }
+      }
+    },
+    handler: async (args) => {
+      try {
+        const gitUrl = args.gitUrl as string;
+        console.log(`[AURA] Starting scam detection for: ${gitUrl}`);
+
+        // Parse GitHub URL
+        const githubMatch = gitUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+        if (!githubMatch) {
+          throw new Error('Invalid GitHub URL');
+        }
+
+        const owner = githubMatch[1];
+        const repo = githubMatch[2].replace(/\.git$/, '');
+
+        const headers: Record<string, string> = {
+          'User-Agent': 'AuraSecurityBot/1.0',
+          'Accept': 'application/vnd.github.v3+json'
+        };
+        if (process.env.GITHUB_TOKEN) {
+          headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+        }
+
+        // Fetch repo tree
+        const repoRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers });
+        if (!repoRes.ok) {
+          throw new Error(`Failed to fetch repository: ${repoRes.status}`);
+        }
+        const repoData = await repoRes.json();
+
+        // Fetch file tree
+        const treeRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees/${repoData.default_branch}?recursive=1`, { headers });
+        let files: Array<{ path: string; type: string }> = [];
+        if (treeRes.ok) {
+          const treeData = await treeRes.json();
+          files = treeData.tree?.filter((f: { type: string }) => f.type === 'blob') || [];
+        }
+
+        // Fetch README
+        let readmeContent = '';
+        const readmeFile = files.find(f => f.path.toLowerCase().includes('readme'));
+        if (readmeFile) {
+          try {
+            const readmeRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${readmeFile.path}`, { headers });
+            if (readmeRes.ok) {
+              const readmeData = await readmeRes.json();
+              if (readmeData.content) {
+                readmeContent = Buffer.from(readmeData.content, 'base64').toString('utf-8');
+              }
+            }
+          } catch { /* skip */ }
+        }
+
+        // Quick scam scan on file names and README
+        const quickResult = await quickScamScan(
+          files.map(f => f.path),
+          readmeContent,
+          repoData.description
+        );
+
+        // If quick scan finds red flags, do deep scan
+        let deepResult = null;
+        if (quickResult.hasRedFlags || quickResult.riskLevel !== 'low') {
+          // Fetch code files for deep scan
+          const codeFiles = files
+            .filter(f => f.path.endsWith('.sol') || f.path.endsWith('.rs') || f.path.endsWith('.ts') || f.path.endsWith('.js'))
+            .slice(0, 10);
+
+          const fileContents: Array<{ path: string; content?: string }> = [];
+          for (const file of codeFiles) {
+            try {
+              const fileRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${file.path}`, { headers });
+              if (fileRes.ok) {
+                const fileData = await fileRes.json();
+                if (fileData.content) {
+                  fileContents.push({
+                    path: file.path,
+                    content: Buffer.from(fileData.content, 'base64').toString('utf-8')
+                  });
+                }
+              }
+            } catch { /* skip */ }
+          }
+
+          deepResult = await detectScamPatterns({
+            files: fileContents,
+            readme: readmeContent,
+            description: repoData.description,
+            name: repo
+          });
+        }
+
+        // Build response
+        const result = {
+          url: gitUrl,
+          repoName: repo,
+          owner,
+          quickScan: quickResult,
+          deepScan: deepResult,
+          isLikelyScam: deepResult?.isLikelyScam || quickResult.riskLevel === 'critical',
+          scamScore: deepResult?.scamScore || (quickResult.riskLevel === 'critical' ? 80 : quickResult.riskLevel === 'high' ? 60 : quickResult.riskLevel === 'medium' ? 30 : 0),
+          riskLevel: deepResult ? (deepResult.scamScore >= 70 ? 'critical' : deepResult.scamScore >= 50 ? 'high' : deepResult.scamScore >= 25 ? 'medium' : 'low') : quickResult.riskLevel,
+          summary: deepResult?.summary || (quickResult.hasRedFlags ? `Found ${quickResult.redFlags.length} red flags in initial scan` : 'No known scam patterns detected'),
+          redFlags: [...(quickResult.redFlags || []), ...(deepResult?.warnings || [])],
+          matches: deepResult?.matches || [],
+          scannedAt: new Date().toISOString()
+        };
+
+        console.log(`[AURA] Scam detection complete: ${result.scamScore}/100 (${result.riskLevel})`);
+
+        return result;
+      } catch (err) {
+        console.error('[AURA] Scam detection error:', err);
+        return {
+          error: err instanceof Error ? err.message : 'Unknown error',
+          scamScore: 0,
+          riskLevel: 'unknown',
+          isLikelyScam: false,
+          summary: 'Failed to scan for scam patterns. Check the URL and try again.'
+        };
+      }
+    }
+  });
+
   // Register Compare tool (compare two repos)
   server.registerTool({
     name: 'compare',
@@ -1098,3 +1233,11 @@ export type { WSMessage, AuditStartedPayload, AuditCompletedPayload, FindingPayl
 // Trust Scanner exports (Rug Check)
 export { performTrustScan } from './integrations/trust-scanner.js';
 export type { TrustScanResult, TrustCheck, TrustMetrics } from './integrations/trust-scanner.js';
+
+// AI Verifier exports
+export { performAIVerification } from './integrations/ai-verifier.js';
+export type { AIVerifyResult } from './integrations/ai-verifier.js';
+
+// Scam Detector exports
+export { detectScamPatterns, quickScamScan, getScamSignatures, addScamSignature } from './integrations/scam-detector.js';
+export type { ScamSignature, ScamDetectionResult, SimilarityMatch } from './integrations/scam-detector.js';

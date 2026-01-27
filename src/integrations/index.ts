@@ -10,6 +10,14 @@ export { LocalScanner, quickLocalScan } from './local-scanner.js';
 export type { LocalScanConfig, LocalScanResult, SecretFinding, PackageFinding, SastFinding, GitInfo, EnvFileFinding, SystemInfo, DiscoveredService, DiscoveredModule } from './local-scanner.js';
 export { NotificationService, createNotificationFromAudit } from './notifications.js';
 
+// AI Verifier - Detect real vs fake AI projects
+export { performAIVerification } from './ai-verifier.js';
+export type { AIVerifyResult } from './ai-verifier.js';
+
+// Scam Detector - Code similarity & known scam pattern detection
+export { detectScamPatterns, quickScamScan, getScamSignatures, addScamSignature } from './scam-detector.js';
+export type { ScamSignature, ScamDetectionResult, SimilarityMatch } from './scam-detector.js';
+
 // Aura Protocol Scanner (multi-agent architecture)
 export { auraScan, getAuraState, getAvailableAgents, orchestrator } from './aura-scanner.js';
 export type { AuraScanConfig, AuraScanResult } from './aura-scanner.js';
