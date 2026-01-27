@@ -1,0 +1,15 @@
+{
+  "name": "aura-security-discord-bot",
+  "version": "1.0.0",
+  "description": "AuraSecurity Discord Bot with Ed25519 signature verification",
+  "type": "module",
+  "main": "index.mjs",
+  "scripts": {
+    "register-commands": "node register-commands.mjs",
+    "package": "zip -r discord-bot.zip index.mjs package.json",
+    "deploy": "aws lambda update-function-code --function-name AuraSecurityDiscordBot --zip-file fileb://discord-bot.zip"
+  },
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.400.0"
+  }
+}
