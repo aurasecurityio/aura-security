@@ -450,15 +450,20 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
     }
   }
 
-  // 15. Owner Account Age Check
+  // 15. Owner Account Age Check (softer if there's real code)
+  const hasRealCode = metrics.codeFileCount >= 20;
+  const hasRealActivity = metrics.commitCount >= 20;
+
   if (metrics.ownerAccountAgeDays !== undefined) {
     if (metrics.ownerAccountAgeDays < 30) {
+      // Softer penalty if they're actually building something
+      const points = (hasRealCode && hasRealActivity) ? -8 : -15;
       checks.push({
         id: 'owner_age',
         name: 'Developer Account',
-        status: 'bad',
-        points: -20,
-        explanation: `Brand new developer! Account only ${metrics.ownerAccountAgeDays} days old`
+        status: 'warn',
+        points,
+        explanation: `New developer account (${metrics.ownerAccountAgeDays} days old)`
       });
     } else if (metrics.ownerAccountAgeDays < 180) {
       checks.push({
@@ -479,15 +484,17 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
     }
   }
 
-  // 16. Owner Repo Count Check
+  // 16. Owner Repo Count Check (softer if building real code)
   if (metrics.ownerPublicRepos !== undefined) {
     if (metrics.ownerPublicRepos === 1) {
+      // Softer penalty if the repo shows real effort
+      const points = (hasRealCode && hasRealActivity) ? -5 : -10;
       checks.push({
         id: 'owner_repos',
         name: 'Developer History',
-        status: 'bad',
-        points: -15,
-        explanation: 'First and only repo - no track record!'
+        status: 'warn',
+        points,
+        explanation: 'First repo - new to GitHub'
       });
     } else if (metrics.ownerPublicRepos < 5) {
       checks.push({
@@ -529,6 +536,41 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
       status: flagCount >= 2 ? 'bad' : 'warn',
       points: flagCount >= 2 ? -25 : -10,
       explanation: `Risky code: ${metrics.codeRedFlags.slice(0, 2).join(', ')}`
+    });
+  }
+
+  // 19. Builder Bonus - reward real development effort
+  const builderSignals = [
+    metrics.codeFileCount >= 20,      // Substantial codebase
+    metrics.hasTests,                  // Has tests
+    metrics.commitCount >= 30,         // Active commits
+    metrics.daysSinceLastPush < 30,    // Recent activity
+    metrics.contributorCount >= 2,     // Team effort
+  ].filter(Boolean).length;
+
+  if (builderSignals >= 4) {
+    checks.push({
+      id: 'builder_bonus',
+      name: 'Builder Score',
+      status: 'good',
+      points: 15,
+      explanation: 'Strong development signals - actively building!'
+    });
+  } else if (builderSignals >= 3) {
+    checks.push({
+      id: 'builder_bonus',
+      name: 'Builder Score',
+      status: 'good',
+      points: 10,
+      explanation: 'Good development activity detected'
+    });
+  } else if (builderSignals >= 2) {
+    checks.push({
+      id: 'builder_bonus',
+      name: 'Builder Score',
+      status: 'info',
+      points: 5,
+      explanation: 'Some development effort shown'
     });
   }
 
@@ -581,11 +623,12 @@ function calculateScore(checks: TrustCheck[]): { score: number; grade: 'A' | 'B'
     grade = 'B';
     verdict = 'DYOR';
     verdictEmoji = '🟡';
-  } else if (score >= 40) {
+  } else if (score >= 35) {
     grade = 'C';
     verdict = 'RISKY';
     verdictEmoji = '🟠';
   } else {
+    // RUG ALERT only for really bad scores (<35)
     grade = 'F';
     verdict = 'RUG ALERT';
     verdictEmoji = '🔴';
