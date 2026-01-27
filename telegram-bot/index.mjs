@@ -2110,7 +2110,7 @@ export async function handler(event) {
 
     // Deduplicate: Skip if we've already processed this update
     const updateId = body?.update_id;
-    if (isDuplicate(updateId)) {
+    if (await isDuplicate(updateId)) {
       return { statusCode: 200, body: 'OK - duplicate' };
     }
 
