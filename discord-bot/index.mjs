@@ -380,7 +380,9 @@ function formatXCheckResults(result) {
         },
         {
           name: 'Follower Quality',
-          value: `${result.followerAnalysis?.realPercent || 0}% real, ${result.followerAnalysis?.botPercent || 0}% bots`,
+          value: result.followerAnalysis?.analysis
+            ? `${result.followerAnalysis.realPercent}% real, ${result.followerAnalysis.botPercent}% bots`
+            : (result.profile?.followers > 1000000 ? 'Sample too small for mega account' : 'Could not analyze'),
           inline: true
         },
         {
@@ -438,10 +440,12 @@ function formatAICheckResults(result) {
     };
   }
 
-  // For AI projects (real, hype, or uncertain)
+  // For AI projects (real, hype, wrapper, or uncertain)
   let color = 0x00ff00;  // Green for REAL AI
   if (result.verdict === 'HYPE ONLY') {
     color = 0xff6600;  // Orange for HYPE
+  } else if (result.verdict === 'WRAPPER') {
+    color = 0x9966ff;  // Purple for WRAPPER
   } else if (result.verdict === 'UNCERTAIN') {
     color = 0xffff00;  // Yellow for UNCERTAIN
   } else if (result.verdict === 'LIKELY REAL') {
@@ -449,55 +453,159 @@ function formatAICheckResults(result) {
   }
 
   const evidence = result.evidence || {};
+  const wrapperAnalysis = result.wrapperAnalysis || {};
   const libs = (evidence.aiLibraries || []).slice(0, 5).join(', ') || 'None found';
   const greenFlags = (result.greenFlags || []).slice(0, 4).map(f => `✅ ${f}`).join('\n') || 'None';
   const redFlags = (result.redFlags || []).slice(0, 4).map(f => `❌ ${f}`).join('\n') || 'None';
+
+  // Build wrapper analysis display
+  let wrapperDisplay = '';
+  if (wrapperAnalysis.analysis) {
+    wrapperDisplay = wrapperAnalysis.analysis;
+    if (wrapperAnalysis.realImplementationPatterns > 0) {
+      wrapperDisplay += `\n🧠 ${wrapperAnalysis.realImplementationPatterns} real ML patterns`;
+    }
+    if (wrapperAnalysis.apiWrapperPatterns > 0) {
+      wrapperDisplay += `\n📦 ${wrapperAnalysis.apiWrapperPatterns} API wrapper patterns`;
+    }
+    if (wrapperAnalysis.valueAddPatterns > 0) {
+      wrapperDisplay += `\n✨ ${wrapperAnalysis.valueAddPatterns} value-add patterns`;
+    }
+  }
+
+  const fields = [
+    {
+      name: 'AI Score',
+      value: `**${result.aiScore}/100**`,
+      inline: true
+    },
+    {
+      name: 'Real AI Project?',
+      value: result.isRealAI ? '✅ Yes' : (result.verdict === 'WRAPPER' ? '📦 Wrapper' : '❌ No'),
+      inline: true
+    },
+    {
+      name: 'AI Libraries Found',
+      value: libs,
+      inline: false
+    }
+  ];
+
+  // Add wrapper analysis if available
+  if (wrapperDisplay) {
+    fields.push({
+      name: 'Wrapper Analysis',
+      value: wrapperDisplay,
+      inline: false
+    });
+  }
+
+  fields.push({
+    name: 'Evidence',
+    value: [
+      evidence.modelFiles?.length > 0 ? `📦 ${evidence.modelFiles.length} model files` : null,
+      evidence.aiCodeFiles?.length > 0 ? `💻 ${evidence.aiCodeFiles.length} AI code files` : null,
+      evidence.trainingScripts ? '🏋️ Training scripts' : null,
+      evidence.inferenceCode ? '🎯 Inference code' : null,
+      evidence.hasNotebook ? '📓 Jupyter notebooks' : null
+    ].filter(Boolean).join('\n') || 'No AI evidence found',
+    inline: false
+  });
+
+  fields.push({
+    name: 'Green Flags',
+    value: greenFlags,
+    inline: true
+  });
+
+  fields.push({
+    name: 'Red Flags',
+    value: redFlags,
+    inline: true
+  });
 
   return {
     embeds: [{
       title: `${result.verdictEmoji || '🤖'} ${result.verdict || 'ANALYSIS'}: ${result.repoName || 'Unknown'}`,
       description: result.summary || 'AI verification complete.',
       color: color,
-      fields: [
-        {
-          name: 'AI Score',
-          value: `**${result.aiScore}/100**`,
-          inline: true
-        },
-        {
-          name: 'Real AI Project?',
-          value: result.isRealAI ? '✅ Yes' : '❌ No',
-          inline: true
-        },
-        {
-          name: 'AI Libraries Found',
-          value: libs,
-          inline: false
-        },
-        {
-          name: 'Evidence',
-          value: [
-            evidence.modelFiles?.length > 0 ? `📦 ${evidence.modelFiles.length} model files` : null,
-            evidence.aiCodeFiles?.length > 0 ? `💻 ${evidence.aiCodeFiles.length} AI code files` : null,
-            evidence.trainingScripts ? '🏋️ Training scripts' : null,
-            evidence.inferenceCode ? '🎯 Inference code' : null,
-            evidence.hasNotebook ? '📓 Jupyter notebooks' : null
-          ].filter(Boolean).join('\n') || 'No AI evidence found',
-          inline: false
-        },
-        {
-          name: 'Green Flags',
-          value: greenFlags,
-          inline: true
-        },
-        {
-          name: 'Red Flags',
-          value: redFlags,
-          inline: true
-        }
-      ],
+      fields: fields,
       footer: {
         text: 'AuraSecurity | AI Project Verifier'
+      },
+      timestamp: new Date().toISOString()
+    }]
+  };
+}
+
+/**
+ * Format scam check results for Discord
+ */
+function formatScamCheckResults(result) {
+  let color = 0x00ff00;  // Green default
+  let emoji = '✅';
+
+  if (result.riskLevel === 'critical' || result.isLikelyScam) {
+    color = 0xff0000;  // Red
+    emoji = '🚨';
+  } else if (result.riskLevel === 'high') {
+    color = 0xff6600;  // Orange
+    emoji = '⚠️';
+  } else if (result.riskLevel === 'medium') {
+    color = 0xffff00;  // Yellow
+    emoji = '🟡';
+  }
+
+  const redFlags = (result.redFlags || []).slice(0, 5).map(f => `❌ ${f}`).join('\n') || 'None detected';
+
+  // Build matches display
+  let matchesText = 'None detected';
+  if (result.matches && result.matches.length > 0) {
+    matchesText = result.matches.slice(0, 3).map(m =>
+      `**${m.signatureName}** (${m.severity})\n${m.description}`
+    ).join('\n\n');
+  }
+
+  const fields = [
+    {
+      name: 'Scam Score',
+      value: `**${result.scamScore}/100**`,
+      inline: true
+    },
+    {
+      name: 'Risk Level',
+      value: `**${(result.riskLevel || 'unknown').toUpperCase()}**`,
+      inline: true
+    },
+    {
+      name: 'Likely Scam?',
+      value: result.isLikelyScam ? '🚨 YES' : '✅ NO',
+      inline: true
+    },
+    {
+      name: 'Red Flags',
+      value: redFlags,
+      inline: false
+    }
+  ];
+
+  // Add pattern matches if any found
+  if (result.matches && result.matches.length > 0) {
+    fields.push({
+      name: 'Known Scam Patterns Matched',
+      value: matchesText,
+      inline: false
+    });
+  }
+
+  return {
+    embeds: [{
+      title: `${emoji} Scam Check: ${result.repoName || 'Unknown'}`,
+      description: result.summary || 'Scam pattern analysis complete.',
+      color: color,
+      fields: fields,
+      footer: {
+        text: 'AuraSecurity | Scam Pattern Detection'
       },
       timestamp: new Date().toISOString()
     }]
@@ -659,6 +767,11 @@ async function handleSlashCommand(interaction) {
                 inline: false
               },
               {
+                name: '/scamcheck <repo>',
+                value: 'Scam detector - checks for known rug pull patterns, honeypots, and wallet drainers.',
+                inline: false
+              },
+              {
                 name: '/compare <repo1> <repo2>',
                 value: 'Compare two projects side-by-side - which one to ape?',
                 inline: false
@@ -772,6 +885,10 @@ export const handler = async (event) => {
         // AI project verification
         result = await callScannerApi('ai-check', { gitUrl: event.repoUrl });
         formattedResponse = formatAICheckResults(result);
+      } else if (event.command === 'scamcheck') {
+        // Scam pattern detection
+        result = await callScannerApi('scam-scan', { gitUrl: event.repoUrl });
+        formattedResponse = formatScamCheckResults(result);
       } else if (event.command === 'compare') {
         // Compare two repos
         result = await callScannerApi('compare', { repo1: event.repo1, repo2: event.repo2 });
@@ -853,7 +970,7 @@ export const handler = async (event) => {
       const { name, options } = interaction.data;
 
       // Handle repo-based scan commands
-      if (name === 'rugcheck' || name === 'scan' || name === 'devcheck' || name === 'aicheck') {
+      if (name === 'rugcheck' || name === 'scan' || name === 'devcheck' || name === 'aicheck' || name === 'scamcheck') {
         const repoUrl = options?.find(o => o.name === 'repo')?.value;
 
         if (!repoUrl) {

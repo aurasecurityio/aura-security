@@ -45,12 +45,51 @@ const HYPE_ONLY_PATTERNS = [
   /cutting.*edge.*ml/i, /state.*of.*the.*art/i
 ];
 
+// Patterns that indicate REAL AI implementation (not just wrapper)
+const REAL_AI_IMPLEMENTATION_PATTERNS = [
+  /def\s+forward\s*\(/i,                    // PyTorch forward pass
+  /model\.train\(\)/i,                       // Model training
+  /loss\.backward\(\)/i,                     // Backpropagation
+  /optimizer\.step\(\)/i,                    // Gradient descent
+  /torch\.nn\./i,                            // Neural network layers
+  /tf\.keras\.layers/i,                      // TensorFlow layers
+  /DataLoader/i,                             // Data loading
+  /tokenizer\.encode/i,                      // Tokenization
+  /embeddings?\s*=.*model/i,                 // Embedding generation
+  /fine[\s_-]?tun/i,                         // Fine-tuning
+  /checkpoint/i,                             // Model checkpointing
+  /\.safetensors|\.gguf|\.onnx/i,           // Model file references
+];
+
+// Patterns that indicate THIN WRAPPER (just API calls, no real logic)
+const WRAPPER_PATTERNS = [
+  /openai\.chat\.completions\.create/i,      // Direct OpenAI call
+  /client\.chat\.completions/i,              // OpenAI client
+  /anthropic\.messages\.create/i,            // Direct Anthropic call
+  /response\s*=\s*(?:await\s+)?openai/i,    // Simple API call
+  /return\s+(?:await\s+)?.*\.generate/i,    // Just returning API response
+  /fetch.*api\.openai\.com/i,               // Raw API fetch
+];
+
+// Patterns that add real value on top of APIs
+const VALUE_ADD_PATTERNS = [
+  /rag|retrieval.*augment/i,                 // RAG implementation
+  /vector.*(?:store|db|database)/i,          // Vector storage
+  /chunk|split.*document/i,                  // Document processing
+  /memory|conversation.*history/i,           // Conversation management
+  /tool.*(?:call|use)|function.*call/i,      // Tool/function calling
+  /agent.*(?:loop|chain|workflow)/i,         // Agent orchestration
+  /prompt.*template|system.*prompt/i,        // Prompt engineering
+  /cache|memoiz/i,                           // Response caching
+  /stream|chunk.*response/i,                 // Streaming implementation
+];
+
 export interface AIVerifyResult {
   url: string;
   repoName: string;
   isRealAI: boolean;
   aiScore: number;  // 0-100
-  verdict: 'REAL AI' | 'LIKELY REAL' | 'UNCERTAIN' | 'HYPE ONLY' | 'NOT APPLICABLE';
+  verdict: 'REAL AI' | 'LIKELY REAL' | 'UNCERTAIN' | 'HYPE ONLY' | 'WRAPPER' | 'NOT APPLICABLE';
   verdictEmoji: string;
   evidence: {
     aiLibraries: string[];
@@ -59,6 +98,15 @@ export interface AIVerifyResult {
     trainingScripts: boolean;
     inferenceCode: boolean;
     hasNotebook: boolean;
+  };
+  // New: Wrapper detection
+  wrapperAnalysis: {
+    isWrapper: boolean;
+    wrapperScore: number;  // 0-100 (higher = more likely just a wrapper)
+    realImplementationPatterns: number;
+    apiWrapperPatterns: number;
+    valueAddPatterns: number;
+    analysis: string;
   };
   redFlags: string[];
   greenFlags: string[];
@@ -237,6 +285,89 @@ export async function performAIVerification(gitUrl: string): Promise<AIVerifyRes
     }
   }
 
+  // ===== WRAPPER ANALYSIS =====
+  // Scan code files to detect if this is a thin API wrapper vs real implementation
+  let realImplementationCount = 0;
+  let wrapperPatternCount = 0;
+  let valueAddCount = 0;
+  let codeContentScanned = '';
+
+  // Fetch up to 5 main code files to analyze
+  const mainCodeFiles = codeFiles
+    .filter(f => !f.path.includes('test') && !f.path.includes('spec') && !f.path.includes('__'))
+    .slice(0, 5);
+
+  for (const file of mainCodeFiles) {
+    try {
+      const fileRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${file.path}`, { headers });
+      if (fileRes.ok) {
+        const fileData = await fileRes.json();
+        if (fileData.content) {
+          const content = Buffer.from(fileData.content, 'base64').toString('utf-8');
+          codeContentScanned += content + '\n';
+        }
+      }
+    } catch {
+      // Skip files we can't read
+    }
+  }
+
+  // Count pattern matches
+  for (const pattern of REAL_AI_IMPLEMENTATION_PATTERNS) {
+    if (pattern.test(codeContentScanned)) {
+      realImplementationCount++;
+    }
+  }
+  for (const pattern of WRAPPER_PATTERNS) {
+    if (pattern.test(codeContentScanned)) {
+      wrapperPatternCount++;
+    }
+  }
+  for (const pattern of VALUE_ADD_PATTERNS) {
+    if (pattern.test(codeContentScanned)) {
+      valueAddCount++;
+    }
+  }
+
+  // Calculate wrapper score (higher = more likely just a wrapper)
+  let wrapperScore = 0;
+  if (wrapperPatternCount > 0 || realImplementationCount > 0 || valueAddCount > 0) {
+    // If only wrapper patterns, high score
+    if (wrapperPatternCount > 0 && realImplementationCount === 0 && valueAddCount === 0) {
+      wrapperScore = 90;
+    } else if (wrapperPatternCount > 0 && realImplementationCount === 0 && valueAddCount > 0) {
+      // Wrapper with value-add (like RAG, agents)
+      wrapperScore = 40 - (valueAddCount * 10);
+    } else if (realImplementationCount > 0) {
+      // Has real implementation
+      wrapperScore = Math.max(0, 20 - (realImplementationCount * 5));
+    }
+  }
+  wrapperScore = Math.max(0, Math.min(100, wrapperScore));
+
+  const isWrapper = wrapperScore >= 70 && realImplementationCount === 0;
+  let wrapperAnalysisText = '';
+  if (isWrapper) {
+    wrapperAnalysisText = 'Thin API wrapper - just calls OpenAI/Anthropic with minimal logic';
+  } else if (wrapperPatternCount > 0 && valueAddCount > 0) {
+    wrapperAnalysisText = 'API-based with value-add features (RAG, agents, etc.)';
+  } else if (realImplementationCount > 0) {
+    wrapperAnalysisText = 'Contains real AI/ML implementation code';
+  } else if (evidence.aiLibraries.length > 0) {
+    wrapperAnalysisText = 'Uses AI libraries but implementation details unclear';
+  } else {
+    wrapperAnalysisText = 'No AI implementation patterns detected';
+  }
+
+  const wrapperAnalysis: AIVerifyResult['wrapperAnalysis'] = {
+    isWrapper,
+    wrapperScore,
+    realImplementationPatterns: realImplementationCount,
+    apiWrapperPatterns: wrapperPatternCount,
+    valueAddPatterns: valueAddCount,
+    analysis: wrapperAnalysisText
+  };
+
   // Score calculation
   // AI Libraries (high weight)
   if (evidence.aiLibraries.length >= 3) {
@@ -331,7 +462,17 @@ export async function performAIVerification(gitUrl: string): Promise<AIVerifyRes
   let verdictEmoji: string;
   let isRealAI = false;
 
-  if (aiScore >= 70) {
+  // Check for WRAPPER first - it's a specific verdict for AI projects that are just API wrappers
+  if (isWrapper && evidence.aiLibraries.length > 0 && aiScore >= 20) {
+    // Has AI libraries (openai, anthropic) but just wraps the API with no real logic
+    verdict = 'WRAPPER';
+    verdictEmoji = '📦';
+    isRealAI = false;  // Not "real AI" in the sense of ML implementation
+    // Add wrapper-specific red flag
+    if (!redFlags.includes('Thin API wrapper with minimal logic')) {
+      redFlags.push('Thin API wrapper with minimal logic');
+    }
+  } else if (aiScore >= 70) {
     verdict = 'REAL AI';
     verdictEmoji = '🤖';
     isRealAI = true;
@@ -364,6 +505,12 @@ export async function performAIVerification(gitUrl: string): Promise<AIVerifyRes
   } else if (verdict === 'LIKELY REAL') {
     summary = 'Shows signs of real AI/ML work. ';
     if (evidence.aiLibraries.length > 0) summary += `Uses ${evidence.aiLibraries[0]}. `;
+  } else if (verdict === 'WRAPPER') {
+    summary = `Thin API wrapper around ${evidence.aiLibraries.slice(0, 2).join('/') || 'AI APIs'}. `;
+    summary += 'Just calls external AI APIs with minimal value-add. ';
+    if (valueAddCount > 0) {
+      summary = `API wrapper with some value-add (${valueAddCount} patterns found). `;
+    }
   } else if (verdict === 'UNCERTAIN') {
     summary = 'Limited AI evidence found. Could be early stage or wrapper project. ';
   } else if (verdict === 'HYPE ONLY') {
@@ -383,6 +530,7 @@ export async function performAIVerification(gitUrl: string): Promise<AIVerifyRes
     verdict,
     verdictEmoji,
     evidence,
+    wrapperAnalysis,
     redFlags,
     greenFlags,
     summary,
