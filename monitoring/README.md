@@ -1,94 +1,140 @@
 # AuraSecurity Monitoring
 
-## Active Monitoring
+Enterprise-grade monitoring for the AuraSecurity Telegram bot.
 
-### 1. Server Health Check (Running)
-- **Script**: `~/health-check.sh` on production server
-- **Frequency**: Every 5 minutes via cron
-- **Checks**: Main API, Scanner, Coordinator, Web UI
+## Quick Setup (5 minutes)
 
-### 2. Set Up Alerts (Choose One)
+### 1. AWS CloudWatch Alarms (Recommended)
 
-#### Option A: Slack Alerts (Recommended)
-1. Create a Slack webhook: https://api.slack.com/messaging/webhooks
-2. Add to server:
 ```bash
-ssh ubuntu@54.90.137.98
-echo 'export SLACK_WEBHOOK="https://hooks.slack.com/services/YOUR/WEBHOOK/URL"' >> ~/.bashrc
-source ~/.bashrc
+# Set up SNS topic and alarms
+export SNS_TOPIC_ARN=$(aws sns create-topic --name aura-security-alerts --query 'TopicArn' --output text)
+
+# Subscribe your email
+aws sns subscribe --topic-arn $SNS_TOPIC_ARN --protocol email --notification-endpoint your@email.com
+
+# Create alarms
+chmod +x cloudwatch-alarms.sh
+./cloudwatch-alarms.sh
 ```
 
-#### Option B: Discord Alerts
-1. Create a Discord webhook in your server settings
-2. Add to server:
+This creates alerts for:
+- Lambda errors (>5 in 5 minutes)
+- Lambda throttling (any)
+- Slow responses (>60s average)
+- No traffic for 30 minutes (bot may be disconnected)
+
+### 2. Server Health Check (Active)
+
 ```bash
-ssh ubuntu@54.90.137.98
-echo 'export DISCORD_WEBHOOK="https://discord.com/api/webhooks/YOUR/WEBHOOK"' >> ~/.bashrc
-source ~/.bashrc
+# On your EC2 server - already running every 5 minutes
+crontab -l | grep health-check
+
+# View logs
+tail -50 /tmp/aura-health.log
+```
+
+For comprehensive bot monitoring:
+```bash
+chmod +x bot-health-check.sh
+
+# Add to crontab
+*/5 * * * * /path/to/monitoring/bot-health-check.sh >> /var/log/aura-cron.log 2>&1
+```
+
+Optional: Add webhook URLs for alerts
+```bash
+export SLACK_WEBHOOK="https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+export DISCORD_WEBHOOK="https://discord.com/api/webhooks/YOUR/WEBHOOK"
+export TELEGRAM_ADMIN_CHAT="your_chat_id"
+export BOT_TOKEN="your_bot_token"
 ```
 
 ### 3. External Uptime Monitoring (Highly Recommended)
 
-Use a free external service to monitor from outside your infrastructure:
+Use a free external service to monitor from outside AWS:
 
-#### UptimeRobot (Free - 50 monitors)
+**UptimeRobot (Free - 50 monitors)**
 1. Go to https://uptimerobot.com
-2. Add monitors:
-   - `https://app.aurasecurity.io/info` (Main API)
-   - `https://app.aurasecurity.io/scanner/info` (Scanner)
-   - TG Bot health endpoint (if available)
-3. Set alert contacts (email, Slack, SMS)
+2. Add HTTP monitor: `https://app.aurasecurity.io/info`
+3. Add HTTP monitor: `https://app.aurasecurity.io/scanner/info`
+4. Set check interval: 5 minutes
+5. Add alert contacts (email, Telegram, Slack)
 
-#### Better Uptime (Free tier)
+**Better Uptime (Free tier)**
 1. Go to https://betteruptime.com
-2. Similar setup - monitors + incident pages
+2. Similar setup, includes status page
 
-### 4. TG Bot Lambda Monitoring (AWS)
+## Monitoring Endpoints
 
+| Endpoint | Purpose | Expected Response |
+|----------|---------|-------------------|
+| `https://app.aurasecurity.io/info` | Main API | `{"name":"aura-security"...}` |
+| `https://app.aurasecurity.io/scanner/info` | Scanner agent | `{"name":"scanner-agent"...}` |
+| `https://app.aurasecurity.io/coordinator/info` | Coordinator | `{"name":"coordinator"...}` |
+| Lambda `/health` | Bot health | `{"status":"ok"...}` |
+
+## Alert Channels
+
+### Slack Webhook
 ```bash
-# Error alarm - alerts when bot errors > 3 in 5 minutes
-aws cloudwatch put-metric-alarm \
-  --alarm-name "TG-Bot-Errors" \
-  --metric-name Errors \
-  --namespace AWS/Lambda \
-  --statistic Sum \
-  --period 300 \
-  --threshold 3 \
-  --comparison-operator GreaterThanThreshold \
-  --dimensions Name=FunctionName,Value=AuraSecurityTelegramBot \
-  --evaluation-periods 1 \
-  --alarm-actions arn:aws:sns:us-east-1:YOUR_ACCOUNT:alerts
-
-# Duration alarm - alerts when bot is slow (approaching timeout)
-aws cloudwatch put-metric-alarm \
-  --alarm-name "TG-Bot-Slow" \
-  --metric-name Duration \
-  --namespace AWS/Lambda \
-  --statistic Average \
-  --period 300 \
-  --threshold 120000 \
-  --comparison-operator GreaterThanThreshold \
-  --dimensions Name=FunctionName,Value=AuraSecurityTelegramBot \
-  --evaluation-periods 2 \
-  --alarm-actions arn:aws:sns:us-east-1:YOUR_ACCOUNT:alerts
+curl -X POST -H 'Content-type: application/json' \
+    --data '{"text":"Alert: Service down!"}' \
+    "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
 ```
 
-## Status Page (Optional)
+### Discord Webhook
+```bash
+curl -X POST -H 'Content-type: application/json' \
+    --data '{"content":"Alert: Service down!"}' \
+    "https://discord.com/api/webhooks/YOUR/WEBHOOK"
+```
 
-Create a public status page for users:
+### Telegram (to admin)
+```bash
+curl -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+    -d "chat_id=${ADMIN_CHAT_ID}" \
+    -d "text=Service Alert: API is down!"
+```
 
-1. **Instatus** (free): https://instatus.com
-2. **Cachet** (self-hosted): https://cachethq.io
+## Runbook: Common Issues
+
+### Bot not responding
+1. Check Lambda CloudWatch logs
+2. Check webhook is set: `curl https://api.telegram.org/bot$TOKEN/getWebhookInfo`
+3. Check pending updates (if >1000, may need clearing)
+
+### Slow scans
+1. `fastMode: true` should be enabled (skips semgrep/checkov)
+2. Check EC2 CPU/memory usage
+3. Check GitHub API rate limits
+
+### Rate limiting
+- GitHub API: 5000 requests/hour with token
+- Twitter API: 450 requests/15 min
+- Telegram: 30 messages/second
+
+## Files
+
+| File | Purpose |
+|------|---------|
+| `health-check.sh` | Basic endpoint monitoring |
+| `bot-health-check.sh` | Comprehensive bot health check |
+| `cloudwatch-alarms.sh` | AWS CloudWatch alarm setup |
+| `set-bot-logo.sh` | Instructions for bot profile photo |
 
 ## Quick Commands
 
 ```bash
 # Check health manually
-~/health-check.sh && echo "All good!"
+./health-check.sh && echo "All good!"
 
 # View health logs
 tail -50 /tmp/aura-health.log
 
-# Test a specific endpoint
-curl -s -o /dev/null -w "%{http_code}" https://app.aurasecurity.io/info
+# Check Lambda webhook
+curl -s "https://api.telegram.org/bot$BOT_TOKEN/getWebhookInfo" | jq
+
+# Test specific endpoint
+curl -s -w "\n%{http_code}" https://app.aurasecurity.io/info
 ```
