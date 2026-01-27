@@ -32,14 +32,6 @@ export interface TrustMetrics {
   language: string | null;
   topics: string[];
   secretsFound: number;
-  // Enhanced metrics
-  forkChangedLines?: number;
-  forkParentRepo?: string;
-  ownerAccountAgeDays?: number;
-  ownerPublicRepos?: number;
-  ownerTotalContributions?: number;
-  readmeRedFlags?: string[];
-  codeRedFlags?: string[];
 }
 
 export interface TrustScanResult {
@@ -421,117 +413,6 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
     });
   }
 
-  // 14. Enhanced Fork Analysis
-  if (metrics.isFork && metrics.forkChangedLines !== undefined) {
-    if (metrics.forkChangedLines < 50) {
-      checks.push({
-        id: 'fork_analysis',
-        name: 'Fork Quality',
-        status: 'bad',
-        points: -25,
-        explanation: `Copy-paste alert! Only ${metrics.forkChangedLines} lines changed from original`
-      });
-    } else if (metrics.forkChangedLines < 200) {
-      checks.push({
-        id: 'fork_analysis',
-        name: 'Fork Quality',
-        status: 'warn',
-        points: -10,
-        explanation: `Minimal changes (${metrics.forkChangedLines} lines) from forked repo`
-      });
-    } else {
-      checks.push({
-        id: 'fork_analysis',
-        name: 'Fork Quality',
-        status: 'info',
-        points: 0,
-        explanation: `Substantial modifications (${metrics.forkChangedLines}+ lines changed)`
-      });
-    }
-  }
-
-  // 15. Owner Account Age Check
-  if (metrics.ownerAccountAgeDays !== undefined) {
-    if (metrics.ownerAccountAgeDays < 30) {
-      checks.push({
-        id: 'owner_age',
-        name: 'Developer Account',
-        status: 'bad',
-        points: -20,
-        explanation: `Brand new developer! Account only ${metrics.ownerAccountAgeDays} days old`
-      });
-    } else if (metrics.ownerAccountAgeDays < 180) {
-      checks.push({
-        id: 'owner_age',
-        name: 'Developer Account',
-        status: 'warn',
-        points: -5,
-        explanation: `New developer account (${Math.floor(metrics.ownerAccountAgeDays / 30)} months old)`
-      });
-    } else if (metrics.ownerAccountAgeDays >= 365) {
-      checks.push({
-        id: 'owner_age',
-        name: 'Developer Account',
-        status: 'good',
-        points: 5,
-        explanation: `Established developer (${Math.floor(metrics.ownerAccountAgeDays / 365)}+ years on GitHub)`
-      });
-    }
-  }
-
-  // 16. Owner Repo Count Check
-  if (metrics.ownerPublicRepos !== undefined) {
-    if (metrics.ownerPublicRepos === 1) {
-      checks.push({
-        id: 'owner_repos',
-        name: 'Developer History',
-        status: 'bad',
-        points: -15,
-        explanation: 'First and only repo - no track record!'
-      });
-    } else if (metrics.ownerPublicRepos < 5) {
-      checks.push({
-        id: 'owner_repos',
-        name: 'Developer History',
-        status: 'warn',
-        points: -5,
-        explanation: `Limited history (only ${metrics.ownerPublicRepos} repos)`
-      });
-    } else if (metrics.ownerPublicRepos >= 10) {
-      checks.push({
-        id: 'owner_repos',
-        name: 'Developer History',
-        status: 'good',
-        points: 5,
-        explanation: `Active developer (${metrics.ownerPublicRepos} public repos)`
-      });
-    }
-  }
-
-  // 17. README Red Flags
-  if (metrics.readmeRedFlags && metrics.readmeRedFlags.length > 0) {
-    const flagCount = metrics.readmeRedFlags.length;
-    checks.push({
-      id: 'readme_flags',
-      name: 'README Analysis',
-      status: flagCount >= 2 ? 'bad' : 'warn',
-      points: flagCount >= 2 ? -20 : -10,
-      explanation: `Scam signals: ${metrics.readmeRedFlags.slice(0, 2).join(', ')}`
-    });
-  }
-
-  // 18. Code Red Flags (Honeypot patterns)
-  if (metrics.codeRedFlags && metrics.codeRedFlags.length > 0) {
-    const flagCount = metrics.codeRedFlags.length;
-    checks.push({
-      id: 'code_flags',
-      name: 'Code Analysis',
-      status: flagCount >= 2 ? 'bad' : 'warn',
-      points: flagCount >= 2 ? -25 : -10,
-      explanation: `Risky code: ${metrics.codeRedFlags.slice(0, 2).join(', ')}`
-    });
-  }
-
   return checks;
 }
 
@@ -655,77 +536,6 @@ function scanForSecrets(content: string): number {
 }
 
 /**
- * Scan README for scam red flags
- */
-function scanReadmeForRedFlags(content: string): string[] {
-  const redFlags: string[] = [];
-  const lowerContent = content.toLowerCase();
-
-  // Check for scam language
-  if (/100x|1000x|guaranteed.*return|moonshot|get rich/i.test(content)) {
-    redFlags.push('Promises unrealistic returns');
-  }
-  if (/🚀{3,}|💰{3,}|💎{3,}/u.test(content)) {
-    redFlags.push('Excessive hype emojis');
-  }
-  if (/whitelist.*limited|presale.*ending|act.*fast|don.?t.*miss/i.test(content)) {
-    redFlags.push('FOMO/urgency language');
-  }
-  if (/t\.me\/|telegram\.me\//i.test(content) && !/docs|documentation|wiki/i.test(content)) {
-    redFlags.push('Only Telegram links, no documentation');
-  }
-  if (lowerContent.includes('airdrop') && lowerContent.includes('connect wallet')) {
-    redFlags.push('Airdrop + connect wallet = phishing risk');
-  }
-  if (/stealth.*launch|fair.*launch.*no.*team/i.test(content)) {
-    redFlags.push('Suspicious launch claims');
-  }
-
-  return redFlags;
-}
-
-/**
- * Scan Solidity code for honeypot patterns
- */
-function scanCodeForRedFlags(files: Array<{ path: string; content?: string }>): string[] {
-  const redFlags: string[] = [];
-
-  for (const file of files) {
-    if (!file.content) continue;
-    const content = file.content;
-
-    // Only scan Solidity files for smart contract red flags
-    if (file.path.endsWith('.sol')) {
-      // Check for honeypot patterns
-      if (/onlyOwner.*withdraw|withdraw.*onlyOwner/is.test(content)) {
-        redFlags.push('Owner-only withdraw function');
-      }
-      if (/function\s+_?mint.*onlyOwner|onlyOwner.*function\s+_?mint/is.test(content)) {
-        redFlags.push('Hidden mint function (owner can create tokens)');
-      }
-      if (/blacklist|blocklist|isBlocked|_blocked/i.test(content)) {
-        redFlags.push('Blacklist function (can block selling)');
-      }
-      if (/selfdestruct|delegatecall/i.test(content)) {
-        redFlags.push('Dangerous functions (selfdestruct/delegatecall)');
-      }
-      if (/maxTx|maxWallet|_maxTxAmount/i.test(content) && /onlyOwner/i.test(content)) {
-        redFlags.push('Owner-controlled transaction limits');
-      }
-      if (/pause|unpause|whenNotPaused/i.test(content)) {
-        redFlags.push('Pausable transfers (can freeze trading)');
-      }
-      if (/fee.*[5-9]\d|fee.*100|taxRate.*[2-9]\d/i.test(content)) {
-        redFlags.push('High fee/tax configuration');
-      }
-    }
-  }
-
-  // Dedupe
-  return [...new Set(redFlags)];
-}
-
-/**
  * Main trust scan function
  */
 export async function performTrustScan(gitUrl: string): Promise<TrustScanResult> {
@@ -805,50 +615,12 @@ export async function performTrustScan(gitUrl: string): Promise<TrustScanResult>
     // Default to 1 if we can't fetch
   }
 
-  // Fetch owner profile for enhanced checks
-  let ownerAccountAgeDays: number | undefined;
-  let ownerPublicRepos: number | undefined;
-  let ownerTotalContributions: number | undefined;
-
-  try {
-    const ownerRes = await fetch(`https://api.github.com/users/${owner}`, { headers });
-    if (ownerRes.ok) {
-      const ownerData = await ownerRes.json();
-      const ownerCreatedAt = new Date(ownerData.created_at);
-      ownerAccountAgeDays = Math.floor((new Date().getTime() - ownerCreatedAt.getTime()) / (1000 * 60 * 60 * 24));
-      ownerPublicRepos = ownerData.public_repos || 0;
-    }
-  } catch {
-    // Continue without owner data
-  }
-
-  // Fetch fork comparison if this is a fork
-  let forkChangedLines: number | undefined;
-  let forkParentRepo: string | undefined;
-
-  if (repoData.fork && repoData.parent) {
-    forkParentRepo = repoData.parent.full_name;
-    try {
-      const compareRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/compare/${repoData.parent.default_branch}...${repoData.default_branch}`, { headers });
-      if (compareRes.ok) {
-        const compareData = await compareRes.json();
-        // Sum up additions and deletions
-        forkChangedLines = (compareData.files || []).reduce((sum: number, f: { additions?: number; deletions?: number }) =>
-          sum + (f.additions || 0) + (f.deletions || 0), 0);
-      }
-    } catch {
-      // Continue without fork comparison
-    }
-  }
-
   // Fetch file tree to analyze code structure
   let codeFileCount = 0;
   let hasTests = false;
   let hasReadme = false;
   let hasDependencies = false;
   let secretsFound = 0;
-  let readmeRedFlags: string[] = [];
-  let codeRedFlags: string[] = [];
 
   try {
     const treeRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees/${repoData.default_branch}?recursive=1`, { headers });
@@ -868,10 +640,9 @@ export async function performTrustScan(gitUrl: string): Promise<TrustScanResult>
       );
 
       // Check for readme
-      const readmeFile = files.find((f: { path: string }) =>
+      hasReadme = files.some((f: { path: string }) =>
         f.path.toLowerCase().includes('readme')
       );
-      hasReadme = !!readmeFile;
 
       // Check for dependencies
       hasDependencies = files.some((f: { path: string }) =>
@@ -881,44 +652,6 @@ export async function performTrustScan(gitUrl: string): Promise<TrustScanResult>
         f.path === 'go.mod' ||
         f.path === 'Gemfile'
       );
-
-      // Scan README for red flags
-      if (readmeFile) {
-        try {
-          const readmeRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${readmeFile.path}`, { headers });
-          if (readmeRes.ok) {
-            const readmeData = await readmeRes.json();
-            if (readmeData.content) {
-              const readmeContent = Buffer.from(readmeData.content, 'base64').toString('utf-8');
-              readmeRedFlags = scanReadmeForRedFlags(readmeContent);
-            }
-          }
-        } catch {
-          // Skip if can't read README
-        }
-      }
-
-      // Scan Solidity files for honeypot patterns (limit to 3 files)
-      const solidityFiles = files.filter((f: { path: string }) => f.path.endsWith('.sol')).slice(0, 3);
-      const scannedFiles: Array<{ path: string; content?: string }> = [];
-
-      for (const file of solidityFiles) {
-        try {
-          const fileRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${file.path}`, { headers });
-          if (fileRes.ok) {
-            const fileData = await fileRes.json();
-            if (fileData.content) {
-              scannedFiles.push({
-                path: file.path,
-                content: Buffer.from(fileData.content, 'base64').toString('utf-8')
-              });
-            }
-          }
-        } catch {
-          // Skip files we can't read
-        }
-      }
-      codeRedFlags = scanCodeForRedFlags(scannedFiles);
 
       // Quick secret scan on key files (config files, env examples)
       const sensitiveFiles = files.filter((f: { path: string }) =>
@@ -973,14 +706,6 @@ export async function performTrustScan(gitUrl: string): Promise<TrustScanResult>
     language: repoData.language,
     topics: repoData.topics || [],
     secretsFound,
-    // Enhanced metrics
-    forkChangedLines,
-    forkParentRepo,
-    ownerAccountAgeDays,
-    ownerPublicRepos,
-    ownerTotalContributions,
-    readmeRedFlags,
-    codeRedFlags,
   };
 
   // Run trust checks
