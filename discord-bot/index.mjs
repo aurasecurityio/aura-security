@@ -340,6 +340,190 @@ function formatDevCheckResults(result, repoUrl) {
 }
 
 /**
+ * Format X/Twitter scan results for Discord
+ */
+function formatXCheckResults(result) {
+  const profile = result.profile || {};
+
+  let trustColor = 0x00ff00;
+  if (result.score < 40) {
+    trustColor = 0xff0000;
+  } else if (result.score < 65) {
+    trustColor = 0xffff00;
+  }
+
+  // Format flags
+  const greenFlags = (result.greenFlags || []).slice(0, 4).map(f => `✅ ${f}`).join('\n') || 'None';
+  const redFlags = (result.redFlags || []).slice(0, 4).map(f => `❌ ${f}`).join('\n') || 'None';
+
+  return {
+    embeds: [{
+      title: `${result.verdictEmoji || '🔍'} ${result.verdict || 'ANALYSIS'}: @${profile.username || 'Unknown'}`,
+      description: profile.bio ? `*"${profile.bio.slice(0, 200)}${profile.bio.length > 200 ? '...' : ''}"*` : 'No bio',
+      color: trustColor,
+      thumbnail: profile.profileImage ? { url: profile.profileImage } : undefined,
+      fields: [
+        {
+          name: 'Trust Score',
+          value: `**${result.score || 0}/100** (${result.grade || 'N/A'})`,
+          inline: true
+        },
+        {
+          name: 'Followers',
+          value: `${profile.followers?.toLocaleString() || 0}`,
+          inline: true
+        },
+        {
+          name: 'Account Age',
+          value: profile.createdAt ? `${Math.floor((Date.now() - new Date(profile.createdAt).getTime()) / (1000*60*60*24*365))} years` : 'Unknown',
+          inline: true
+        },
+        {
+          name: 'Follower Quality',
+          value: `${result.followerAnalysis?.realPercent || 0}% real, ${result.followerAnalysis?.botPercent || 0}% bots`,
+          inline: true
+        },
+        {
+          name: 'GitHub Verified',
+          value: result.githubVerified ? '✅ Yes' : '❌ No',
+          inline: true
+        },
+        {
+          name: 'Green Flags',
+          value: greenFlags,
+          inline: false
+        },
+        {
+          name: 'Red Flags',
+          value: redFlags,
+          inline: false
+        }
+      ],
+      footer: {
+        text: 'AuraSecurity | X Profile Analysis'
+      },
+      timestamp: new Date().toISOString()
+    }]
+  };
+}
+
+/**
+ * Format AI verification results for Discord
+ */
+function formatAICheckResults(result) {
+  let color = 0x00ff00;
+  if (result.verdict === 'HYPE ONLY' || result.verdict === 'NOT AI') {
+    color = 0xff0000;
+  } else if (result.verdict === 'UNCERTAIN') {
+    color = 0xffff00;
+  }
+
+  const evidence = result.evidence || {};
+  const libs = (evidence.aiLibraries || []).slice(0, 5).join(', ') || 'None found';
+  const greenFlags = (result.greenFlags || []).slice(0, 4).map(f => `✅ ${f}`).join('\n') || 'None';
+  const redFlags = (result.redFlags || []).slice(0, 4).map(f => `❌ ${f}`).join('\n') || 'None';
+
+  return {
+    embeds: [{
+      title: `${result.verdictEmoji || '🤖'} ${result.verdict || 'ANALYSIS'}: ${result.repoName || 'Unknown'}`,
+      description: result.summary || 'AI verification complete.',
+      color: color,
+      fields: [
+        {
+          name: 'AI Score',
+          value: `**${result.aiScore || 0}/100**`,
+          inline: true
+        },
+        {
+          name: 'Real AI Project?',
+          value: result.isRealAI ? '✅ Yes' : '❌ No',
+          inline: true
+        },
+        {
+          name: 'AI Libraries Found',
+          value: libs,
+          inline: false
+        },
+        {
+          name: 'Evidence',
+          value: [
+            evidence.modelFiles?.length > 0 ? `📦 ${evidence.modelFiles.length} model files` : null,
+            evidence.aiCodeFiles?.length > 0 ? `💻 ${evidence.aiCodeFiles.length} AI code files` : null,
+            evidence.trainingScripts ? '🏋️ Training scripts' : null,
+            evidence.inferenceCode ? '🎯 Inference code' : null,
+            evidence.hasNotebook ? '📓 Jupyter notebooks' : null
+          ].filter(Boolean).join('\n') || 'No AI evidence found',
+          inline: false
+        },
+        {
+          name: 'Green Flags',
+          value: greenFlags,
+          inline: true
+        },
+        {
+          name: 'Red Flags',
+          value: redFlags,
+          inline: true
+        }
+      ],
+      footer: {
+        text: 'AuraSecurity | AI Project Verifier'
+      },
+      timestamp: new Date().toISOString()
+    }]
+  };
+}
+
+/**
+ * Format compare results for Discord
+ */
+function formatCompareResults(result) {
+  const r1 = result.repo1 || {};
+  const r2 = result.repo2 || {};
+
+  let winnerText = '🤝 **TIE** - Both projects scored the same';
+  if (result.winner === 1) {
+    winnerText = `🏆 **${r1.name}** is the safer choice`;
+  } else if (result.winner === 2) {
+    winnerText = `🏆 **${r2.name}** is the safer choice`;
+  }
+
+  return {
+    embeds: [{
+      title: '⚔️ Project Comparison',
+      description: winnerText,
+      color: 0x5865F2,
+      fields: [
+        {
+          name: `${r1.verdictEmoji || '📊'} ${r1.name || 'Repo 1'}`,
+          value: `Score: **${r1.score || 0}/100** (${r1.grade || 'N/A'})\nVerdict: ${r1.verdict || 'Unknown'}`,
+          inline: true
+        },
+        {
+          name: `${r2.verdictEmoji || '📊'} ${r2.name || 'Repo 2'}`,
+          value: `Score: **${r2.score || 0}/100** (${r2.grade || 'N/A'})\nVerdict: ${r2.verdict || 'Unknown'}`,
+          inline: true
+        },
+        {
+          name: 'Summary - Repo 1',
+          value: r1.summary?.slice(0, 200) || 'No summary',
+          inline: false
+        },
+        {
+          name: 'Summary - Repo 2',
+          value: r2.summary?.slice(0, 200) || 'No summary',
+          inline: false
+        }
+      ],
+      footer: {
+        text: 'AuraSecurity | Project Comparison'
+      },
+      timestamp: new Date().toISOString()
+    }]
+  };
+}
+
+/**
  * Handle slash commands
  */
 async function handleSlashCommand(interaction) {
@@ -435,6 +619,21 @@ async function handleSlashCommand(interaction) {
                 inline: false
               },
               {
+                name: '/xcheck <username>',
+                value: 'X/Twitter profile analysis - bot detection, follower quality, GitHub verification.',
+                inline: false
+              },
+              {
+                name: '/aicheck <repo>',
+                value: 'AI project verifier - checks if repo has real AI code or is just hype.',
+                inline: false
+              },
+              {
+                name: '/compare <repo1> <repo2>',
+                value: 'Compare two projects side-by-side - which one to ape?',
+                inline: false
+              },
+              {
                 name: '/help',
                 value: 'Show this help message.',
                 inline: false
@@ -513,21 +712,45 @@ async function processDeferredResponse(interaction, secrets) {
 export const handler = async (event) => {
   console.log('Lambda invoked:', event.type || 'discord_interaction');
 
-  // Handle deferred scan (async invocation from self)
-  if (event.type === 'deferred_scan') {
-    console.log('Processing deferred scan for:', event.repoUrl);
+  // Handle deferred command (async invocation from self)
+  if (event.type === 'deferred_command') {
+    console.log(`Processing deferred ${event.command} for:`, event.repoUrl);
     const webhookUrl = `https://discord.com/api/v10/webhooks/${event.applicationId}/${event.interactionToken}`;
 
     try {
-      // Do the full vulnerability scan
-      const result = await callScannerApi('scan-local', {
-        gitUrl: event.repoUrl,
-        scanSecrets: true,
-        scanPackages: true,
-        fastMode: true
-      });
+      let result;
+      let formattedResponse;
 
-      const formattedResponse = formatVulnScanResults(result, event.repoUrl);
+      if (event.command === 'scan') {
+        // Full vulnerability scan
+        result = await callScannerApi('scan-local', {
+          gitUrl: event.repoUrl,
+          scanSecrets: true,
+          scanPackages: true,
+          fastMode: true
+        });
+        formattedResponse = formatVulnScanResults(result, event.repoUrl);
+      } else if (event.command === 'devcheck') {
+        // Developer trust check
+        result = await callScannerApi('trust-scan', { gitUrl: event.repoUrl });
+        formattedResponse = formatDevCheckResults(result, event.repoUrl);
+      } else if (event.command === 'xcheck') {
+        // X/Twitter profile check
+        result = await callScannerApi('x-scan', { username: event.username });
+        formattedResponse = formatXCheckResults(result);
+      } else if (event.command === 'aicheck') {
+        // AI project verification
+        result = await callScannerApi('ai-check', { gitUrl: event.repoUrl });
+        formattedResponse = formatAICheckResults(result);
+      } else if (event.command === 'compare') {
+        // Compare two repos
+        result = await callScannerApi('compare', { repo1: event.repo1, repo2: event.repo2 });
+        formattedResponse = formatCompareResults(result);
+      } else {
+        // rugcheck - quick trust scan
+        result = await callScannerApi('trust-scan', { gitUrl: event.repoUrl });
+        formattedResponse = formatTrustResults(result, event.repoUrl);
+      }
 
       // Send followup message to Discord
       const discordResponse = await fetch(webhookUrl, {
@@ -540,13 +763,13 @@ export const handler = async (event) => {
       return { statusCode: 200, body: 'OK' };
 
     } catch (error) {
-      console.error('Deferred scan error:', error);
+      console.error('Deferred command error:', error);
 
       // Send error message
       await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: `:x: Scan failed: ${error.message}` })
+        body: JSON.stringify({ content: `:x: ${event.command} failed: ${error.message}` })
       });
 
       return { statusCode: 200, body: 'Error handled' };
@@ -599,8 +822,8 @@ export const handler = async (event) => {
     if (interaction.type === 2) {
       const { name, options } = interaction.data;
 
-      // Handle scan commands
-      if (name === 'rugcheck' || name === 'scan' || name === 'devcheck') {
+      // Handle repo-based scan commands
+      if (name === 'rugcheck' || name === 'scan' || name === 'devcheck' || name === 'aicheck') {
         const repoUrl = options?.find(o => o.name === 'repo')?.value;
 
         if (!repoUrl) {
@@ -625,63 +848,116 @@ export const handler = async (event) => {
           };
         }
 
-        // For /scan (slow), use deferred response pattern
-        if (name === 'scan') {
-          console.log(`Deferring scan for ${repoUrl}`);
+        // Use deferred response for ALL scan commands to avoid 3-second timeout
+        console.log(`Deferring ${name} for ${repoUrl}`);
 
-          // Invoke self asynchronously to do the actual work
-          const lambdaClient = new LambdaClient({ region: 'us-east-1' });
-          await lambdaClient.send(new InvokeCommand({
-            FunctionName: 'AuraSecurityDiscordBot',
-            InvocationType: 'Event', // Async invocation
-            Payload: JSON.stringify({
-              type: 'deferred_scan',
-              command: name,
-              repoUrl: repoUrl,
-              applicationId: interaction.application_id,
-              interactionToken: interaction.token
-            })
-          }));
+        // Invoke self asynchronously to do the actual work
+        const lambdaClient = new LambdaClient({ region: 'us-east-1' });
+        await lambdaClient.send(new InvokeCommand({
+          FunctionName: 'AuraSecurityDiscordBot',
+          InvocationType: 'Event', // Async invocation
+          Payload: JSON.stringify({
+            type: 'deferred_command',
+            command: name,
+            repoUrl: repoUrl,
+            applicationId: interaction.application_id,
+            interactionToken: interaction.token
+          })
+        }));
 
-          // Return deferred response immediately
-          return {
-            statusCode: 200,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: 5 }) // DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE
-          };
-        }
+        // Return deferred response immediately (within 3 seconds)
+        return {
+          statusCode: 200,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 5 }) // DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE
+        };
+      }
 
-        // For quick commands (rugcheck, devcheck), process synchronously
-        try {
-          console.log(`Processing ${name} for ${repoUrl}`);
-          let result;
-          let formattedResponse;
+      // Handle X/Twitter check command
+      if (name === 'xcheck') {
+        const username = options?.find(o => o.name === 'username')?.value;
 
-          if (name === 'devcheck') {
-            result = await callScannerApi('trust-scan', { gitUrl: repoUrl });
-            formattedResponse = formatDevCheckResults(result, repoUrl);
-          } else {
-            result = await callScannerApi('trust-scan', { gitUrl: repoUrl });
-            formattedResponse = formatTrustResults(result, repoUrl);
-          }
-
-          console.log('Scan complete, returning result');
-          return {
-            statusCode: 200,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: 4, data: formattedResponse })
-          };
-        } catch (error) {
-          console.error('Scan error:', error);
+        if (!username) {
           return {
             statusCode: 200,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               type: 4,
-              data: { content: `:x: Scan failed: ${error.message}` }
+              data: { content: ':x: Please provide an X/Twitter username.', flags: 64 }
             })
           };
         }
+
+        console.log(`Deferring xcheck for ${username}`);
+
+        const lambdaClient = new LambdaClient({ region: 'us-east-1' });
+        await lambdaClient.send(new InvokeCommand({
+          FunctionName: 'AuraSecurityDiscordBot',
+          InvocationType: 'Event',
+          Payload: JSON.stringify({
+            type: 'deferred_command',
+            command: 'xcheck',
+            username: username,
+            applicationId: interaction.application_id,
+            interactionToken: interaction.token
+          })
+        }));
+
+        return {
+          statusCode: 200,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 5 })
+        };
+      }
+
+      // Handle compare command
+      if (name === 'compare') {
+        const repo1 = options?.find(o => o.name === 'repo1')?.value;
+        const repo2 = options?.find(o => o.name === 'repo2')?.value;
+
+        if (!repo1 || !repo2) {
+          return {
+            statusCode: 200,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 4,
+              data: { content: ':x: Please provide two GitHub repository URLs.', flags: 64 }
+            })
+          };
+        }
+
+        if (!isValidGitUrl(repo1) || !isValidGitUrl(repo2)) {
+          return {
+            statusCode: 200,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 4,
+              data: { content: ':x: Invalid GitHub URL(s). Use format: https://github.com/owner/repo', flags: 64 }
+            })
+          };
+        }
+
+        console.log(`Deferring compare: ${repo1} vs ${repo2}`);
+
+        const lambdaClient = new LambdaClient({ region: 'us-east-1' });
+        await lambdaClient.send(new InvokeCommand({
+          FunctionName: 'AuraSecurityDiscordBot',
+          InvocationType: 'Event',
+          Payload: JSON.stringify({
+            type: 'deferred_command',
+            command: 'compare',
+            repo1: repo1,
+            repo2: repo2,
+            applicationId: interaction.application_id,
+            interactionToken: interaction.token
+          })
+        }));
+
+        return {
+          statusCode: 200,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 5 })
+        };
       }
 
       // For other commands (like /help), handle normally

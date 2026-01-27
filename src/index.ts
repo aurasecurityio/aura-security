@@ -10,6 +10,8 @@ import type { LocalScanResult, SecretFinding, PackageFinding } from './integrati
 import { auraScan, getAuraState, getAvailableAgents } from './integrations/aura-scanner.js';
 import { getWebSocketServer, type AuditorWebSocket } from './websocket/index.js';
 import { performTrustScan } from './integrations/trust-scanner.js';
+import { performXScan } from './integrations/x-scanner.js';
+import { performAIVerification } from './integrations/ai-verifier.js';
 
 const PORT = parseInt(process.env.AURA_PORT ?? '3000', 10);
 const WS_PORT = parseInt(process.env.WS_PORT ?? '3001', 10);
@@ -835,6 +837,137 @@ async function main(): Promise<void> {
           grade: 'F',
           verdict: 'ERROR',
           summary: 'Failed to scan repository. Please check the URL and try again.'
+        };
+      }
+    }
+  });
+
+  // Register X/Twitter Scan tool
+  server.registerTool({
+    name: 'x-scan',
+    description: 'Analyze X/Twitter profile for legitimacy (follower quality, bot detection, content analysis)',
+    parameters: {
+      type: 'object',
+      required: ['username'],
+      properties: {
+        username: { type: 'string', description: 'X/Twitter username or URL (e.g., @elonmusk or https://x.com/elonmusk)' }
+      }
+    },
+    handler: async (args) => {
+      try {
+        const username = args.username as string;
+        console.log(`[AURA] Starting X scan for: ${username}`);
+
+        const result = await performXScan(username);
+
+        console.log(`[AURA] X scan complete: ${result.score}/100 (${result.verdict})`);
+
+        return result;
+      } catch (err) {
+        console.error('[AURA] X scan error:', err);
+        return {
+          error: err instanceof Error ? err.message : 'Unknown error',
+          score: 0,
+          grade: 'F',
+          verdict: 'ERROR',
+          summary: 'Failed to scan X profile. Check the username and try again.'
+        };
+      }
+    }
+  });
+
+  // Register AI Project Verifier tool
+  server.registerTool({
+    name: 'ai-check',
+    description: 'Verify if a GitHub repo is a real AI project or just hype',
+    parameters: {
+      type: 'object',
+      required: ['gitUrl'],
+      properties: {
+        gitUrl: { type: 'string', description: 'GitHub repository URL to verify' }
+      }
+    },
+    handler: async (args) => {
+      try {
+        const gitUrl = args.gitUrl as string;
+        console.log(`[AURA] Starting AI verification for: ${gitUrl}`);
+
+        const result = await performAIVerification(gitUrl);
+
+        console.log(`[AURA] AI check complete: ${result.aiScore}/100 (${result.verdict})`);
+
+        return result;
+      } catch (err) {
+        console.error('[AURA] AI check error:', err);
+        return {
+          error: err instanceof Error ? err.message : 'Unknown error',
+          aiScore: 0,
+          verdict: 'ERROR',
+          isRealAI: false,
+          summary: 'Failed to verify AI project. Check the URL and try again.'
+        };
+      }
+    }
+  });
+
+  // Register Compare tool (compare two repos)
+  server.registerTool({
+    name: 'compare',
+    description: 'Compare two GitHub repositories side-by-side for trust scores',
+    parameters: {
+      type: 'object',
+      required: ['repo1', 'repo2'],
+      properties: {
+        repo1: { type: 'string', description: 'First GitHub repository URL' },
+        repo2: { type: 'string', description: 'Second GitHub repository URL' }
+      }
+    },
+    handler: async (args) => {
+      try {
+        const repo1 = args.repo1 as string;
+        const repo2 = args.repo2 as string;
+        console.log(`[AURA] Comparing: ${repo1} vs ${repo2}`);
+
+        // Run both scans in parallel
+        const [scan1, scan2] = await Promise.all([
+          performTrustScan(repo1),
+          performTrustScan(repo2)
+        ]);
+
+        // Determine winner
+        const winner = scan1.trustScore > scan2.trustScore ? 1 :
+                       scan2.trustScore > scan1.trustScore ? 2 : 0;
+
+        return {
+          repo1: {
+            url: repo1,
+            name: scan1.repoName,
+            score: scan1.trustScore,
+            grade: scan1.grade,
+            verdict: scan1.verdict,
+            verdictEmoji: scan1.verdictEmoji,
+            summary: scan1.summary
+          },
+          repo2: {
+            url: repo2,
+            name: scan2.repoName,
+            score: scan2.trustScore,
+            grade: scan2.grade,
+            verdict: scan2.verdict,
+            verdictEmoji: scan2.verdictEmoji,
+            summary: scan2.summary
+          },
+          winner,
+          recommendation: winner === 1 ? `${scan1.repoName} looks safer` :
+                          winner === 2 ? `${scan2.repoName} looks safer` :
+                          'Both projects have similar trust scores',
+          scannedAt: new Date().toISOString()
+        };
+      } catch (err) {
+        console.error('[AURA] Compare error:', err);
+        return {
+          error: err instanceof Error ? err.message : 'Unknown error',
+          summary: 'Failed to compare repositories. Check the URLs and try again.'
         };
       }
     }

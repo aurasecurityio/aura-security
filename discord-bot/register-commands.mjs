@@ -54,6 +54,48 @@ const commands = [
     ]
   },
   {
+    name: 'xcheck',
+    description: 'Analyze X/Twitter profile for legitimacy and bot followers',
+    options: [
+      {
+        name: 'username',
+        description: 'X/Twitter username (e.g., @elonmusk or elonmusk)',
+        type: 3,
+        required: true
+      }
+    ]
+  },
+  {
+    name: 'aicheck',
+    description: 'Verify if a repo is a real AI project or just hype',
+    options: [
+      {
+        name: 'repo',
+        description: 'GitHub repository URL (e.g., https://github.com/owner/repo)',
+        type: 3,
+        required: true
+      }
+    ]
+  },
+  {
+    name: 'compare',
+    description: 'Compare two repos side-by-side - which one to ape?',
+    options: [
+      {
+        name: 'repo1',
+        description: 'First GitHub repository URL',
+        type: 3,
+        required: true
+      },
+      {
+        name: 'repo2',
+        description: 'Second GitHub repository URL',
+        type: 3,
+        required: true
+      }
+    ]
+  },
+  {
     name: 'help',
     description: 'Show available commands and how to use them'
   }
