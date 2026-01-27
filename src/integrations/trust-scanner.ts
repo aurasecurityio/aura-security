@@ -420,9 +420,35 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
  * Calculate trust score from checks
  */
 function calculateScore(checks: TrustCheck[]): { score: number; grade: 'A' | 'B' | 'C' | 'F'; verdict: 'SAFU' | 'DYOR' | 'RISKY' | 'RUG ALERT'; verdictEmoji: string } {
-  const baseScore = 50;
+  const baseScore = 40; // Lowered from 50
   const totalPoints = checks.reduce((sum, check) => sum + check.points, 0);
-  const score = Math.max(0, Math.min(100, baseScore + totalPoints));
+  let score = Math.max(0, Math.min(100, baseScore + totalPoints));
+
+  // Count critical issues
+  const badChecks = checks.filter(c => c.status === 'bad');
+  const hasSecrets = checks.some(c => c.id === 'secrets' && c.status === 'bad');
+  const hasNoCode = checks.some(c => c.id === 'code' && c.status === 'bad');
+  const isAbandoned = checks.some(c => c.id === 'activity' && c.status === 'bad');
+
+  // Apply caps based on critical issues
+  if (hasSecrets) {
+    // Leaked secrets = max score 50 (RISKY)
+    score = Math.min(score, 50);
+  }
+  if (hasNoCode) {
+    // No code = max score 40 (RISKY)
+    score = Math.min(score, 40);
+  }
+  if (badChecks.length >= 3) {
+    // 3+ bad checks = max score 50 (RISKY)
+    score = Math.min(score, 50);
+  } else if (badChecks.length >= 2) {
+    // 2 bad checks = max score 60 (DYOR)
+    score = Math.min(score, 60);
+  } else if (badChecks.length >= 1) {
+    // 1 bad check = max score 75 (DYOR)
+    score = Math.min(score, 75);
+  }
 
   let grade: 'A' | 'B' | 'C' | 'F';
   let verdict: 'SAFU' | 'DYOR' | 'RISKY' | 'RUG ALERT';
