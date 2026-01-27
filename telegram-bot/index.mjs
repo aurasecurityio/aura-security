@@ -6,8 +6,10 @@
 // - Fallback API URLs
 // - Graceful error handling
 // - Request timeouts
+// - DynamoDB-based deduplication (persists across Lambda instances)
 
 import https from 'https';
+import { DynamoDBClient, PutItemCommand, GetItemCommand } from '@aws-sdk/client-dynamodb';
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const X_BEARER_TOKEN = process.env.X_BEARER_TOKEN;
@@ -24,31 +26,52 @@ const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
 
-// Deduplication: Track processed updates to prevent Telegram retry spam
-// Persists across warm Lambda invocations
-const processedUpdates = new Map(); // update_id -> timestamp
-const DEDUP_TTL_MS = 300000; // 5 minutes
+// DynamoDB client for deduplication (persists across Lambda instances)
+const dynamoClient = new DynamoDBClient({ region: 'us-east-1' });
+const DEDUP_TABLE = 'aura-telegram-dedup';
+const DEDUP_TTL_SECONDS = 300; // 5 minutes
 
-function isDuplicate(updateId) {
+// Check if update was already processed using DynamoDB
+async function isDuplicate(updateId) {
   if (!updateId) return false;
 
-  // Clean old entries (older than TTL)
-  const now = Date.now();
-  for (const [id, timestamp] of processedUpdates) {
-    if (now - timestamp > DEDUP_TTL_MS) {
-      processedUpdates.delete(id);
+  const updateIdStr = String(updateId);
+
+  try {
+    // Try to get existing record
+    const getResult = await dynamoClient.send(new GetItemCommand({
+      TableName: DEDUP_TABLE,
+      Key: { update_id: { S: updateIdStr } }
+    }));
+
+    if (getResult.Item) {
+      console.log(`[DEDUP] Skipping duplicate update_id: ${updateId}`);
+      return true;
     }
-  }
 
-  // Check if we've seen this update
-  if (processedUpdates.has(updateId)) {
-    console.log(`[DEDUP] Skipping duplicate update_id: ${updateId}`);
-    return true;
-  }
+    // Mark as processed with TTL
+    const ttl = Math.floor(Date.now() / 1000) + DEDUP_TTL_SECONDS;
+    await dynamoClient.send(new PutItemCommand({
+      TableName: DEDUP_TABLE,
+      Item: {
+        update_id: { S: updateIdStr },
+        ttl: { N: String(ttl) },
+        timestamp: { S: new Date().toISOString() }
+      },
+      ConditionExpression: 'attribute_not_exists(update_id)'
+    }));
 
-  // Mark as processed
-  processedUpdates.set(updateId, now);
-  return false;
+    return false;
+  } catch (error) {
+    // ConditionalCheckFailedException means another Lambda already processed this
+    if (error.name === 'ConditionalCheckFailedException') {
+      console.log(`[DEDUP] Race condition caught - duplicate update_id: ${updateId}`);
+      return true;
+    }
+    // Log error but don't block - fail open to avoid missing messages
+    console.error('[DEDUP] DynamoDB error:', error.message);
+    return false;
+  }
 }
 
 // Retry wrapper with exponential backoff
