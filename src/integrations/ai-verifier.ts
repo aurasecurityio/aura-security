@@ -50,7 +50,7 @@ export interface AIVerifyResult {
   repoName: string;
   isRealAI: boolean;
   aiScore: number;  // 0-100
-  verdict: 'REAL AI' | 'LIKELY REAL' | 'UNCERTAIN' | 'HYPE ONLY' | 'NOT AI';
+  verdict: 'REAL AI' | 'LIKELY REAL' | 'UNCERTAIN' | 'HYPE ONLY' | 'NOT APPLICABLE';
   verdictEmoji: string;
   evidence: {
     aiLibraries: string[];
@@ -288,10 +288,18 @@ export async function performAIVerification(gitUrl: string): Promise<AIVerifyRes
     greenFlags.push('Contains Jupyter notebooks');
   }
 
-  // Red flags
-  const hasAIInName = /\bai\b|artificial.*intelligence|machine.*learning|ml\b|llm\b|gpt|neural|deep.*learn/i.test(
-    repoData.name + ' ' + (repoData.description || '') + ' ' + (repoData.topics || []).join(' ')
-  );
+  // Check AI claims - split into STRONG claims (explicit ML/AI project) vs WEAK claims (just mentions AI)
+  const repoText = repoData.name + ' ' + (repoData.description || '') + ' ' + (repoData.topics || []).join(' ');
+
+  // Strong AI claims: explicitly trying to be an ML/AI project
+  const hasStrongAIClaims = /llm|gpt|bert|neural|deep.*learn|transformer|diffusion|machine.*learning|ml.*model|ai.*model|train.*model/i.test(repoText);
+
+  // Weak AI claims: just mentions AI (could be a tool FOR AI, not an AI project itself)
+  const hasWeakAIClaims = /\bai\b|artificial.*intelligence/i.test(repoText);
+
+  // Combined check (for backwards compatibility)
+  const hasAIInName = hasStrongAIClaims || hasWeakAIClaims;
+
   const hasHypeOnly = HYPE_ONLY_PATTERNS.some(p => p.test(readmeContent));
 
   if (hasAIInName && evidence.aiLibraries.length === 0 && evidence.aiCodeFiles.length === 0) {
@@ -334,15 +342,17 @@ export async function performAIVerification(gitUrl: string): Promise<AIVerifyRes
   } else if (aiScore >= 30) {
     verdict = 'UNCERTAIN';
     verdictEmoji = '🟡';
-  } else if (hasAIInName && aiScore < 30 && evidence.aiLibraries.length === 0 && strongAIFileCount === 0) {
-    // Only call it "HYPE ONLY" if the repo CLAIMS to be AI but has NO real evidence
-    // (no AI libraries AND no strong AI file patterns like llm/gpt/bert/transformer)
+  } else if (hasStrongAIClaims && aiScore < 30 && evidence.aiLibraries.length === 0 && strongAIFileCount === 0) {
+    // HYPE ONLY: Repo explicitly claims to be an ML/AI project (llm, gpt, neural, etc.)
+    // but has NO real evidence - this is a red flag
     verdict = 'HYPE ONLY';
     verdictEmoji = '🟠';
   } else {
-    // Repo doesn't claim to be AI, so just say it's not an AI project (neutral)
-    verdict = 'NOT AI';
-    verdictEmoji = 'ℹ️';
+    // NOT APPLICABLE: This isn't trying to be an AI/ML project
+    // Could be a tool that works WITH AI, or just regular software
+    verdict = 'NOT APPLICABLE';
+    verdictEmoji = '➖';
+    aiScore = -1;  // Signal that score is not applicable
   }
 
   // Generate summary
@@ -360,14 +370,9 @@ export async function performAIVerification(gitUrl: string): Promise<AIVerifyRes
     summary = 'Claims to be AI but lacks actual AI libraries or code. Potential red flag for AI-branded projects. ';
     if (redFlags.length > 0) summary += redFlags[0] + '. ';
   } else {
-    // NOT AI - neutral message for non-AI projects
-    summary = 'This project is not primarily an AI/ML project. ';
-    if (evidence.aiLibraries.length === 0) {
-      summary += 'No ML libraries detected. ';
-    }
-    if (weakAIFileCount > 0) {
-      summary += `Has ${weakAIFileCount} files with generic names (agent/model/chat - common in non-AI software). `;
-    }
+    // NOT APPLICABLE - this isn't an AI project and that's fine
+    summary = 'This is a software project, not an AI/ML project. ';
+    summary += 'Use /aicheck for projects that claim to be AI-powered. ';
   }
 
   return {
