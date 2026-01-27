@@ -262,7 +262,9 @@ export async function performAIVerification(gitUrl: string): Promise<AIVerifyRes
   }
 
   // Red flags
-  const hasAIInName = /\bai\b|artificial.*intelligence|machine.*learning|ml\b|llm\b|gpt/i.test(repoData.name + ' ' + (repoData.description || ''));
+  const hasAIInName = /\bai\b|artificial.*intelligence|machine.*learning|ml\b|llm\b|gpt|neural|deep.*learn/i.test(
+    repoData.name + ' ' + (repoData.description || '') + ' ' + (repoData.topics || []).join(' ')
+  );
   const hasHypeOnly = HYPE_ONLY_PATTERNS.some(p => p.test(readmeContent));
 
   if (hasAIInName && evidence.aiLibraries.length === 0 && evidence.aiCodeFiles.length === 0) {
@@ -305,12 +307,14 @@ export async function performAIVerification(gitUrl: string): Promise<AIVerifyRes
   } else if (aiScore >= 30) {
     verdict = 'UNCERTAIN';
     verdictEmoji = '🟡';
-  } else if (aiScore >= 10) {
+  } else if (hasAIInName && aiScore < 30) {
+    // Only call it "HYPE ONLY" if the repo CLAIMS to be AI but has no evidence
     verdict = 'HYPE ONLY';
     verdictEmoji = '🟠';
   } else {
+    // Repo doesn't claim to be AI, so just say it's not an AI project (neutral)
     verdict = 'NOT AI';
-    verdictEmoji = '🔴';
+    verdictEmoji = 'ℹ️';
   }
 
   // Generate summary
@@ -325,10 +329,14 @@ export async function performAIVerification(gitUrl: string): Promise<AIVerifyRes
   } else if (verdict === 'UNCERTAIN') {
     summary = 'Limited AI evidence found. Could be early stage or wrapper project. ';
   } else if (verdict === 'HYPE ONLY') {
-    summary = 'Claims to be AI but lacks actual AI libraries or code. ';
+    summary = 'Claims to be AI but lacks actual AI libraries or code. Potential red flag for AI-branded projects. ';
     if (redFlags.length > 0) summary += redFlags[0] + '. ';
   } else {
-    summary = 'No AI/ML components detected in this repository. ';
+    // NOT AI - neutral message
+    summary = 'This is not an AI/ML project. No AI libraries or models detected. ';
+    if (evidence.aiCodeFiles.length > 0) {
+      summary += `Found ${evidence.aiCodeFiles.length} files with AI-related names (likely unrelated to ML). `;
+    }
   }
 
   return {
