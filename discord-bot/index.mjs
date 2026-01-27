@@ -411,11 +411,41 @@ function formatXCheckResults(result) {
  * Format AI verification results for Discord
  */
 function formatAICheckResults(result) {
-  let color = 0x00ff00;
-  if (result.verdict === 'HYPE ONLY' || result.verdict === 'NOT AI') {
-    color = 0xff0000;
+  // Handle NOT APPLICABLE case - simplified output
+  if (result.verdict === 'NOT APPLICABLE') {
+    return {
+      embeds: [{
+        title: `➖ ${result.repoName || 'Unknown'}`,
+        description: result.summary || 'This is a software project, not an AI/ML project.',
+        color: 0x808080,  // Gray - neutral
+        fields: [
+          {
+            name: 'AI Check',
+            value: 'Not applicable - this project is not an AI/ML project',
+            inline: false
+          },
+          {
+            name: 'Tip',
+            value: 'Use `/aicheck` on projects that claim to be AI-powered to verify if they have real AI code.',
+            inline: false
+          }
+        ],
+        footer: {
+          text: 'AuraSecurity | AI Project Verifier'
+        },
+        timestamp: new Date().toISOString()
+      }]
+    };
+  }
+
+  // For AI projects (real, hype, or uncertain)
+  let color = 0x00ff00;  // Green for REAL AI
+  if (result.verdict === 'HYPE ONLY') {
+    color = 0xff6600;  // Orange for HYPE
   } else if (result.verdict === 'UNCERTAIN') {
-    color = 0xffff00;
+    color = 0xffff00;  // Yellow for UNCERTAIN
+  } else if (result.verdict === 'LIKELY REAL') {
+    color = 0x00cc00;  // Light green
   }
 
   const evidence = result.evidence || {};
@@ -431,7 +461,7 @@ function formatAICheckResults(result) {
       fields: [
         {
           name: 'AI Score',
-          value: `**${result.aiScore || 0}/100**`,
+          value: `**${result.aiScore}/100**`,
           inline: true
         },
         {
