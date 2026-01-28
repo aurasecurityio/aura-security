@@ -1051,13 +1051,43 @@ async function main(): Promise<void> {
           });
         }
 
-        // Build response - flag empty repos as suspicious
+        // Build response using "worst finding wins" logic
+        // Both quick scan and deep scan contribute - we take the worst signal
         const noCodeRedFlags = hasNoCode ? ['No code files found - nothing to scan (SUSPICIOUS)'] : [];
-        const baseRiskLevel = deepResult ? (deepResult.scamScore >= 70 ? 'critical' : deepResult.scamScore >= 50 ? 'high' : deepResult.scamScore >= 25 ? 'medium' : 'low') : quickResult.riskLevel;
 
-        // Upgrade risk level if no code
-        const finalRiskLevel = hasNoCode && baseRiskLevel === 'low' ? 'medium' : baseRiskLevel;
-        const finalScamScore = hasNoCode && !deepResult?.scamScore ? 35 : (deepResult?.scamScore || (quickResult.riskLevel === 'critical' ? 80 : quickResult.riskLevel === 'high' ? 60 : quickResult.riskLevel === 'medium' ? 30 : 0));
+        // Risk level from deep scan (if it ran)
+        const deepRiskLevel = deepResult ? (deepResult.scamScore >= 70 ? 'critical' : deepResult.scamScore >= 50 ? 'high' : deepResult.scamScore >= 25 ? 'medium' : 'low') : 'low';
+
+        // Take the WORST risk level from both scans
+        const riskOrder = { low: 0, medium: 1, high: 2, critical: 3 } as Record<string, number>;
+        const quickRisk = riskOrder[quickResult.riskLevel] || 0;
+        const deepRisk = riskOrder[deepRiskLevel] || 0;
+        const noCodeRisk = hasNoCode ? 1 : 0; // medium
+        const worstRisk = Math.max(quickRisk, deepRisk, noCodeRisk);
+        const finalRiskLevel = Object.entries(riskOrder).find(([_, v]) => v === worstRisk)?.[0] || 'low';
+
+        // Score: take the higher of deep scan score or quick scan implied score
+        const quickImpliedScore = quickResult.riskLevel === 'critical' ? 80 : quickResult.riskLevel === 'high' ? 60 : quickResult.riskLevel === 'medium' ? 30 : 0;
+        const deepScore = deepResult?.scamScore || 0;
+        const noCodeScore = hasNoCode ? 35 : 0;
+        const finalScamScore = Math.max(deepScore, quickImpliedScore, noCodeScore);
+
+        // isLikelyScam: true if ANY signal says so
+        const hasScamMatches = (deepResult?.matches?.length || 0) > 0;
+        const isLikelyScam = deepResult?.isLikelyScam || quickResult.riskLevel === 'critical' || hasNoCode || hasScamMatches;
+
+        // Summary: pick the most relevant one, never contradict
+        let finalSummary: string;
+        if (hasNoCode) {
+          finalSummary = 'SUSPICIOUS: No code files to analyze - cannot verify safety';
+        } else if (deepResult?.summary) {
+          // Deep scan summary already handles "never say CLEAN with matches"
+          finalSummary = deepResult.summary;
+        } else if (quickResult.hasRedFlags) {
+          finalSummary = `Found ${quickResult.redFlags.length} red flags in initial scan`;
+        } else {
+          finalSummary = 'No known scam patterns detected';
+        }
 
         const result = {
           url: gitUrl,
@@ -1065,10 +1095,10 @@ async function main(): Promise<void> {
           owner,
           quickScan: quickResult,
           deepScan: deepResult,
-          isLikelyScam: deepResult?.isLikelyScam || quickResult.riskLevel === 'critical' || hasNoCode,
+          isLikelyScam,
           scamScore: finalScamScore,
           riskLevel: finalRiskLevel,
-          summary: hasNoCode ? 'SUSPICIOUS: No code files to analyze - cannot verify safety' : (deepResult?.summary || (quickResult.hasRedFlags ? `Found ${quickResult.redFlags.length} red flags in initial scan` : 'No known scam patterns detected')),
+          summary: finalSummary,
           redFlags: [...noCodeRedFlags, ...(quickResult.redFlags || []), ...(deepResult?.warnings || [])],
           matches: deepResult?.matches || [],
           scannedAt: new Date().toISOString()

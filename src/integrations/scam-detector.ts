@@ -405,13 +405,26 @@ const KNOWN_SCAM_REPOS: { url: string; name: string; hash?: string }[] = [
   // { url: 'github.com/scammer/rugpull', name: 'Known Rug', hash: 'abc123' }
 ];
 
-// Suspicious keywords in file names
+// Suspicious keywords in file names (matched as whole words to avoid false positives like "hackathon")
 const SUSPICIOUS_FILE_NAMES = [
-  'drain', 'drainer', 'stealer', 'exploit', 'hack',
-  'backdoor', 'hidden', 'secret', 'admin_only', 'emergency_exit',
-  'rug', 'rugpull', 'scam', 'honeypot', 'sniper', 'bundle',
+  'drain', 'drainer', 'stealer', 'exploit',
+  'backdoor', 'hidden', 'admin_only', 'emergency_exit',
+  'rug', 'rugpull', 'scam', 'honeypot', 'sniper',
   'phish', 'steal', 'siphon', 'extract_funds'
 ];
+
+// Helper: check if a file name contains a suspicious word as a whole word (not substring)
+function isSuspiciousFileName(fileName: string): string | null {
+  const lower = fileName.toLowerCase();
+  for (const word of SUSPICIOUS_FILE_NAMES) {
+    // Match whole word: "drain.js" yes, "hackathon" no
+    const regex = new RegExp(`(?:^|[^a-z])${word}(?:[^a-z]|$)`, 'i');
+    if (regex.test(lower)) {
+      return word;
+    }
+  }
+  return null;
+}
 
 // Suspicious patterns in code
 const SUSPICIOUS_CODE_PATTERNS = [
@@ -543,14 +556,13 @@ export async function detectScamPatterns(
     .map(f => f.content)
     .join('\n');
 
-  // Check for suspicious file names
+  // Check for suspicious file names (whole word match to avoid false positives)
   for (const file of filePaths) {
-    const fileName = file.split('/').pop()?.toLowerCase() || '';
-    for (const suspicious of SUSPICIOUS_FILE_NAMES) {
-      if (fileName.includes(suspicious)) {
-        suspiciousFiles.push(file);
-        warnings.push(`Suspicious file name: ${file}`);
-      }
+    const fileName = file.split('/').pop() || '';
+    const match = isSuspiciousFileName(fileName);
+    if (match) {
+      suspiciousFiles.push(file);
+      warnings.push(`Suspicious file name: ${file}`);
     }
   }
 
@@ -620,14 +632,16 @@ export async function detectScamPatterns(
   // Calculate scam score
   let scamScore = 0;
 
-  // Critical matches add 30 points each
-  scamScore += matches.filter(m => m.severity === 'critical').length * 30;
-  // High matches add 20 points each
-  scamScore += matches.filter(m => m.severity === 'high').length * 20;
-  // Medium matches add 10 points each
-  scamScore += matches.filter(m => m.severity === 'medium').length * 10;
-  // Low matches add 5 points each
-  scamScore += matches.filter(m => m.severity === 'low').length * 5;
+  // Signature matches (known scam patterns)
+  const criticalMatches = matches.filter(m => m.severity === 'critical').length;
+  const highMatches = matches.filter(m => m.severity === 'high').length;
+  const mediumMatches = matches.filter(m => m.severity === 'medium').length;
+  const lowMatches = matches.filter(m => m.severity === 'low').length;
+
+  scamScore += criticalMatches * 30;
+  scamScore += highMatches * 20;
+  scamScore += mediumMatches * 10;
+  scamScore += lowMatches * 5;
 
   // Suspicious patterns add points
   scamScore += suspiciousPatterns.filter(p => p.severity === 'high').length * 15;
@@ -635,6 +649,16 @@ export async function detectScamPatterns(
 
   // Suspicious files add points
   scamScore += suspiciousFiles.length * 10;
+
+  // Enforce minimum scores when known scam signatures are matched
+  // A known scam pattern should never result in a "clean" score
+  if (criticalMatches > 0) {
+    scamScore = Math.max(scamScore, 50);
+  } else if (highMatches > 0) {
+    scamScore = Math.max(scamScore, 35);
+  } else if (mediumMatches > 0) {
+    scamScore = Math.max(scamScore, 20);
+  }
 
   // Cap at 100
   scamScore = Math.min(100, scamScore);
@@ -645,16 +669,27 @@ export async function detectScamPatterns(
   // Determine if likely scam
   const isLikelyScam = scamScore >= 50 || matches.some(m => m.severity === 'critical' && m.confidence > 60);
 
-  // Generate summary
+  // Generate summary - signature matches always override
+  // Rule: if we matched a known scam pattern, NEVER say "CLEAN"
   let summary = '';
-  if (scamScore >= 70) {
-    summary = `HIGH RISK: Multiple scam patterns detected. ${matches.length} signature matches found.`;
-  } else if (scamScore >= 50) {
-    summary = `CAUTION: Suspicious patterns found. Review carefully before interacting.`;
+  if (matches.length > 0) {
+    // We found known scam patterns - lead with the worst one
+    const worstMatch = matches.sort((a, b) => {
+      const order = { critical: 0, high: 1, medium: 2, low: 3 };
+      return order[a.severity] - order[b.severity];
+    })[0];
+
+    if (scamScore >= 70) {
+      summary = `DANGER: ${matches.length} known scam pattern(s) detected including ${worstMatch.signatureName}.`;
+    } else if (scamScore >= 50) {
+      summary = `WARNING: Known scam pattern detected - ${worstMatch.signatureName}. Review carefully.`;
+    } else {
+      summary = `CAUTION: Matched scam pattern - ${worstMatch.signatureName}. Proceed with caution.`;
+    }
   } else if (scamScore >= 25) {
     summary = `MODERATE RISK: Some concerning patterns detected. Proceed with caution.`;
   } else if (suspiciousPatterns.length > 0 || suspiciousFiles.length > 0) {
-    summary = `LOW RISK: Minor concerns found but no major red flags.`;
+    summary = `LOW RISK: Minor concerns found but no known scam patterns.`;
   } else {
     summary = `CLEAN: No known scam patterns detected.`;
   }
@@ -685,13 +720,12 @@ export async function quickScamScan(
 }> {
   const redFlags: string[] = [];
 
-  // Check file names
+  // Check file names (whole word match to avoid false positives like "hackathon")
   for (const file of files) {
-    const fileName = file.split('/').pop()?.toLowerCase() || '';
-    for (const suspicious of SUSPICIOUS_FILE_NAMES) {
-      if (fileName.includes(suspicious)) {
-        redFlags.push(`Suspicious file: ${file}`);
-      }
+    const fileName = file.split('/').pop() || '';
+    const match = isSuspiciousFileName(fileName);
+    if (match) {
+      redFlags.push(`Suspicious file: ${file}`);
     }
   }
 
