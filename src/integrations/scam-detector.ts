@@ -1,8 +1,8 @@
 /**
- * Scam Detector - Code Similarity & Known Scam Pattern Detection
+ * Scam Detector - Focused on AI Crypto Projects & Solana Ecosystem
  *
- * Compares GitHub repos against known scam patterns and templates.
- * Detects copied code, rug pull templates, and suspicious patterns.
+ * Detects fake AI projects, Solana rug patterns, and wallet drainers.
+ * Optimized for pump.fun and AI agent token ecosystem.
  */
 
 // Known scam repo signatures - file patterns, code snippets, structure
@@ -21,130 +21,366 @@ export interface ScamSignature {
   source?: string;
 }
 
-// Known scam signatures database
+// Known scam signatures database - FOCUSED ON AI + SOLANA
 const SCAM_SIGNATURES: ScamSignature[] = [
+  // ============ FAKE AI PROJECT DETECTION (Core Value) ============
   {
-    id: 'pump-dump-template-1',
-    name: 'Pump & Dump Template',
-    description: 'Common pump and dump token template with hidden mint functions',
-    severity: 'critical',
+    id: 'fake-ai-wrapper',
+    name: 'API Wrapper Pretending to be AI',
+    description: 'Project claims AI but just wraps OpenAI/Anthropic API with no real logic',
+    severity: 'high',
     patterns: {
       codePatterns: [
-        /function\s+_?mint(?:To)?Owner\s*\(/i,
-        /onlyOwner.*mint.*unlimited/i,
-        /hidden.*mint/i,
-        /backdoor.*admin/i,
-        /emergency.*withdraw.*all/i,
+        /openai\.chat\.completions\.create/i,
+        /anthropic\.messages\.create/i,
+        /new\s+OpenAI\s*\(/i,
+        /new\s+Anthropic\s*\(/i,
+        /ChatCompletion\.create/i,
+        /client\.chat\.completions/i,
       ],
       readmePatterns: [
-        /100x\s+guaranteed/i,
-        /get\s+rich\s+quick/i,
-        /next\s+100x\s+gem/i,
-        /guaranteed\s+profit/i,
-        /early\s+investors\s+only/i,
+        /powered\s+by\s+(?:advanced\s+)?ai/i,
+        /revolutionary\s+ai/i,
+        /cutting[\s-]edge\s+(?:ai|ml|machine\s+learning)/i,
+        /ai[\s-]driven\s+(?:trading|analysis|predictions)/i,
+        /proprietary\s+ai/i,
+        /our\s+(?:advanced|custom|unique)\s+ai/i,
       ]
     }
   },
   {
-    id: 'honeypot-template-1',
-    name: 'Honeypot Contract',
-    description: 'Contract that allows buying but prevents selling',
-    severity: 'critical',
+    id: 'fake-ai-no-ml-code',
+    name: 'No Real ML Code',
+    description: 'Claims AI/ML but has no actual machine learning implementation',
+    severity: 'high',
+    patterns: {
+      readmePatterns: [
+        /(?:train|trained)\s+(?:on|with)\s+(?:millions|billions)/i,
+        /(?:neural|deep)\s+(?:network|learning)/i,
+        /machine\s+learning\s+(?:model|algorithm)/i,
+        /ai\s+(?:agent|bot|assistant)/i,
+      ],
+      // These are red flags when README claims AI but code doesn't have real ML
+      filePatterns: ['model.py', 'train.py', 'inference.py'] // If missing = red flag
+    }
+  },
+  {
+    id: 'fake-ai-buzzwords',
+    name: 'AI Buzzword Overload',
+    description: 'README stuffed with AI buzzwords but no substance',
+    severity: 'medium',
+    patterns: {
+      readmePatterns: [
+        /(?:gpt|llm|transformer|neural)\s*[\-\s]*(?:powered|based|driven)/i,
+        /autonomous\s+ai\s+agent/i,
+        /sentient|conscious|self[\-\s]aware/i,
+        /ai\s+(?:singularity|superintelligence)/i,
+        /(?:first|only|most\s+advanced)\s+ai/i,
+        /ai\s+that\s+(?:thinks|learns|evolves)/i,
+      ]
+    }
+  },
+  {
+    id: 'fake-ai-trading-bot',
+    name: 'Fake AI Trading Bot',
+    description: 'Claims AI trading but likely just random or copy trades',
+    severity: 'high',
+    patterns: {
+      readmePatterns: [
+        /ai\s+(?:trading|sniper|mev)\s+bot/i,
+        /(?:guaranteed|100%)\s+(?:profit|returns|win)/i,
+        /never\s+(?:lose|loss)/i,
+        /(?:predict|know)\s+(?:the\s+)?(?:market|price)/i,
+        /insider\s+(?:ai|algorithm|bot)/i,
+      ],
+      codePatterns: [
+        /Math\.random\(\).*(?:buy|sell|trade)/i,
+        /random.*(?:amount|size|position)/i,
+      ]
+    }
+  },
+  {
+    id: 'eliza-fork-unchanged',
+    name: 'Unchanged Eliza/ai16z Fork',
+    description: 'Direct fork of ai16z/eliza with minimal changes',
+    severity: 'medium',
     patterns: {
       codePatterns: [
-        /require\s*\(\s*(?:msg\.sender|_from)\s*==\s*owner/i,
-        /blacklist\[.*\]\s*=\s*true/i,
-        /canSell\s*=\s*false/i,
-        /onlySellWhenEnabled/i,
-        /transferFrom.*require.*owner/i,
-        /sell.*disabled/i,
-      ]
+        /elizaLogger/i,
+        /AgentRuntime.*eliza/i,
+        /import.*from\s+['"]@ai16z\/eliza/i,
+        /elizaConfig/i,
+      ],
+      filePatterns: ['eliza.config.ts', 'eliza.character.json']
     }
   },
+
+  // ============ SOLANA RUG PATTERNS ============
   {
-    id: 'fake-liquidity-lock',
-    name: 'Fake Liquidity Lock',
-    description: 'Pretends to lock liquidity but has backdoor',
+    id: 'solana-drain-program',
+    name: 'Solana Drain Program',
+    description: 'Solana program designed to drain user funds',
     severity: 'critical',
     patterns: {
-      codePatterns: [
-        /unlockLiquidity.*onlyOwner/i,
-        /emergencyUnlock/i,
-        /bypassLock/i,
-        /lockTime\s*=\s*0/i,
-        /removeLiquidity.*owner/i,
-      ]
-    }
-  },
-  {
-    id: 'rug-pull-solana-1',
-    name: 'Solana Rug Template',
-    description: 'Common Solana program rug pull patterns',
-    severity: 'critical',
-    patterns: {
-      filePatterns: ['drain.rs', 'withdraw_all.rs', 'emergency_exit.rs'],
+      filePatterns: ['drain.rs', 'withdraw_all.rs', 'emergency_exit.rs', 'rug.rs'],
       codePatterns: [
         /withdraw_all_funds/i,
         /drain_pool/i,
         /transfer_to_admin/i,
         /close_account.*authority/i,
         /emergency.*drain/i,
+        /lamports.*=.*0/i,
+        /\*\*ctx\.accounts\.(?:user|victim).*lamports.*=.*0/i,
       ]
     }
   },
   {
-    id: 'fake-ai-project-1',
-    name: 'Fake AI Project',
-    description: 'Claims AI but has no real AI code',
+    id: 'solana-mint-authority',
+    name: 'Mint Authority Not Revoked',
+    description: 'Solana token where creator can mint unlimited tokens',
+    severity: 'critical',
+    patterns: {
+      codePatterns: [
+        /mint_authority.*Some/i,
+        /MintTo\s*\{/i,
+        /mint_to.*authority/i,
+        /set_authority.*Mint/i,
+        /token::mint_to/i,
+      ]
+    }
+  },
+  {
+    id: 'solana-freeze-authority',
+    name: 'Freeze Authority Retained',
+    description: 'Solana token where creator can freeze accounts',
     severity: 'high',
     patterns: {
-      readmePatterns: [
-        /powered\s+by\s+(?:advanced\s+)?ai/i,
-        /revolutionary\s+ai/i,
-        /cutting[\s-]edge\s+(?:ai|ml|machine\s+learning)/i,
-        /ai[\s-]driven\s+(?:trading|analysis|predictions)/i,
-      ],
       codePatterns: [
-        // Just imports with no actual usage
-        /import.*openai.*\n(?:(?!openai|completion|chat).)*$/is,
+        /freeze_authority.*Some/i,
+        /FreezeAccount/i,
+        /set_authority.*Freeze/i,
+        /token::freeze_account/i,
       ]
     }
   },
   {
-    id: 'copy-paste-defi-1',
-    name: 'Copy-Paste DeFi',
-    description: 'Exact copy of common DeFi templates with minimal changes',
-    severity: 'medium',
+    id: 'solana-close-authority',
+    name: 'Close Authority Abuse',
+    description: 'Program can close user token accounts and steal funds',
+    severity: 'critical',
     patterns: {
       codePatterns: [
-        // Common unchanged boilerplate
-        /MasterChef.*SUSHI/i,
-        /PancakeRouter/i,
-        /UniswapV2Router/i,
-      ]
+        /close\s*=\s*authority/i,
+        /CloseAccount/i,
+        /close_account.*destination/i,
+        /token::close_account/i,
+      ],
+      filePatterns: ['close_accounts.rs']
     }
   },
   {
-    id: 'wallet-drainer-1',
-    name: 'Wallet Drainer',
-    description: 'Code designed to drain connected wallets',
+    id: 'pump-fun-bundle',
+    name: 'Pump.fun Bundle/Snipe',
+    description: 'Code for bundling or sniping pump.fun launches',
+    severity: 'high',
+    patterns: {
+      codePatterns: [
+        /pump\.fun.*bundle/i,
+        /pumpfun.*snipe/i,
+        /bundl.*pump/i,
+        /jito.*bundle.*pump/i,
+      ],
+      filePatterns: ['bundle.ts', 'sniper.ts', 'pumpfun_snipe.js']
+    }
+  },
+
+  // ============ WALLET DRAINERS (Frontend/JS) ============
+  {
+    id: 'wallet-drainer-js',
+    name: 'JavaScript Wallet Drainer',
+    description: 'Frontend code designed to drain connected wallets',
     severity: 'critical',
     patterns: {
       codePatterns: [
         /signAllTransactions/i,
         /drainWallet/i,
         /transferAll.*tokens/i,
-        /approveMax.*spender/i,
-        /setApprovalForAll.*true/i,
-        /unlimited.*approval/i,
+        /phantom\.solana.*signTransaction/i,
+        /window\.solana.*signAllTransactions/i,
+        /solflare.*signAllTransactions/i,
       ],
-      filePatterns: ['drainer.js', 'drain.ts', 'stealer.js']
+      filePatterns: ['drainer.js', 'drain.ts', 'stealer.js', 'siphon.js']
     }
   },
   {
-    id: 'airdrop-scam-1',
+    id: 'wallet-approval-abuse',
+    name: 'Token Approval Abuse',
+    description: 'Tricks users into approving unlimited token access',
+    severity: 'critical',
+    patterns: {
+      codePatterns: [
+        /approve.*(?:max|unlimited|infinite)/i,
+        /setApprovalForAll.*true/i,
+        /allowance.*type\(uint256\)\.max/i,
+        /approve.*0xffffffff/i,
+      ]
+    }
+  },
+  {
+    id: 'phishing-connect',
+    name: 'Phishing Wallet Connect',
+    description: 'Fake wallet connect that steals credentials',
+    severity: 'critical',
+    patterns: {
+      codePatterns: [
+        /localStorage\.getItem.*(?:key|private|seed|mnemonic|phrase)/i,
+        /(?:seed|mnemonic|private).*(?:phrase|key).*(?:input|form|submit)/i,
+        /fetch.*(?:seed|mnemonic|privateKey)/i,
+        /XMLHttpRequest.*(?:private|key|seed|wallet)/i,
+      ],
+      readmePatterns: [
+        /enter\s+(?:your\s+)?(?:seed|recovery|mnemonic)\s+phrase/i,
+        /import\s+(?:your\s+)?wallet/i,
+      ]
+    }
+  },
+  {
+    id: 'suspicious-data-exfil',
+    name: 'Suspicious Data Exfiltration',
+    description: 'Sends wallet data to external servers',
+    severity: 'critical',
+    patterns: {
+      codePatterns: [
+        /fetch\s*\(.*(?:\.ru|\.cn|\.tk|\.ml|\.xyz\/api)/i,
+        /axios\.post.*(?:wallet|key|seed|private)/i,
+        /webhook.*(?:discord|telegram).*(?:key|seed|wallet)/i,
+      ]
+    }
+  },
+
+  // ============ README SCAM LANGUAGE ============
+  {
+    id: 'pump-dump-language',
+    name: 'Pump & Dump Marketing',
+    description: 'README uses classic pump and dump language',
+    severity: 'high',
+    patterns: {
+      readmePatterns: [
+        /100x\s+(?:guaranteed|potential|gem)/i,
+        /1000x/i,
+        /get\s+rich\s+quick/i,
+        /next\s+(?:100x|1000x|moon)\s+gem/i,
+        /guaranteed\s+(?:profit|returns|gains)/i,
+        /early\s+investors\s+only/i,
+        /(?:ape|buy)\s+(?:now|in|before)/i,
+      ]
+    }
+  },
+  {
+    id: 'fomo-tactics',
+    name: 'FOMO Marketing Tactics',
+    description: 'Uses fear of missing out to pressure investment',
+    severity: 'medium',
+    patterns: {
+      readmePatterns: [
+        /(?:last|final)\s+chance/i,
+        /don'?t\s+(?:miss|sleep\s+on)/i,
+        /only\s+\d+\s+spots?\s+left/i,
+        /act\s+(?:fast|now|quickly)/i,
+        /limited\s+(?:time|supply|spots)/i,
+        /(?:whitelist|presale)\s+(?:closing|ending)\s+soon/i,
+        /stealth\s+launch/i,
+        /(?:floor|price)\s+(?:is\s+)?pumping/i,
+      ]
+    }
+  },
+  {
+    id: 'trust-me-bro',
+    name: 'Trust Me Bro Signals',
+    description: 'Vague trust signals with no verification',
+    severity: 'medium',
+    patterns: {
+      readmePatterns: [
+        /trust\s+(?:me|us|the\s+team)/i,
+        /(?:team|devs?)\s+(?:is|are)\s+(?:based|legit|doxxed)/i,
+        /safu|safe\s+(?:team|project|investment)/i,
+        /(?:this\s+is|not)\s+(?:not\s+)?financial\s+advice/i,
+        /dyor.*not\s+financial\s+advice/i,
+        /liquidity\s+(?:locked|burned)/i,
+        /contract\s+(?:renounced|verified)/i,
+      ]
+    }
+  },
+  {
+    id: 'fake-partnership',
+    name: 'Fake Partnership Claims',
+    description: 'Claims partnerships that are likely fake',
+    severity: 'high',
+    patterns: {
+      readmePatterns: [
+        /partner(?:ship|ed)\s+with\s+(?:binance|coinbase|openai|anthropic|google|microsoft)/i,
+        /backed\s+by\s+(?:a16z|sequoia|paradigm)/i,
+        /official\s+(?:partner|collaboration)/i,
+        /endorsed\s+by/i,
+      ]
+    }
+  },
+
+  // ============ COPY-PASTE DETECTION ============
+  {
+    id: 'copy-paste-readme',
+    name: 'Copy-Paste README Template',
+    description: 'README is clearly copied from template or other project',
+    severity: 'medium',
+    patterns: {
+      readmePatterns: [
+        /\[Project\s+Name\]/i,
+        /\[Your\s+(?:Name|Project|Token)\]/i,
+        /TODO:?\s*(?:add|replace|update)/i,
+        /INSERT\s+(?:TOKEN|PROJECT|NAME)/i,
+        /CHANGE\s+THIS/i,
+      ]
+    }
+  },
+  {
+    id: 'placeholder-code',
+    name: 'Placeholder Code',
+    description: 'Code contains obvious placeholders indicating copy-paste',
+    severity: 'medium',
+    patterns: {
+      codePatterns: [
+        /YOUR_(?:API_KEY|TOKEN|SECRET)/i,
+        /REPLACE_(?:THIS|ME|WITH)/i,
+        /TODO:?\s*implement/i,
+        /fixme|hack|xxx/i,
+      ]
+    }
+  },
+
+  // ============ OBFUSCATION ============
+  {
+    id: 'obfuscated-code',
+    name: 'Obfuscated Code',
+    description: 'Intentionally obfuscated code hiding malicious functions',
+    severity: 'high',
+    patterns: {
+      codePatterns: [
+        /\w{50,}/,  // Very long variable names
+        /eval\s*\(/i,
+        /Function\s*\(.*\)\s*\(/,
+        /atob\s*\(.*atob/i,  // Nested base64
+        /String\.fromCharCode\(.*,.*,.*,.*,/i,  // Many char codes
+        /\\x[0-9a-f]{2}.*\\x[0-9a-f]{2}.*\\x[0-9a-f]{2}/gi,  // Multiple hex
+      ],
+      filePatterns: ['obfuscated.js', 'packed.js', 'encoded.js']
+    }
+  },
+
+  // ============ AIRDROP SCAMS ============
+  {
+    id: 'airdrop-scam',
     name: 'Airdrop Scam',
-    description: 'Fake airdrop that requires wallet connection or fees',
+    description: 'Fake airdrop that requires fees or wallet approval',
     severity: 'high',
     patterns: {
       codePatterns: [
@@ -155,8 +391,9 @@ const SCAM_SIGNATURES: ScamSignature[] = [
       ],
       readmePatterns: [
         /free\s+airdrop/i,
-        /claim\s+your\s+tokens/i,
+        /claim\s+your\s+(?:free\s+)?tokens/i,
         /limited\s+time\s+airdrop/i,
+        /airdrop.*connect.*wallet/i,
       ]
     }
   }
@@ -171,17 +408,34 @@ const KNOWN_SCAM_REPOS: { url: string; name: string; hash?: string }[] = [
 // Suspicious keywords in file names
 const SUSPICIOUS_FILE_NAMES = [
   'drain', 'drainer', 'stealer', 'exploit', 'hack',
-  'backdoor', 'hidden', 'secret', 'admin_only', 'emergency_exit'
+  'backdoor', 'hidden', 'secret', 'admin_only', 'emergency_exit',
+  'rug', 'rugpull', 'scam', 'honeypot', 'sniper', 'bundle',
+  'phish', 'steal', 'siphon', 'extract_funds'
 ];
 
-// Suspicious patterns in code that indicate potential scam
+// Suspicious patterns in code
 const SUSPICIOUS_CODE_PATTERNS = [
+  // Obfuscation
   { pattern: /eval\s*\(/, name: 'Dynamic code execution (eval)', severity: 'high' as const },
   { pattern: /Function\s*\(.*\)\s*\(/, name: 'Dynamic function creation', severity: 'high' as const },
   { pattern: /atob\s*\(|btoa\s*\(/, name: 'Base64 encoding (possible obfuscation)', severity: 'medium' as const },
-  { pattern: /\\x[0-9a-f]{2}/gi, name: 'Hex encoded strings', severity: 'medium' as const },
   { pattern: /fromCharCode/, name: 'Character code obfuscation', severity: 'medium' as const },
-  { pattern: /process\.env\[.*\+.*\]/, name: 'Dynamic env access', severity: 'medium' as const },
+
+  // Data exfiltration
+  { pattern: /document\.cookie/, name: 'Cookie access', severity: 'high' as const },
+  { pattern: /localStorage\.getItem.*(?:key|private|seed|mnemonic)/i, name: 'Accessing stored keys', severity: 'critical' as const },
+
+  // Wallet interactions (Solana focused)
+  { pattern: /signAllTransactions/, name: 'Sign all transactions (dangerous)', severity: 'critical' as const },
+  { pattern: /phantom\.solana.*sign/i, name: 'Phantom wallet signing', severity: 'medium' as const },
+  { pattern: /window\.solana/, name: 'Direct Solana wallet access', severity: 'medium' as const },
+
+  // Solana program patterns
+  { pattern: /invoke_signed.*transfer/i, name: 'Solana PDA transfer', severity: 'medium' as const },
+  { pattern: /close_account.*lamports/i, name: 'Solana account drain', severity: 'high' as const },
+  { pattern: /\*\*.*lamports.*=.*0/, name: 'Zero out lamports', severity: 'critical' as const },
+
+  // Shell/System access
   { pattern: /require\s*\(\s*['"`]child_process/, name: 'Shell execution', severity: 'high' as const },
   { pattern: /exec\s*\(|spawn\s*\(/, name: 'Command execution', severity: 'high' as const },
 ];
