@@ -991,6 +991,11 @@ async function main(): Promise<void> {
           files = treeData.tree?.filter((f: { type: string }) => f.type === 'blob') || [];
         }
 
+        // Check for code files - if none, repo is suspicious
+        const codeExtensions = ['.js', '.ts', '.jsx', '.tsx', '.py', '.go', '.rs', '.sol', '.java', '.c', '.cpp', '.rb', '.php'];
+        const codeFileCount = files.filter(f => codeExtensions.some(ext => f.path.endsWith(ext))).length;
+        const hasNoCode = codeFileCount === 0;
+
         // Fetch README
         let readmeContent = '';
         const readmeFile = files.find(f => f.path.toLowerCase().includes('readme'));
@@ -1045,18 +1050,25 @@ async function main(): Promise<void> {
           });
         }
 
-        // Build response
+        // Build response - flag empty repos as suspicious
+        const noCodeRedFlags = hasNoCode ? ['No code files found - nothing to scan (SUSPICIOUS)'] : [];
+        const baseRiskLevel = deepResult ? (deepResult.scamScore >= 70 ? 'critical' : deepResult.scamScore >= 50 ? 'high' : deepResult.scamScore >= 25 ? 'medium' : 'low') : quickResult.riskLevel;
+
+        // Upgrade risk level if no code
+        const finalRiskLevel = hasNoCode && baseRiskLevel === 'low' ? 'medium' : baseRiskLevel;
+        const finalScamScore = hasNoCode && !deepResult?.scamScore ? 35 : (deepResult?.scamScore || (quickResult.riskLevel === 'critical' ? 80 : quickResult.riskLevel === 'high' ? 60 : quickResult.riskLevel === 'medium' ? 30 : 0));
+
         const result = {
           url: gitUrl,
           repoName: repo,
           owner,
           quickScan: quickResult,
           deepScan: deepResult,
-          isLikelyScam: deepResult?.isLikelyScam || quickResult.riskLevel === 'critical',
-          scamScore: deepResult?.scamScore || (quickResult.riskLevel === 'critical' ? 80 : quickResult.riskLevel === 'high' ? 60 : quickResult.riskLevel === 'medium' ? 30 : 0),
-          riskLevel: deepResult ? (deepResult.scamScore >= 70 ? 'critical' : deepResult.scamScore >= 50 ? 'high' : deepResult.scamScore >= 25 ? 'medium' : 'low') : quickResult.riskLevel,
-          summary: deepResult?.summary || (quickResult.hasRedFlags ? `Found ${quickResult.redFlags.length} red flags in initial scan` : 'No known scam patterns detected'),
-          redFlags: [...(quickResult.redFlags || []), ...(deepResult?.warnings || [])],
+          isLikelyScam: deepResult?.isLikelyScam || quickResult.riskLevel === 'critical' || hasNoCode,
+          scamScore: finalScamScore,
+          riskLevel: finalRiskLevel,
+          summary: hasNoCode ? 'SUSPICIOUS: No code files to analyze - cannot verify safety' : (deepResult?.summary || (quickResult.hasRedFlags ? `Found ${quickResult.redFlags.length} red flags in initial scan` : 'No known scam patterns detected')),
+          redFlags: [...noCodeRedFlags, ...(quickResult.redFlags || []), ...(deepResult?.warnings || [])],
           matches: deepResult?.matches || [],
           scannedAt: new Date().toISOString()
         };
