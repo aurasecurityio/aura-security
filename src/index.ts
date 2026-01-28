@@ -995,6 +995,7 @@ async function main(): Promise<void> {
         const codeExtensions = ['.js', '.ts', '.jsx', '.tsx', '.py', '.go', '.rs', '.sol', '.java', '.c', '.cpp', '.rb', '.php'];
         const codeFileCount = files.filter(f => codeExtensions.some(ext => f.path.endsWith(ext))).length;
         const hasNoCode = codeFileCount === 0;
+        console.log(`[AURA] scam-scan: files=${files.length}, codeFiles=${codeFileCount}, hasNoCode=${hasNoCode}`);
 
         // Fetch README
         let readmeContent = '';
