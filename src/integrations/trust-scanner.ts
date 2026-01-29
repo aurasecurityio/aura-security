@@ -593,8 +593,19 @@ function calculateScore(checks: TrustCheck[]): { score: number; grade: 'A' | 'B'
 
   // Apply caps based on critical issues
   if (hasSecrets) {
-    // Leaked secrets = max score 50 (RISKY)
-    score = Math.min(score, 50);
+    const secretsCheck = checks.find(c => c.id === 'secrets');
+    const secretCount = secretsCheck ? Math.abs(secretsCheck.points) / 10 : 1;
+    if (secretCount >= 5) {
+      // Many secrets = definitely compromised, hard cap RISKY
+      score = Math.min(score, 40);
+    } else if (secretCount >= 3) {
+      // Several secrets = serious concern
+      score = Math.min(score, 50);
+    } else {
+      // 1-2 secrets = concerning but could be marginal detection
+      // Cap at DYOR, let other signals weigh in
+      score = Math.min(score, 65);
+    }
   }
   if (hasNoCode) {
     // No code = max score 40 (RISKY)
@@ -680,17 +691,27 @@ function generateSummary(checks: TrustCheck[], score: number, verdict: string): 
  */
 function scanForSecrets(content: string): number {
   const secretPatterns = [
-    /AKIA[0-9A-Z]{16}/,                    // AWS Access Key
-    /[a-zA-Z0-9+\/]{40}/,                   // Generic 40-char key
-    /ghp_[A-Za-z0-9_]{36}/,                // GitHub Token
-    /sk_live_[A-Za-z0-9]{24,}/,            // Stripe Key
-    /-----BEGIN.*PRIVATE KEY-----/,         // Private Key
-    /password\s*[:=]\s*['""][^'""]+['""]/, // Hardcoded password
+    /AKIA[0-9A-Z]{16}/,                                    // AWS Access Key (always starts with AKIA)
+    /gh[pousr]_[A-Za-z0-9_]{36,}/,                         // GitHub tokens (prefixed)
+    /sk_live_[A-Za-z0-9]{24,}/,                             // Stripe live keys
+    /-----BEGIN\s*(?:RSA|EC|DSA|OPENSSH)?\s*PRIVATE KEY-----/, // Private keys (PEM format)
+    /password\s*[:=]\s*["'][^"']{8,}["']/i,                 // Hardcoded passwords with real values
+    /xox[bprs]-[0-9]{10,}-[A-Za-z0-9-]+/,                  // Slack tokens
+    /(?:api[_-]?key|secret[_-]?key|auth[_-]?token)\s*[:=]\s*["'][A-Za-z0-9+\/=]{20,}["']/i, // Secret assignments
   ];
+
+  // Skip data files (token lists, address registries)
+  if (/["'](tokens|addresses|mints|constituents|verified)["']\s*:/i.test(content)) {
+    return 0;
+  }
+
+  // Placeholder values are not real secrets
+  const placeholderPattern = /your[_-]?api[_-]?key|REPLACE[_-]?ME|TODO|CHANGEME|xxxx|placeholder|example/i;
 
   let count = 0;
   for (const pattern of secretPatterns) {
-    if (pattern.test(content)) {
+    const match = content.match(pattern);
+    if (match && !placeholderPattern.test(match[0])) {
       count++;
     }
   }
@@ -963,13 +984,28 @@ export async function performTrustScan(gitUrl: string): Promise<TrustScanResult>
       }
       codeRedFlags = scanCodeForRedFlags(scannedFiles);
 
-      // Quick secret scan on key files (config files, env examples)
-      const sensitiveFiles = files.filter((f: { path: string }) =>
-        f.path.includes('config') ||
-        f.path.includes('.env') ||
-        f.path.endsWith('.json') ||
-        f.path.endsWith('.yml')
-      ).slice(0, 5);
+      // Quick secret scan on files that could plausibly contain secrets
+      const sensitiveFiles = files.filter((f: { path: string }) => {
+        const p = f.path.toLowerCase();
+        // Only scan files that could contain secrets
+        const isSensitive = p.includes('.env') ||
+          p.includes('config') ||
+          p.endsWith('.yml') ||
+          p.endsWith('.yaml');
+        // Exclude known safe files that produce false positives
+        const isSafe = p === 'package.json' ||
+          p === 'package-lock.json' ||
+          p.includes('tsconfig') ||
+          p.includes('eslint') ||
+          p.includes('prettier') ||
+          p.endsWith('.lock') ||
+          p.includes('token-list') ||
+          p.includes('tokenlist') ||
+          p.includes('/test') ||
+          p.includes('/example') ||
+          p.includes('/fixture');
+        return isSensitive && !isSafe;
+      }).slice(0, 5);
 
       for (const file of sensitiveFiles) {
         try {
