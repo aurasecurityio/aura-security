@@ -267,10 +267,15 @@ function runGitleaks(targetPath: string): SecretFinding[] {
           /^0x[0-9a-fA-F]{10,}$/.test(secret) ||
           // Contract address assignments (common in deploy scripts and config)
           /^0x[0-9a-fA-F]{10,}['";,\s]/.test(secret) ||
+          // Solana base58 addresses / program IDs (32-44 base58 chars, no 0x prefix)
+          /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(secret) ||
           // Variable name clearly indicates address/hash, not a secret
-          /(?:ADDRESS|CONTRACT|CLASS_HASH|TOKEN|VERIFIER|HANDLER|ORACLE|ASSET_ID|PAIR_ID|POOL|VAULT|FACTORY|ROUTER|FEE_TOKEN|PRAGMA)/i.test(finding.Match || '') ||
+          /(?:ADDRESS|CONTRACT|CLASS_HASH|TOKEN|VERIFIER|HANDLER|ORACLE|ASSET_ID|PAIR_ID|POOL|VAULT|FACTORY|ROUTER|FEE_TOKEN|PRAGMA|PROGRAM_ID|MINT|PUBKEY|PUBLIC_KEY|AUTHORITY|SIGNER|WALLET_ADDRESS)/i.test(finding.Match || '') ||
           // RPC/node URLs (public endpoints, not secrets)
-          /^https?:\/\/.+\.(xyz|io|com|dev|net)\/?/.test(secret)
+          /^https?:\/\/.+\.(xyz|io|com|dev|net)\/?/.test(secret) ||
+          // IPFS CIDs (content-addressed, public by design)
+          /^Qm[1-9A-HJ-NP-Za-km-z]{44}$/.test(secret) ||
+          /^bafy[a-z2-7]{50,}$/i.test(secret)
         );
 
         // Skip if any false positive indicator matches
