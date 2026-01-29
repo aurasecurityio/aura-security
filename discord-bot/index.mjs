@@ -542,23 +542,95 @@ function formatAICheckResults(result) {
  * Format scam check results for Discord
  */
 function formatScamCheckResults(result) {
-  let color = 0x00ff00;  // Green default
+  // Use unified fields if available, fallback to legacy
+  const hasUnified = result.score !== undefined && result.verdict;
+
+  if (hasUnified) {
+    // === UNIFIED CARD ===
+    const colors = {
+      'SAFU': 0x00ff00,
+      'DYOR': 0xffff00,
+      'RISKY': 0xff8c00,
+      'RUG ALERT': 0xff0000
+    };
+
+    const tagsText = (result.tags || []).map(t => `\`${t}\``).join(' ');
+    const repoDisplay = result.owner ? `${result.owner}/${result.repoName}` : (result.repoName || 'Unknown');
+
+    // Code safety line
+    const codeStatus = result.codeSafety?.status || 'UNKNOWN';
+    const codeEmoji = codeStatus === 'CLEAN' ? '✅' : codeStatus === 'WARNING' ? '🟡' : '🚨';
+    const codeLine = `${codeEmoji} ${result.codeSafety?.summary || 'N/A'}`;
+
+    // Trust line
+    const trustStatus = result.projectTrust?.status || 'UNKNOWN';
+    const trustEmoji = trustStatus === 'SAFU' ? '✅' : trustStatus === 'DYOR' ? '🟡' : '🟠';
+    const trustLine = `${trustEmoji} ${trustStatus} (${result.projectTrust?.trustScore || 0}/100)`;
+
+    // Secrets line
+    const secretsEmoji = result.secretsScan?.status === 'CLEAN' ? '✅' : '🚨';
+    const secretsLine = result.secretsScan?.status === 'CLEAN' ? `${secretsEmoji} None found` : `${secretsEmoji} ${result.secretsScan?.count || 0} leaked`;
+
+    const fields = [
+      { name: 'Code Safety', value: codeLine, inline: false },
+      { name: 'Project Trust', value: trustLine, inline: true },
+      { name: 'Secrets', value: secretsLine, inline: true }
+    ];
+
+    // Red flags
+    const redFlags = (result.redFlags || []).slice(0, 5);
+    if (redFlags.length > 0) {
+      fields.push({
+        name: '⚠ Red Flags',
+        value: redFlags.map(f => `• ${f}`).join('\n'),
+        inline: false
+      });
+    }
+
+    // Green flags
+    const greenFlags = (result.greenFlags || []).slice(0, 5);
+    if (greenFlags.length > 0) {
+      fields.push({
+        name: '✅ Green Flags',
+        value: greenFlags.map(f => `• ${f}`).join('\n'),
+        inline: false
+      });
+    }
+
+    // Analysis
+    if (result.analysis) {
+      fields.push({
+        name: '💬 Analysis',
+        value: result.analysis.slice(0, 1024),
+        inline: false
+      });
+    }
+
+    return {
+      embeds: [{
+        title: `${result.verdictEmoji || '🔍'} ${result.verdict} — ${repoDisplay}`,
+        description: `**Score: ${result.score}/100**\n${tagsText}`,
+        color: colors[result.verdict] || 0x808080,
+        fields: fields,
+        footer: { text: 'AuraSecurity | Project Check' },
+        timestamp: new Date().toISOString()
+      }]
+    };
+  }
+
+  // === LEGACY FALLBACK (if unified fields missing) ===
+  let color = 0x00ff00;
   let emoji = '✅';
 
   if (result.riskLevel === 'critical' || result.isLikelyScam) {
-    color = 0xff0000;  // Red
-    emoji = '🚨';
+    color = 0xff0000; emoji = '🚨';
   } else if (result.riskLevel === 'high') {
-    color = 0xff6600;  // Orange
-    emoji = '⚠️';
+    color = 0xff6600; emoji = '⚠️';
   } else if (result.riskLevel === 'medium') {
-    color = 0xffff00;  // Yellow
-    emoji = '🟡';
+    color = 0xffff00; emoji = '🟡';
   }
 
   const redFlags = (result.redFlags || []).slice(0, 5).map(f => `❌ ${f}`).join('\n') || 'None detected';
-
-  // Build matches display
   let matchesText = 'None detected';
   if (result.matches && result.matches.length > 0) {
     matchesText = result.matches.slice(0, 3).map(m =>
@@ -567,35 +639,14 @@ function formatScamCheckResults(result) {
   }
 
   const fields = [
-    {
-      name: 'Scam Score',
-      value: `**${result.scamScore}/100**`,
-      inline: true
-    },
-    {
-      name: 'Risk Level',
-      value: `**${(result.riskLevel || 'unknown').toUpperCase()}**`,
-      inline: true
-    },
-    {
-      name: 'Likely Scam?',
-      value: result.isLikelyScam ? '🚨 YES' : '✅ NO',
-      inline: true
-    },
-    {
-      name: 'Red Flags',
-      value: redFlags,
-      inline: false
-    }
+    { name: 'Scam Score', value: `**${result.scamScore}/100**`, inline: true },
+    { name: 'Risk Level', value: `**${(result.riskLevel || 'unknown').toUpperCase()}**`, inline: true },
+    { name: 'Likely Scam?', value: result.isLikelyScam ? '🚨 YES' : '✅ NO', inline: true },
+    { name: 'Red Flags', value: redFlags, inline: false }
   ];
 
-  // Add pattern matches if any found
   if (result.matches && result.matches.length > 0) {
-    fields.push({
-      name: 'Known Scam Patterns Matched',
-      value: matchesText,
-      inline: false
-    });
+    fields.push({ name: 'Known Scam Patterns Matched', value: matchesText, inline: false });
   }
 
   return {
@@ -604,9 +655,7 @@ function formatScamCheckResults(result) {
       description: result.summary || 'Scam pattern analysis complete.',
       color: color,
       fields: fields,
-      footer: {
-        text: 'AuraSecurity | Scam Pattern Detection'
-      },
+      footer: { text: 'AuraSecurity | Scam Pattern Detection' },
       timestamp: new Date().toISOString()
     }]
   };

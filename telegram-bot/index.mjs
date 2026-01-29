@@ -2530,7 +2530,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         return { statusCode: 200, body: 'OK' };
       }
 
-      await sendMessage(chatId, `\u{1F50D} Scanning for scam patterns...\n_Checking for rug pulls, honeypots, wallet drainers..._`);
+      await sendMessage(chatId, `\u{1F50D} Running full project check...\n_Analyzing code safety, project trust, secrets..._`);
 
       try {
         const result = await withRetry(async () => {
@@ -2545,47 +2545,89 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
 
         const scam = result.result || result;
 
-        // Format scam check result
-        let emoji = '\u2705'; // ✅
-        if (scam.isLikelyScam || scam.riskLevel === 'critical') {
-          emoji = '\u{1F6A8}'; // 🚨
-        } else if (scam.riskLevel === 'high') {
-          emoji = '\u26A0\uFE0F'; // ⚠️
-        } else if (scam.riskLevel === 'medium') {
-          emoji = '\u{1F7E1}'; // 🟡
+        // Use unified fields if available
+        const hasUnified = scam.score !== undefined && scam.verdict;
+
+        let text;
+        if (hasUnified) {
+          // === UNIFIED CARD ===
+          const repoDisplay = scam.owner ? `${scam.owner}/${scam.repoName}` : (scam.repoName || 'Unknown');
+          const tagsText = (scam.tags || []).map(t => `\`${t}\``).join(' ');
+
+          // Code safety
+          const codeStatus = scam.codeSafety?.status || 'UNKNOWN';
+          const codeEmoji = codeStatus === 'CLEAN' ? '\u2705' : codeStatus === 'WARNING' ? '\u{1F7E1}' : '\u{1F6A8}';
+
+          // Trust
+          const trustStatus = scam.projectTrust?.status || 'UNKNOWN';
+          const trustEmoji = trustStatus === 'SAFU' ? '\u2705' : trustStatus === 'DYOR' ? '\u{1F7E1}' : '\u{1F7E0}';
+
+          // Secrets
+          const secretsEmoji = scam.secretsScan?.status === 'CLEAN' ? '\u2705' : '\u{1F6A8}';
+          const secretsText = scam.secretsScan?.status === 'CLEAN' ? 'Clean' : `${scam.secretsScan?.count || 0} leaked`;
+
+          text = `${scam.verdictEmoji || '\u{1F50D}'} *${scam.verdict} \u2014 ${repoDisplay}*\n`;
+          text += `*Score: ${scam.score}/100*\n`;
+          text += `${tagsText}\n\n`;
+
+          text += `${codeEmoji} *Code:* ${scam.codeSafety?.summary || 'N/A'}\n`;
+          text += `${trustEmoji} *Trust:* ${trustStatus} (${scam.projectTrust?.trustScore || 0}/100)\n`;
+          text += `${secretsEmoji} *Secrets:* ${secretsText}\n\n`;
+
+          // Red flags
+          const redFlags = (scam.redFlags || []).slice(0, 5);
+          if (redFlags.length > 0) {
+            text += `\u26A0\uFE0F *Red Flags:*\n`;
+            redFlags.forEach(f => { text += `\u2022 ${f}\n`; });
+            text += '\n';
+          }
+
+          // Green flags
+          const greenFlags = (scam.greenFlags || []).slice(0, 5);
+          if (greenFlags.length > 0) {
+            text += `\u2705 *Green Flags:*\n`;
+            greenFlags.forEach(f => { text += `\u2022 ${f}\n`; });
+            text += '\n';
+          }
+
+          // Analysis
+          if (scam.analysis) {
+            text += `\u{1F4AC} *Analysis:*\n${scam.analysis}\n`;
+          }
+        } else {
+          // === LEGACY FALLBACK ===
+          let emoji = '\u2705';
+          if (scam.isLikelyScam || scam.riskLevel === 'critical') {
+            emoji = '\u{1F6A8}';
+          } else if (scam.riskLevel === 'high') {
+            emoji = '\u26A0\uFE0F';
+          } else if (scam.riskLevel === 'medium') {
+            emoji = '\u{1F7E1}';
+          }
+
+          text = `${emoji} *Scam Check: ${scam.repoName || 'Unknown'}*\n\n`;
+          text += `*Scam Score:* ${scam.scamScore || 0}/100\n`;
+          text += `*Risk Level:* ${(scam.riskLevel || 'unknown').toUpperCase()}\n`;
+          text += `*Likely Scam:* ${scam.isLikelyScam ? '\u{1F6A8} YES' : '\u2705 NO'}\n\n`;
+
+          if (scam.summary) text += `*Summary:* ${scam.summary}\n\n`;
+
+          const redFlags = scam.redFlags || [];
+          if (redFlags.length > 0) {
+            text += `*Red Flags:*\n`;
+            redFlags.slice(0, 5).forEach(flag => { text += `\u274C ${flag}\n`; });
+            text += '\n';
+          }
+
+          const matches = scam.matches || [];
+          if (matches.length > 0) {
+            text += `*Scam Patterns:*\n`;
+            matches.slice(0, 3).forEach(m => {
+              text += `\u{1F6A9} *${m.signatureName}* (${m.severity})\n   ${m.description}\n`;
+            });
+            text += '\n';
+          }
         }
-
-        let text = `${emoji} *Scam Check: ${scam.repoName || 'Unknown'}*\n\n`;
-        text += `*Scam Score:* ${scam.scamScore || 0}/100\n`;
-        text += `*Risk Level:* ${(scam.riskLevel || 'unknown').toUpperCase()}\n`;
-        text += `*Likely Scam:* ${scam.isLikelyScam ? '\u{1F6A8} YES' : '\u2705 NO'}\n\n`;
-
-        if (scam.summary) {
-          text += `*Summary:* ${scam.summary}\n\n`;
-        }
-
-        // Show red flags
-        const redFlags = scam.redFlags || [];
-        if (redFlags.length > 0) {
-          text += `*Red Flags Found:*\n`;
-          redFlags.slice(0, 5).forEach(flag => {
-            text += `\u274C ${flag}\n`;
-          });
-          text += '\n';
-        }
-
-        // Show matched patterns
-        const matches = scam.matches || [];
-        if (matches.length > 0) {
-          text += `*Known Scam Patterns Matched:*\n`;
-          matches.slice(0, 3).forEach(m => {
-            text += `\u{1F6A9} *${m.signatureName}* (${m.severity})\n`;
-            text += `   ${m.description}\n`;
-          });
-          text += '\n';
-        }
-
-        text += `_Always DYOR! Not financial advice._`;
 
         await sendMessage(chatId, text);
       } catch (err) {

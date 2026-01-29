@@ -1089,22 +1089,191 @@ async function main(): Promise<void> {
           finalSummary = 'No known scam patterns detected';
         }
 
+        // Run trust scan in parallel for unified results
+        let trustResult: any = null;
+        try {
+          trustResult = await performTrustScan(gitUrl);
+        } catch (trustErr) {
+          console.error('[AURA] Trust scan failed during scam-scan, continuing:', trustErr);
+        }
+
+        // === UNIFIED SCORING ===
+        // Start with trust score, apply scam-scan overrides downward
+        const trustScore = trustResult?.trustScore ?? 50;
+        let unifiedScore = trustScore;
+        let scamCap = 100;
+        if (deepResult?.matches?.some((m: any) => m.severity === 'critical')) {
+          scamCap = 20;
+        } else if (deepResult?.matches?.some((m: any) => m.severity === 'high')) {
+          scamCap = 35;
+        } else if ((deepResult?.matches?.length ?? 0) > 0) {
+          scamCap = 50;
+        }
+        if (hasNoCode) {
+          scamCap = Math.min(scamCap, 40);
+        }
+        unifiedScore = Math.min(unifiedScore, scamCap);
+
+        // Unified grade and verdict
+        let unifiedGrade: string, unifiedVerdict: string, unifiedEmoji: string;
+        if (unifiedScore >= 80) {
+          unifiedGrade = 'A'; unifiedVerdict = 'SAFU'; unifiedEmoji = '🟢';
+        } else if (unifiedScore >= 60) {
+          unifiedGrade = 'B'; unifiedVerdict = 'DYOR'; unifiedEmoji = '🟡';
+        } else if (unifiedScore >= 35) {
+          unifiedGrade = 'C'; unifiedVerdict = 'RISKY'; unifiedEmoji = '🟠';
+        } else {
+          unifiedGrade = 'F'; unifiedVerdict = 'RUG ALERT'; unifiedEmoji = '🔴';
+        }
+
+        // === CODE SAFETY ===
+        const codeSafetyStatus = isLikelyScam ? 'DANGER' : (finalScamScore > 0 ? 'WARNING' : 'CLEAN');
+        const codeSafetySummary = hasNoCode
+          ? 'No code files found — nothing to analyze'
+          : isLikelyScam
+            ? `${(deepResult?.matches?.length || 0)} scam pattern(s) detected`
+            : finalScamScore > 0
+              ? `Minor concerns found (score: ${finalScamScore})`
+              : 'No scam patterns detected';
+
+        // === PROJECT TRUST ===
+        const projectTrustStatus = trustResult?.verdict || 'UNKNOWN';
+        const projectTrustSummary = trustResult?.summary || 'Trust scan unavailable';
+
+        // === SECRETS ===
+        const secretsCount = trustResult?.metrics?.secretsFound ?? 0;
+
+        // === TAGS ===
+        const tags: string[] = [];
+        const metrics = trustResult?.metrics;
+        if (metrics) {
+          // Age
+          if (metrics.repoAgeDays < 7) tags.push('#NewProject');
+          else if (metrics.repoAgeDays < 30) tags.push('#UnderOneMonth');
+          else if (metrics.repoAgeDays > 365) tags.push('#Established');
+          // Dev
+          if (metrics.ownerAccountAgeDays !== undefined && metrics.ownerAccountAgeDays < 30) tags.push('#NewDev');
+          if (metrics.contributorCount === 1) tags.push('#SoloDev');
+          else if (metrics.contributorCount > 10) tags.push('#ActiveTeam');
+          // Code
+          if (metrics.commitCount <= 1) tags.push('#SingleCommit');
+          else if (metrics.commitCount > 100) tags.push('#ActiveDev');
+          if (metrics.codeFileCount === 0) tags.push('#NoCode');
+          if (metrics.hasTests) tags.push('#HasTests');
+          // Safety
+          if (finalScamScore === 0 && !hasNoCode) tags.push('#CleanCode');
+          if (secretsCount === 0) tags.push('#NoSecrets');
+          else tags.push('#LeakedSecrets');
+          if (isLikelyScam) tags.push('#ScamDetected');
+          if (metrics.isArchived) tags.push('#Archived');
+          if (metrics.isFork) tags.push('#Fork');
+        }
+
+        // === RED FLAGS & GREEN FLAGS ===
+        const allRedFlags: string[] = [...noCodeRedFlags, ...(quickResult.redFlags || []), ...(deepResult?.warnings || [])];
+        const greenFlags: string[] = [];
+
+        if (trustResult?.checks) {
+          for (const check of trustResult.checks) {
+            if (check.status === 'bad') {
+              allRedFlags.push(check.explanation);
+            } else if (check.status === 'warn' && check.id !== 'secrets') {
+              allRedFlags.push(check.explanation);
+            }
+          }
+          // Green flags from trust checks
+          if (metrics) {
+            if (metrics.codeFileCount > 0) greenFlags.push(`${metrics.codeFileCount} real code files${metrics.language ? ` (${metrics.language})` : ''}`);
+            if (metrics.hasTests) greenFlags.push('Has test suite');
+            if (!isLikelyScam && !hasNoCode && finalScamScore === 0) greenFlags.push('No wallet drainers or rug patterns');
+            if (secretsCount === 0) greenFlags.push('No leaked secrets');
+            if (metrics.commitCount > 100) greenFlags.push(`${metrics.commitCount} commits — active development`);
+            if (metrics.contributorCount > 5) greenFlags.push(`${metrics.contributorCount}+ contributors`);
+            if (metrics.repoAgeDays > 365) greenFlags.push(`${Math.floor(metrics.repoAgeDays / 365)} year(s) of history`);
+            if (metrics.hasLicense) greenFlags.push('Open-source license');
+          }
+        }
+
+        // === DETERMINISTIC COMMENTARY ===
+        let analysis = '';
+        const codeClean = !isLikelyScam && finalScamScore === 0 && !hasNoCode;
+        const highTrust = unifiedScore >= 80;
+        const lowTrust = unifiedScore < 60;
+
+        if (hasNoCode) {
+          analysis = `No code files to analyze. Repository contains ${files.length} files but none are source code. Cannot verify safety. This pattern is common in placeholder repos created before a rug pull.`;
+        } else if (isLikelyScam) {
+          const matchNames = (deepResult?.matches || []).map((m: any) => m.signatureName).join(', ');
+          analysis = `DANGER. ${(deepResult?.matches?.length || 0)} known scam pattern(s) detected: ${matchNames}. This code contains signatures associated with known rug pull techniques.`;
+        } else if (codeClean && highTrust) {
+          const years = metrics ? Math.floor(metrics.repoAgeDays / 365) : 0;
+          const commitText = metrics?.commitCount ? `${metrics.commitCount} commits` : 'active development';
+          const contribText = metrics?.contributorCount ? `${metrics.contributorCount} contributors` : 'multiple contributors';
+          analysis = `Established, actively maintained project. ${commitText}, ${contribText}${years > 0 ? ` over ${years} year(s)` : ''}. No scam patterns, no leaked secrets. Strong builder signals.`;
+        } else if (codeClean && lowTrust) {
+          const ownerAge = metrics?.ownerAccountAgeDays ?? 0;
+          const commits = metrics?.commitCount ?? 0;
+          analysis = `Code is clean — no scam patterns, drainers, or obfuscation detected. Zero track record.${ownerAge > 0 ? ` Developer account is ${ownerAge} days old.` : ''} Only ${commits} commit(s). No community engagement. These are the exact signals present in 90% of rug pulls on Solana.`;
+        } else if (codeClean) {
+          // Mid-range trust
+          const warnings = allRedFlags.length;
+          analysis = `Code is clean with no scam patterns detected.${warnings > 0 ? ` ${warnings} concern(s) noted in project metadata.` : ''} Review the red flags above before investing.`;
+        } else {
+          analysis = finalSummary;
+        }
+
+        // Handle archived projects
+        if (metrics?.isArchived && codeClean) {
+          const monthsAgo = metrics.daysSinceLastPush ? Math.floor(metrics.daysSinceLastPush / 30) : 0;
+          analysis = `Project is archived and no longer maintained.${monthsAgo > 0 ? ` Last updated ${monthsAgo} month(s) ago.` : ''} Code was clean when active but no longer receives security updates.`;
+        }
+
+        // Handle forks
+        if (metrics?.isFork && metrics?.forkChangedLines !== undefined && metrics.forkChangedLines < 50) {
+          analysis = `This is a fork with minimal changes (${metrics.forkChangedLines} lines). Minimal-effort projects that clone established codebases are a common rug pull tactic.`;
+        }
+
         const result = {
           url: gitUrl,
           repoName: repo,
           owner,
+          // === Unified fields ===
+          score: unifiedScore,
+          grade: unifiedGrade,
+          verdict: unifiedVerdict,
+          verdictEmoji: unifiedEmoji,
+          codeSafety: {
+            status: codeSafetyStatus,
+            scamScore: finalScamScore,
+            matches: deepResult?.matches || [],
+            summary: codeSafetySummary
+          },
+          projectTrust: {
+            status: projectTrustStatus,
+            trustScore,
+            checks: trustResult?.checks || [],
+            summary: projectTrustSummary
+          },
+          secretsScan: {
+            status: secretsCount === 0 ? 'CLEAN' : 'FOUND',
+            count: secretsCount
+          },
+          tags,
+          redFlags: allRedFlags,
+          greenFlags,
+          analysis,
+          // === Legacy fields (backward compat) ===
           quickScan: quickResult,
           deepScan: deepResult,
           isLikelyScam,
           scamScore: finalScamScore,
           riskLevel: finalRiskLevel,
           summary: finalSummary,
-          redFlags: [...noCodeRedFlags, ...(quickResult.redFlags || []), ...(deepResult?.warnings || [])],
           matches: deepResult?.matches || [],
           scannedAt: new Date().toISOString()
         };
 
-        console.log(`[AURA] Scam detection complete: ${result.scamScore}/100 (${result.riskLevel})`);
+        console.log(`[AURA] Scam detection complete: unified=${result.score}/100 (${result.verdict}), scam=${result.scamScore}/100 (${result.riskLevel})`);
 
         return result;
       } catch (err) {
