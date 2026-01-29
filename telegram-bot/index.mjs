@@ -2545,6 +2545,14 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
 
         const scam = result.result || result;
 
+        // Handle rate limit / unavailable state
+        if (scam.trustUnavailable && scam.score === null) {
+          const repoDisplay = scam.owner ? `${scam.owner}/${scam.repoName}` : (scam.repoName || 'Unknown');
+          const text = `\u23F3 *Rate Limited \u2014 ${repoDisplay}*\n\n${scam.analysis || 'GitHub API rate limit reached. Try again in a few minutes.'}`;
+          await sendMessage(chatId, text);
+          return { statusCode: 200, body: 'OK' };
+        }
+
         // Use unified fields if available
         const hasUnified = scam.score !== undefined && scam.verdict;
 

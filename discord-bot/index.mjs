@@ -542,6 +542,20 @@ function formatAICheckResults(result) {
  * Format scam check results for Discord
  */
 function formatScamCheckResults(result) {
+  // Handle rate limit / unavailable state
+  if (result.trustUnavailable && result.score === null) {
+    const repoDisplay = result.owner ? `${result.owner}/${result.repoName}` : (result.repoName || 'Unknown');
+    return {
+      embeds: [{
+        title: `⏳ Rate Limited — ${repoDisplay}`,
+        description: result.analysis || 'GitHub API rate limit reached. Try again in a few minutes.',
+        color: 0x808080,
+        footer: { text: 'AuraSecurity | Project Check' },
+        timestamp: new Date().toISOString()
+      }]
+    };
+  }
+
   // Use unified fields if available, fallback to legacy
   const hasUnified = result.score !== undefined && result.verdict;
 
