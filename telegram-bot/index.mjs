@@ -572,6 +572,13 @@ async function quickSecurityScan(githubUrl) {
       const result = await callAuraScan(githubUrl);
       clearTimeout(timeout);
 
+      const innerResult = result?.result || result;
+      // Check if scan failed (clone error, bad URL, etc.)
+      if (innerResult?.scan_failed || innerResult?.error) {
+        resolve({ scanned: false, reason: innerResult.error || 'Scan failed' });
+        return;
+      }
+
       const scanDetails = result?.result?.scan_details || result?.scan_details || {};
       const secrets = scanDetails.secrets_found || 0;
       const vulns = scanDetails.package_vulns || 0;
@@ -1489,6 +1496,15 @@ function formatDetailedAnalysis(aiAnalysis, execAnalysis, repoUrl) {
 function formatScanResult(apiResponse, gitUrl) {
   // API returns {result: {scan_details: ...}}
   const result = apiResponse.result || apiResponse;
+
+  // Check if the scan itself failed (e.g., clone error, invalid URL)
+  if (result.scan_failed || result.error || (result.scan_details && result.scan_details.error)) {
+    const errorMsg = result.error || (result.scan_details && result.scan_details.error) || 'Scan failed';
+    return {
+      text: `\u274C *Scan Failed*\n\n\u{1F4E6} Repository: ${gitUrl}\n\n${errorMsg}`
+    };
+  }
+
   const scan = result.scan_details || {};
   const secrets = scan.secrets_found || 0;
   const vulns = scan.package_vulns || 0;

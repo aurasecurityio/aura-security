@@ -208,6 +208,20 @@ function formatVulnScanResults(result, repoUrl) {
   const parsed = parseGitHubUrl(repoUrl);
   const repoName = parsed ? `${parsed.owner}/${parsed.repo}` : repoUrl;
 
+  // Check if the scan itself failed (e.g., clone error, invalid URL)
+  if (result.scan_failed || result.error || scanDetails.error) {
+    const errorMsg = result.error || scanDetails.error || 'Scan failed';
+    return {
+      embeds: [{
+        title: `❌ Scan Failed — ${repoName}`,
+        description: errorMsg,
+        color: 0xff0000,
+        footer: { text: 'AuraSecurity | Vulnerability Scan' },
+        timestamp: new Date().toISOString()
+      }]
+    };
+  }
+
   // Count vulnerabilities from events
   let criticalCount = 0;
   let highCount = 0;
@@ -886,7 +900,7 @@ async function processDeferredResponse(interaction, secrets) {
         gitUrl: repoUrl,
         fastMode: name === 'rugcheck'
       });
-      formattedResponse = formatScanResults(result, repoUrl);
+      formattedResponse = formatVulnScanResults(result, repoUrl);
     } else if (name === 'devcheck') {
       result = await callScannerApi('/trust', { gitUrl: repoUrl });
       formattedResponse = formatDevCheckResults(result, repoUrl);
