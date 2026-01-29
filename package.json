@@ -1,6 +1,6 @@
 {
   "name": "aura-security",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "AI-powered security scanner with 9-agent swarm. Detect secrets, vulnerabilities, attack paths. CLI, API, or cloud dashboard at app.aurasecurity.io",
   "type": "module",
   "main": "dist/index.js",
