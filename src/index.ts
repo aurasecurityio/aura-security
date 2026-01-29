@@ -979,6 +979,37 @@ async function main(): Promise<void> {
         // Fetch repo tree
         const repoRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers });
         if (!repoRes.ok) {
+          // Check if rate limited (403 or 429) — return unified "unavailable" instead of error
+          if (repoRes.status === 403 || repoRes.status === 429) {
+            const remaining = repoRes.headers.get('x-ratelimit-remaining');
+            const isRateLimit = remaining === '0' || repoRes.status === 429;
+            if (isRateLimit) {
+              console.error(`[AURA] GitHub API rate limited (${repoRes.status}) — cannot scan ${owner}/${repo}`);
+              return {
+                url: gitUrl,
+                repoName: repo,
+                owner,
+                score: null,
+                grade: null,
+                verdict: null,
+                verdictEmoji: null,
+                trustUnavailable: true,
+                codeSafety: { status: 'UNAVAILABLE', scamScore: 0, matches: [], summary: 'GitHub API rate limit reached — scan unavailable' },
+                projectTrust: { status: 'UNAVAILABLE', trustScore: null, checks: [], summary: 'GitHub API rate limit reached' },
+                secretsScan: { status: 'UNAVAILABLE', count: 0 },
+                tags: [],
+                redFlags: [],
+                greenFlags: [],
+                analysis: 'GitHub API rate limit reached. Cannot scan this repository right now. Try again in a few minutes.',
+                scamScore: 0,
+                riskLevel: 'unknown',
+                isLikelyScam: false,
+                summary: 'Rate limited — try again shortly',
+                matches: [],
+                scannedAt: new Date().toISOString()
+              };
+            }
+          }
           throw new Error(`Failed to fetch repository: ${repoRes.status}`);
         }
         const repoData = await repoRes.json();
