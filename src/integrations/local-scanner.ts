@@ -205,6 +205,8 @@ const SKIP_RULES_IN_FILE_TYPES: Record<string, string[]> = {
   // Docker compose files often have local dev tokens/passwords
   '.yml': ['jwt', 'generic-api-key'],
   '.yaml': ['jwt', 'generic-api-key'],
+  // Python files - model IDs, test data, block configs flagged as keys
+  '.py': ['generic-api-key'],
   // TSX/JSX UI components - password inputs, form fields, etc.
   '.tsx': ['hashicorp-tf-password', 'generic-api-key'],
   '.jsx': ['hashicorp-tf-password', 'generic-api-key'],
