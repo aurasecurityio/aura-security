@@ -487,12 +487,27 @@ async function main(): Promise<void> {
             };
           } catch (gitErr) {
             console.error(`[AURA] Remote Git scan failed:`, gitErr);
+            const errorMsg = gitErr instanceof Error ? gitErr.message : 'Unknown error';
             return {
               agent_id: 'exploit-reviewer',
               agent_state: 'blocked',
               events: [],
               meta: { assumptions: [], uncertainties: [] },
-              error: `Remote scan failed: ${gitErr instanceof Error ? gitErr.message : 'Unknown error'}`
+              error: `Remote scan failed: ${errorMsg}`,
+              scan_failed: true,
+              scan_details: {
+                path: gitUrl,
+                secrets_found: 0,
+                packages_scanned: 0,
+                package_vulns: 0,
+                sast_findings: 0,
+                iac_findings: 0,
+                dockerfile_findings: 0,
+                env_files: 0,
+                services_discovered: 0,
+                modules_discovered: 0,
+                error: errorMsg
+              }
             };
           }
         }
