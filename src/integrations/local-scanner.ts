@@ -124,7 +124,18 @@ const FALSE_POSITIVE_DIRS = [
   '/thirdparty/',
   '/external/',
   '/dummy/',
-  '/fake/'
+  '/fake/',
+  '/data/',
+  '/scripts/data/',
+  '/seeds/',
+  '/seed/',
+  '/migrations/',
+  '/migration/',
+  '/index_constituents/',
+  '/token-list/',
+  '/tokenlist/',
+  '/verified-tokens/',
+  '/validated-tokens/'
 ];
 
 // File name patterns that indicate test/example data (not real secrets)
@@ -170,6 +181,8 @@ const SKIP_RULES_IN_FILE_TYPES: Record<string, string[]> = {
   '.md': ['generic-api-key', 'curl-auth-header'],
   '.rst': ['generic-api-key', 'curl-auth-header'],
   '.txt': ['generic-api-key'],
+  // JSON files often contain token lists, address registries, config data - not real secrets
+  '.json': ['generic-api-key', 'aws-access-token', 'private-key'],
 };
 
 // Run gitleaks for secrets detection
@@ -234,8 +247,20 @@ function runGitleaks(targetPath: string): SecretFinding[] {
         const skipRulesForExt = SKIP_RULES_IN_FILE_TYPES[fileExt] || [];
         const isRuleSkippedForFileType = skipRulesForExt.includes(ruleId);
 
+        // Filter out JSON data files that contain token lists / address registries
+        // (Solana base58 addresses get flagged as API keys by gitleaks)
+        const isJsonDataFile = fileExt === '.json' && (
+          /token[-_]?list/i.test(filePath) ||
+          /address(es)?[-_]?(list|registry)/i.test(filePath) ||
+          /constituents/i.test(filePath) ||
+          /verified[-_]?tokens/i.test(filePath) ||
+          /validated[-_]?tokens/i.test(filePath) ||
+          /mint(s)?[-_]?(list|registry)/i.test(filePath) ||
+          /registry\.json$/i.test(filePath)
+        );
+
         // Skip if any false positive indicator matches
-        if (isExcludedFile || isInFalsePositiveDir || isTestFile || isFalsePositiveRule || isRuleSkippedForFileType) {
+        if (isExcludedFile || isInFalsePositiveDir || isTestFile || isFalsePositiveRule || isRuleSkippedForFileType || isJsonDataFile) {
           filteredCount++;
           continue;
         }
@@ -249,11 +274,33 @@ function runGitleaks(targetPath: string): SecretFinding[] {
         });
       }
 
+      // Post-processing: if a single JSON file has 10+ findings, it's almost certainly
+      // a data/registry file (token lists, address mappings) not real leaked secrets
+      const fileCounts = new Map<string, number>();
+      for (const f of findings) {
+        if (f.file.toLowerCase().endsWith('.json')) {
+          fileCounts.set(f.file, (fileCounts.get(f.file) || 0) + 1);
+        }
+      }
+      const bulkJsonFiles = new Set<string>();
+      for (const [file, count] of fileCounts) {
+        if (count >= 10) {
+          bulkJsonFiles.add(file);
+          filteredCount += count;
+          console.log(`[SCANNER] Filtered ${count} findings from ${basename(file)} (bulk data file)`);
+        }
+      }
+      if (bulkJsonFiles.size > 0) {
+        const beforeCount = findings.length;
+        findings.splice(0, findings.length, ...findings.filter(f => !bulkJsonFiles.has(f.file)));
+        console.log(`[SCANNER] Removed ${beforeCount - findings.length} bulk JSON false positives`);
+      }
+
       // Cleanup
       try { rmSync(reportPath); } catch {}
 
       if (filteredCount > 0) {
-        console.log(`[SCANNER] Filtered ${filteredCount} false positives (test files, examples, lock files)`);
+        console.log(`[SCANNER] Filtered ${filteredCount} false positives (test files, examples, lock files, data files)`);
       }
     }
 
