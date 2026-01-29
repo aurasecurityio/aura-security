@@ -705,13 +705,21 @@ function scanForSecrets(content: string): number {
     return 0;
   }
 
-  // Placeholder values are not real secrets
-  const placeholderPattern = /your[_-]?api[_-]?key|REPLACE[_-]?ME|TODO|CHANGEME|xxxx|placeholder|example/i;
+  // Placeholder/example values are not real secrets
+  const placeholderPattern = /your[_-]?api[_-]?key|REPLACE[_-]?ME|TODO|CHANGEME|xxxx|placeholder|example|sample|dummy|test|fake|mock/i;
+
+  // Known blockchain addresses, program IDs, and public values
+  const blockchainPattern = /^(?:0x[0-9a-fA-F]{10,}|[1-9A-HJ-NP-Za-km-z]{32,44})$/; // EVM hex or Solana base58
 
   let count = 0;
   for (const pattern of secretPatterns) {
     const match = content.match(pattern);
     if (match && !placeholderPattern.test(match[0])) {
+      // For password and api_key patterns, extract the value and check if it's a blockchain address
+      const valueMatch = match[0].match(/["']([^"']+)["']/);
+      if (valueMatch && blockchainPattern.test(valueMatch[1])) {
+        continue; // Skip blockchain addresses matched as secrets
+      }
       count++;
     }
   }
@@ -1003,7 +1011,12 @@ export async function performTrustScan(gitUrl: string): Promise<TrustScanResult>
           p.includes('tokenlist') ||
           p.includes('/test') ||
           p.includes('/example') ||
-          p.includes('/fixture');
+          p.includes('/fixture') ||
+          // .env.example/.env.sample/.env.template are documentation, not real secrets
+          /\.env\.(example|sample|template|defaults|development|test)$/i.test(p) ||
+          // Docker/CI configs often have placeholder values
+          p.includes('docker-compose') ||
+          p.includes('.github/');
         return isSensitive && !isSafe;
       }).slice(0, 5);
 
