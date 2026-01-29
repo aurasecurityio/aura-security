@@ -259,8 +259,22 @@ function runGitleaks(targetPath: string): SecretFinding[] {
           /registry\.json$/i.test(filePath)
         );
 
+        // Filter blockchain addresses and hashes flagged as generic-api-key
+        // These are public on-chain values, not secrets
+        const secret = (finding.Secret || finding.Match || '').trim();
+        const isBlockchainValue = ruleId === 'generic-api-key' && (
+          // Ethereum/StarkNet/EVM hex addresses and hashes (0x prefix + hex chars)
+          /^0x[0-9a-fA-F]{10,}$/.test(secret) ||
+          // Contract address assignments (common in deploy scripts and config)
+          /^0x[0-9a-fA-F]{10,}['";,\s]/.test(secret) ||
+          // Variable name clearly indicates address/hash, not a secret
+          /(?:ADDRESS|CONTRACT|CLASS_HASH|TOKEN|VERIFIER|HANDLER|ORACLE|ASSET_ID|PAIR_ID|POOL|VAULT|FACTORY|ROUTER|FEE_TOKEN|PRAGMA)/i.test(finding.Match || '') ||
+          // RPC/node URLs (public endpoints, not secrets)
+          /^https?:\/\/.+\.(xyz|io|com|dev|net)\/?/.test(secret)
+        );
+
         // Skip if any false positive indicator matches
-        if (isExcludedFile || isInFalsePositiveDir || isTestFile || isFalsePositiveRule || isRuleSkippedForFileType || isJsonDataFile) {
+        if (isExcludedFile || isInFalsePositiveDir || isTestFile || isFalsePositiveRule || isRuleSkippedForFileType || isJsonDataFile || isBlockchainValue) {
           filteredCount++;
           continue;
         }
