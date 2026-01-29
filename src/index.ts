@@ -1091,16 +1091,19 @@ async function main(): Promise<void> {
 
         // Run trust scan in parallel for unified results
         let trustResult: any = null;
+        let trustFailed = false;
         try {
           trustResult = await performTrustScan(gitUrl);
-        } catch (trustErr) {
-          console.error('[AURA] Trust scan failed during scam-scan, continuing:', trustErr);
+        } catch (trustErr: any) {
+          console.error('[AURA] Trust scan failed during scam-scan:', trustErr?.message || trustErr);
+          trustFailed = true;
         }
 
         // === UNIFIED SCORING ===
         // Start with trust score, apply scam-scan overrides downward
-        const trustScore = trustResult?.trustScore ?? 50;
-        let unifiedScore = trustScore;
+        // If trust scan failed (e.g., rate limit), don't use a fake default
+        const trustScore = trustFailed ? null : (trustResult?.trustScore ?? 50);
+        let unifiedScore = trustScore ?? 50;
         let scamCap = 100;
         if (deepResult?.matches?.some((m: any) => m.severity === 'critical')) {
           scamCap = 20;
@@ -1233,15 +1236,21 @@ async function main(): Promise<void> {
           analysis = `This is a fork with minimal changes (${metrics.forkChangedLines} lines). Minimal-effort projects that clone established codebases are a common rug pull tactic.`;
         }
 
+        // If trust scan failed, override analysis to be honest about it
+        if (trustFailed && !isLikelyScam && !hasNoCode) {
+          analysis = `Code scan completed — no scam patterns or drainers detected. Trust analysis unavailable (GitHub API limit reached). Run again shortly for full project scoring.`;
+        }
+
         const result = {
           url: gitUrl,
           repoName: repo,
           owner,
           // === Unified fields ===
-          score: unifiedScore,
-          grade: unifiedGrade,
-          verdict: unifiedVerdict,
-          verdictEmoji: unifiedEmoji,
+          score: trustFailed ? null : unifiedScore,
+          grade: trustFailed ? null : unifiedGrade,
+          verdict: trustFailed ? null : unifiedVerdict,
+          verdictEmoji: trustFailed ? null : unifiedEmoji,
+          trustUnavailable: trustFailed || undefined,
           codeSafety: {
             status: codeSafetyStatus,
             scamScore: finalScamScore,
