@@ -135,7 +135,13 @@ const FALSE_POSITIVE_DIRS = [
   '/token-list/',
   '/tokenlist/',
   '/verified-tokens/',
-  '/validated-tokens/'
+  '/validated-tokens/',
+  '/load-tests/',
+  '/load_tests/',
+  '/loadtests/',
+  '/benchmark/',
+  '/benchmarks/',
+  '/perf/',
 ];
 
 // File name patterns that indicate test/example data (not real secrets)
@@ -145,6 +151,8 @@ const TEST_FILE_PATTERNS = [
   /\.test\./i,
   /\.spec\./i,
   /\.fuzz\.test\./i,                              // Fuzz test files
+  /[-_]test\.(py|ts|js|go|rs|java|rb)$/i,        // Files ending in _test.py, -test.ts, etc.
+  /[-_]spec\.(py|ts|js|go|rs|java|rb)$/i,        // Files ending in _spec.py, etc.
   /example\d*\.(key|pem|jwt|crt|p12|pfx)$/i,
   /test\d*\.(key|pem|jwt|crt|p12|pfx)$/i,
   /sample\d*\.(key|pem|jwt|crt|p12|pfx)$/i,
@@ -156,6 +164,17 @@ const TEST_FILE_PATTERNS = [
   /\/tests?\//i,                                  // Files in test directories
   /\/fixtures?\//i,                               // Test fixtures
   /\/mocks?\//i,                                  // Mock files
+  // Template/default env files — not real secrets
+  /\.env\.default$/i,
+  /\.env\.defaults$/i,
+  /\.env\.dist$/i,
+  /\.env\.template$/i,
+  /\.env\.dev$/i,
+  /\.env\.local\.example$/i,
+  // Google/Firebase client config (public by design)
+  /google-services\.json$/i,
+  /GoogleService-Info\.plist$/i,
+  /firebase\.json$/i,
 ];
 
 // Rules to completely skip - too many false positives to be useful
@@ -182,7 +201,17 @@ const SKIP_RULES_IN_FILE_TYPES: Record<string, string[]> = {
   '.rst': ['generic-api-key', 'curl-auth-header'],
   '.txt': ['generic-api-key'],
   // JSON files often contain token lists, address registries, config data - not real secrets
-  '.json': ['generic-api-key', 'aws-access-token', 'private-key'],
+  '.json': ['generic-api-key', 'aws-access-token', 'private-key', 'gcp-api-key'],
+  // Docker compose files often have local dev tokens/passwords
+  '.yml': ['jwt', 'generic-api-key'],
+  '.yaml': ['jwt', 'generic-api-key'],
+  // TSX/JSX UI components - password inputs, form fields, etc.
+  '.tsx': ['hashicorp-tf-password', 'generic-api-key'],
+  '.jsx': ['hashicorp-tf-password', 'generic-api-key'],
+  // HTML files often have public client-side keys (Firebase, analytics)
+  '.html': ['gcp-api-key', 'generic-api-key'],
+  // Dart/mobile files often have public Firebase config
+  '.dart': ['gcp-api-key'],
 };
 
 // Run gitleaks for secrets detection
