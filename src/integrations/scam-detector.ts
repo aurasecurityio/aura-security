@@ -51,17 +51,18 @@ const SCAM_SIGNATURES: ScamSignature[] = [
   {
     id: 'fake-ai-no-ml-code',
     name: 'No Real ML Code',
-    description: 'Claims AI/ML but has no actual machine learning implementation',
+    description: 'Claims custom ML training/models but has no actual machine learning implementation',
     severity: 'high',
     patterns: {
       readmePatterns: [
+        // Only match claims of CUSTOM ML — not just using an AI API (which is legitimate)
         /(?:train|trained)\s+(?:on|with)\s+(?:millions|billions)/i,
-        /(?:neural|deep)\s+(?:network|learning)/i,
-        /machine\s+learning\s+(?:model|algorithm)/i,
-        /ai\s+(?:agent|bot|assistant)/i,
+        /(?:neural|deep)\s+(?:network|learning)\s+(?:model|architecture)/i,
+        /(?:our|custom|proprietary)\s+machine\s+learning\s+(?:model|algorithm)/i,
+        // Removed: /ai\s+(?:agent|bot|assistant)/i — too broad, matches every legit AI project
       ],
-      // These are red flags when README claims AI but code doesn't have real ML
-      filePatterns: ['model.py', 'train.py', 'inference.py'] // If missing = red flag
+      // Note: filePatterns here are NOT checked (they were meant as "missing = red flag"
+      // but the detection engine checks for presence, not absence). Removing to avoid confusion.
     }
   },
   {
@@ -605,19 +606,26 @@ export async function detectScamPatterns(
       }
     }
 
-    // Calculate confidence
+    // Calculate confidence — require meaningful match threshold
     if (matchCount > 0 && totalPatterns > 0) {
       const confidence = Math.min(100, (matchCount / totalPatterns) * 100 + (matchCount * 15));
 
-      matches.push({
-        signatureId: signature.id,
-        signatureName: signature.name,
-        description: signature.description,
-        severity: signature.severity,
-        matchType: 'code',
-        matchDetails: matchDetails.join('; '),
-        confidence: Math.round(confidence)
-      });
+      // For high/critical severity, require at least 2 matches OR 40%+ confidence
+      // A single weak README pattern match shouldn't brand a project as a scam
+      const minConfidence = (signature.severity === 'critical' || signature.severity === 'high') ? 40 : 25;
+      const minMatches = (signature.severity === 'critical' || signature.severity === 'high') ? 2 : 1;
+
+      if (confidence >= minConfidence || matchCount >= minMatches) {
+        matches.push({
+          signatureId: signature.id,
+          signatureName: signature.name,
+          description: signature.description,
+          severity: signature.severity,
+          matchType: 'code',
+          matchDetails: matchDetails.join('; '),
+          confidence: Math.round(confidence)
+        });
+      }
     }
   }
 
@@ -729,14 +737,22 @@ export async function quickScamScan(
     }
   }
 
-  // Check README
+  // Check README — require multiple pattern matches per signature to avoid
+  // flagging legitimate projects (e.g., a real AI project mentioning "AI assistant")
   if (readme) {
     for (const sig of SCAM_SIGNATURES) {
       if (sig.patterns.readmePatterns) {
+        let readmeMatchCount = 0;
         for (const pattern of sig.patterns.readmePatterns) {
           if (pattern.test(readme)) {
-            redFlags.push(`README red flag: ${sig.name}`);
+            readmeMatchCount++;
           }
+        }
+        // For critical severity: 1 match is enough (drain patterns, etc.)
+        // For high/medium: require at least 2 README matches to flag
+        const threshold = sig.severity === 'critical' ? 1 : 2;
+        if (readmeMatchCount >= threshold) {
+          redFlags.push(`README red flag: ${sig.name}`);
         }
       }
     }
