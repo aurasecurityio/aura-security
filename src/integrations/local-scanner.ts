@@ -1200,10 +1200,20 @@ const SECRET_PATTERNS = [
   { name: 'OpenAI Key', regex: /sk-[A-Za-z0-9]{32,}/g, severity: 'high' as const },
 ];
 
-// Files/patterns to SKIP for secret scanning (test files, examples, etc.)
+// Files/patterns to SKIP for secret scanning (test files, examples, lock files, data files)
 const SKIP_SECRET_SCAN_PATTERNS = [
+  // Test/example files
   /example/i, /sample/i, /test/i, /mock/i, /fixture/i, /\.test\./i, /\.spec\./i,
-  /\.d\.ts$/, /\.map$/, /\.min\./
+  // Build artifacts
+  /\.d\.ts$/, /\.map$/, /\.min\./,
+  // Lock files (contain hashes that trigger false positives, never contain real secrets)
+  /package-lock\.json$/i, /pnpm-lock\.yaml$/i, /yarn\.lock$/i, /Cargo\.lock$/i, /composer\.lock$/i, /Gemfile\.lock$/i,
+  // Template/example env files (placeholders, not real secrets)
+  /\.example$/i, /\.template$/i, /\.sample$/i,
+  // Data directories (contain public addresses, not secrets)
+  /\/data\//i, /\/fixtures?\//i, /\/seeds?\//i, /\/migrations?\//i,
+  // Index/constituent data files (stock symbols, token lists etc.)
+  /index_constituents/i, /token-?list/i, /verified-tokens/i, /validated-tokens/i,
 ];
 
 // Files to scan for secrets
@@ -1911,10 +1921,30 @@ export class LocalScanner {
       if (stats.size > 1024 * 1024) return findings;
 
       const content = readFileSync(filePath, 'utf-8');
+
+      // Skip JSON files that are clearly data (token lists, address registries, etc.)
+      // These contain public blockchain addresses that regex misidentifies as secrets
+      if (fileName.endsWith('.json')) {
+        // If a JSON file has "tokens", "addresses", "mints", "symbols" keys, it's data
+        if (/["'](tokens|addresses|mints|symbols|constituents|verified|validated)["']\s*:/i.test(content)) {
+          return findings;
+        }
+        // If JSON file has more than 100 similar-looking base58 values, it's a token/address list
+        const base58Matches = content.match(/["'][1-9A-HJ-NP-Za-km-z]{32,44}["']/g);
+        if (base58Matches && base58Matches.length > 50) {
+          return findings;
+        }
+      }
+
       const lines = content.split('\n');
 
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
+
+        // Skip lines that are clearly placeholder/example values
+        if (/your[_-]?(?:api[_-]?key|token|secret)|REPLACE[_-]?ME|TODO|CHANGEME|xxxx|placeholder/i.test(line)) {
+          continue;
+        }
 
         for (const pattern of SECRET_PATTERNS) {
           pattern.regex.lastIndex = 0;
