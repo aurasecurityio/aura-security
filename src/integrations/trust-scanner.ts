@@ -708,6 +708,10 @@ function scanForSecrets(content: string): number {
   // Placeholder/example values are not real secrets
   const placeholderPattern = /your[_-]?api[_-]?key|REPLACE[_-]?ME|TODO|CHANGEME|xxxx|placeholder|example|sample|dummy|test|fake|mock/i;
 
+  // Public/client-side API keys that are intentionally embedded in frontend code
+  // These are NOT secrets — they're meant to be public
+  const publicKeyContext = /(?:inkeep|algolia|segment|analytics|gtag|ga4|google.*analytics|mapbox|stripe.*publishable|pk_(?:live|test)|posthog|amplitude|mixpanel|sentry.*dsn|bugsnag|datadog.*rum|hotjar|intercom.*app)/i;
+
   // Known blockchain addresses, program IDs, and public values
   const blockchainPattern = /^(?:0x[0-9a-fA-F]{10,}|[1-9A-HJ-NP-Za-km-z]{32,44})$/; // EVM hex or Solana base58
 
@@ -719,6 +723,10 @@ function scanForSecrets(content: string): number {
       const valueMatch = match[0].match(/["']([^"']+)["']/);
       if (valueMatch && blockchainPattern.test(valueMatch[1])) {
         continue; // Skip blockchain addresses matched as secrets
+      }
+      // Skip public/client-side API keys (check surrounding context)
+      if (publicKeyContext.test(content.substring(Math.max(0, content.indexOf(match[0]) - 200), content.indexOf(match[0]) + match[0].length + 200))) {
+        continue;
       }
       count++;
     }
@@ -996,10 +1004,15 @@ export async function performTrustScan(gitUrl: string): Promise<TrustScanResult>
       const sensitiveFiles = files.filter((f: { path: string }) => {
         const p = f.path.toLowerCase();
         // Only scan files that could contain secrets
+        // Only scan files that are likely to actually contain secrets
+        // Be specific — "config" in filename matches too many tool configs
         const isSensitive = p.includes('.env') ||
-          p.includes('config') ||
-          p.endsWith('.yml') ||
-          p.endsWith('.yaml');
+          // Only match dedicated config files, not tool configs like rollup.config.ts
+          /(?:^|\/)(?:config|settings|credentials|secrets)\.(json|yml|yaml|toml|ini)$/i.test(p) ||
+          /(?:^|\/)application\.(yml|yaml|properties)$/i.test(p) ||
+          // CI/deploy configs that might have real tokens
+          p.endsWith('.env.local') ||
+          p.endsWith('.env.production');
         // Exclude known safe files that produce false positives
         const isSafe = p === 'package.json' ||
           p === 'package-lock.json' ||
