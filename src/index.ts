@@ -45,6 +45,7 @@ import { performTrustScan } from './integrations/trust-scanner.js';
 import { performXScan } from './integrations/x-scanner.js';
 import { performAIVerification } from './integrations/ai-verifier.js';
 import { detectScamPatterns, quickScamScan } from './integrations/scam-detector.js';
+import { MoltbookAgent as MoltbookAgentRunner } from './integrations/moltbook/agent.js';
 
 const PORT = parseInt(process.env.AURA_PORT ?? '3000', 10);
 const WS_PORT = parseInt(process.env.WS_PORT ?? '3001', 10);
@@ -1407,10 +1408,112 @@ async function main(): Promise<void> {
     }
   });
 
+  // === Moltbook Integration Tools ===
+
+  // Initialize Moltbook agent (lazy — only starts if MOLTBOOK_API_KEY is set)
+  let moltbookAgent: MoltbookAgentRunner | null = null;
+
+  const getMoltbookAgent = (): MoltbookAgentRunner => {
+    if (!moltbookAgent) {
+      moltbookAgent = new MoltbookAgentRunner();
+    }
+    return moltbookAgent;
+  };
+
+  // Agent Trust Score tool
+  server.registerTool({
+    name: 'agent-trust',
+    description: 'Score a Moltbook agent\'s trust level (identity, behavior, network, content signals)',
+    parameters: {
+      type: 'object',
+      required: ['agentName'],
+      properties: {
+        agentName: { type: 'string', description: 'Moltbook agent name to score' }
+      }
+    },
+    handler: async (args) => {
+      try {
+        const agentName = args.agentName as string;
+        console.log(`[AURA] Scoring Moltbook agent: ${agentName}`);
+        const agent = getMoltbookAgent();
+        const score = await agent.scoreAgent(agentName);
+        if (!score) {
+          return { error: `Agent "${agentName}" not found on Moltbook` };
+        }
+        return score;
+      } catch (err) {
+        console.error('[AURA] Agent trust error:', err);
+        return { error: err instanceof Error ? err.message : 'Unknown error' };
+      }
+    }
+  });
+
+  // Bot Farm Detection tool
+  server.registerTool({
+    name: 'bot-detect',
+    description: 'Run bot farm detection on tracked Moltbook agents',
+    parameters: {
+      type: 'object',
+      properties: {}
+    },
+    handler: async () => {
+      try {
+        const agent = getMoltbookAgent();
+        const detector = agent.getBotDetector();
+        const clusters = detector.detect();
+        return {
+          clustersFound: clusters.length,
+          clusters: clusters.map(c => ({
+            id: c.id,
+            agents: c.agents,
+            confidence: c.confidence,
+            signals: c.signals
+          })),
+          stats: detector.getStats()
+        };
+      } catch (err) {
+        console.error('[AURA] Bot detect error:', err);
+        return { error: err instanceof Error ? err.message : 'Unknown error' };
+      }
+    }
+  });
+
+  // Moltbook Agent Status tool
+  server.registerTool({
+    name: 'moltbook-status',
+    description: 'Get Moltbook agent status (scanner, monitor, jail stats)',
+    parameters: {
+      type: 'object',
+      properties: {}
+    },
+    handler: async () => {
+      try {
+        const agent = getMoltbookAgent();
+        return agent.getStatus();
+      } catch (err) {
+        console.error('[AURA] Moltbook status error:', err);
+        return { error: err instanceof Error ? err.message : 'Unknown error' };
+      }
+    }
+  });
+
   // Start HTTP server
   await server.start();
   console.log(`[AURA] Auditor listening on http://127.0.0.1:${PORT}`);
   console.log('[AURA] Endpoints: /info, /tools, /memory, /settings, /audits, /stats, /notifications');
+
+  // Start Moltbook agent if API key is available
+  if (process.env.MOLTBOOK_API_KEY) {
+    try {
+      const agent = getMoltbookAgent();
+      await agent.start();
+      console.log('[AURA] Moltbook agent started');
+    } catch (err) {
+      console.error('[AURA] Moltbook agent failed to start:', err);
+    }
+  } else {
+    console.log('[AURA] Moltbook agent not started (set MOLTBOOK_API_KEY to enable)');
+  }
 
   // Start WebSocket server for real-time updates
   const wsServer = getWebSocketServer(WS_PORT);
@@ -1508,3 +1611,7 @@ export type { AIVerifyResult } from './integrations/ai-verifier.js';
 // Scam Detector exports
 export { detectScamPatterns, quickScamScan, getScamSignatures, addScamSignature } from './integrations/scam-detector.js';
 export type { ScamSignature, ScamDetectionResult, SimilarityMatch } from './integrations/scam-detector.js';
+
+// Moltbook Integration exports
+export { MoltbookClient, MoltbookScanner, MoltbookAgent, FeedMonitor, makePostDecision, formatScanResult, formatScanError, formatPostTitle, AgentScorer, BotFarmDetector, JailEnforcer } from './integrations/moltbook/index.js';
+export type { MoltbookAgentConfig, PostDecision, AgentTrustScore, JailLevel, BotCluster } from './integrations/moltbook/index.js';

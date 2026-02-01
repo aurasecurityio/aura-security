@@ -2325,7 +2325,9 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         `/scan <github-url> - Full security scan\n` +
         `/scamcheck <github-url> - Detect scam patterns\n` +
         `/devcheck <@username> - Full dev audit (identity + security)\n` +
-        `/xcheck <@username> - Same as devcheck\n\n` +
+        `/xcheck <@username> - Same as devcheck\n` +
+        `/trustagent <name> - Moltbook agent trust score\n` +
+        `/botcheck - Detect bot farm clusters\n\n` +
         `*Example:*\n` +
         `/scan https://github.com/ethereum/go-ethereum\n` +
         `/scamcheck https://github.com/owner/repo\n` +
@@ -2342,7 +2344,9 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         `/scan <url> - Full security scan (secrets, vulns)\n` +
         `/scamcheck <url> - Detect rug pulls & scam patterns\n` +
         `/devcheck <@user> - Full dev audit (identity + security)\n` +
-        `/xcheck <@user> - Same as devcheck\n\n` +
+        `/xcheck <@user> - Same as devcheck\n` +
+        `/trustagent <name> - Moltbook agent trust score\n` +
+        `/botcheck - Detect bot farm clusters\n\n` +
         `*What I check:*\n\n` +
         `\u{1F6E1} *Security Scan (/scan):*\n` +
         `\u2022 Exposed secrets & API keys\n` +
@@ -2657,6 +2661,105 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
       } catch (err) {
         console.error('Scam check error:', err);
         await sendMessage(chatId, `\u274C Scam check failed: ${err.message}`);
+      }
+    }
+    // /trustagent command - Check Moltbook agent trust score
+    else if (text.startsWith('/trustagent')) {
+      const agentName = text.replace(/^\/trustagent(@[a-zA-Z0-9_]+)?/i, '').trim();
+
+      if (!agentName) {
+        await sendMessage(chatId, `\u274C Please provide a Moltbook agent name.\n\n*Example:*\n/trustagent AgentName`);
+        return { statusCode: 200, body: 'OK' };
+      }
+
+      await sendMessage(chatId, `\u{1F50D} Scoring agent *${agentName}*...\n_Analyzing identity, behavior, network, content..._`);
+
+      try {
+        const result = await withRetry(async () => {
+          const response = await fetch(`${AURA_API_URL}/tools`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tool: 'agent-trust', arguments: { agentName } })
+          });
+          if (!response.ok) throw new Error(`API error: ${response.status}`);
+          return response.json();
+        });
+
+        const score = result.result || result;
+
+        if (score.error) {
+          await sendMessage(chatId, `\u274C ${score.error}`);
+          return { statusCode: 200, body: 'OK' };
+        }
+
+        const level = score.jailLevel || 'free';
+        let levelEmoji = '\u2705';
+        if (level === 'jailed') levelEmoji = '\u{1F534}';
+        else if (level === 'watch_list') levelEmoji = '\u{1F7E0}';
+        else if (level === 'warning') levelEmoji = '\u{1F7E1}';
+
+        let msg = `${levelEmoji} *Agent Trust: ${score.agentName}*\n\n`;
+        msg += `*Overall Score:* ${score.overallScore || 0}/100\n`;
+        msg += `*Jail Level:* ${level.replace('_', ' ').toUpperCase()}\n\n`;
+        msg += `\u{1F6E1} *Signal Breakdown:*\n`;
+        msg += `\u2022 Identity: ${score.identity?.score || 0}/100 (${score.identity?.accountAgeDays || 0}d old${score.identity?.verified ? ', verified' : ''})\n`;
+        msg += `\u2022 Behavior: ${score.behavior?.score || 0}/100\n`;
+        msg += `\u2022 Network: ${score.network?.score || 0}/100\n`;
+        msg += `\u2022 Content: ${score.content?.score || 0}/100\n`;
+
+        if (score.reasons?.length > 0) {
+          msg += `\n\u26A0\uFE0F *Reasons:*\n`;
+          score.reasons.slice(0, 3).forEach(r => { msg += `\u2022 ${r}\n`; });
+        }
+
+        await sendMessage(chatId, msg);
+      } catch (err) {
+        console.error('Trust agent error:', err);
+        await sendMessage(chatId, `\u274C Agent trust check failed: ${err.message}`);
+      }
+    }
+    // /botcheck command - Run bot farm detection
+    else if (text.startsWith('/botcheck')) {
+      await sendMessage(chatId, `\u{1F916} Running bot farm detection...\n_Analyzing agent clusters, coordination patterns..._`);
+
+      try {
+        const result = await withRetry(async () => {
+          const response = await fetch(`${AURA_API_URL}/tools`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tool: 'bot-detect', arguments: {} })
+          });
+          if (!response.ok) throw new Error(`API error: ${response.status}`);
+          return response.json();
+        });
+
+        const data = result.result || result;
+
+        if (data.error) {
+          await sendMessage(chatId, `\u274C ${data.error}`);
+          return { statusCode: 200, body: 'OK' };
+        }
+
+        const clusters = data.clusters || [];
+        let msg;
+
+        if (clusters.length === 0) {
+          msg = `\u2705 *Bot Farm Detection*\n\nNo bot clusters detected.\nAgents tracked: ${data.stats?.agentsTracked || 0}`;
+        } else {
+          msg = `\u{1F6A8} *Bot Farm Detection \u2014 ${clusters.length} Cluster(s)*\n\n`;
+          msg += `Agents in clusters: ${data.stats?.totalAgentsInClusters || 0}\n\n`;
+
+          clusters.slice(0, 5).forEach((c, i) => {
+            msg += `*Cluster ${i + 1}* (${Math.round(c.confidence * 100)}% confidence)\n`;
+            msg += `Agents: ${c.agents.slice(0, 5).join(', ')}${c.agents.length > 5 ? ` +${c.agents.length - 5} more` : ''}\n`;
+            msg += `Signals: ${c.signals.map(s => s.type.replace('_', ' ')).join(', ')}\n\n`;
+          });
+        }
+
+        await sendMessage(chatId, msg);
+      } catch (err) {
+        console.error('Bot check error:', err);
+        await sendMessage(chatId, `\u274C Bot detection failed: ${err.message}`);
       }
     }
     // Auto-detect URLs/usernames
