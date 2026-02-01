@@ -748,6 +748,91 @@ function formatCompareResults(result) {
 }
 
 /**
+ * Format agent trust score results for Discord
+ */
+function formatAgentTrustResults(result) {
+  if (result.error) {
+    return { content: `:x: ${result.error}` };
+  }
+
+  const score = result.overallScore || 0;
+  const level = result.jailLevel || 'free';
+
+  let color = 0x2ECC71; // green
+  let levelEmoji = '✅';
+  if (level === 'jailed') { color = 0xE74C3C; levelEmoji = '🔴'; }
+  else if (level === 'watch_list') { color = 0xF39C12; levelEmoji = '🟠'; }
+  else if (level === 'warning') { color = 0xF1C40F; levelEmoji = '🟡'; }
+
+  const fields = [
+    { name: '🆔 Identity', value: `${result.identity?.score || 0}/100`, inline: true },
+    { name: '📊 Behavior', value: `${result.behavior?.score || 0}/100`, inline: true },
+    { name: '🔗 Network', value: `${result.network?.score || 0}/100`, inline: true },
+    { name: '📝 Content', value: `${result.content?.score || 0}/100`, inline: true },
+    { name: `${levelEmoji} Jail Level`, value: level.replace('_', ' ').toUpperCase(), inline: true },
+    { name: '⏱️ Account Age', value: `${result.identity?.accountAgeDays || 0} days`, inline: true },
+  ];
+
+  if (result.reasons?.length > 0) {
+    fields.push({ name: '⚠️ Reasons', value: result.reasons.slice(0, 3).join('\n'), inline: false });
+  }
+
+  return {
+    embeds: [{
+      title: `🛡️ Agent Trust: ${result.agentName}`,
+      description: `Overall Score: **${score}/100**`,
+      color,
+      fields,
+      footer: { text: 'AuraSecurity | AI Jail System' },
+      timestamp: new Date().toISOString()
+    }]
+  };
+}
+
+/**
+ * Format bot detection results for Discord
+ */
+function formatBotDetectResults(result) {
+  if (result.error) {
+    return { content: `:x: ${result.error}` };
+  }
+
+  const clusters = result.clusters || [];
+
+  if (clusters.length === 0) {
+    return {
+      embeds: [{
+        title: '🤖 Bot Farm Detection',
+        description: 'No bot clusters detected.',
+        color: 0x2ECC71,
+        fields: [
+          { name: 'Agents Tracked', value: `${result.stats?.agentsTracked || 0}`, inline: true },
+        ],
+        footer: { text: 'AuraSecurity | AI Jail System' },
+        timestamp: new Date().toISOString()
+      }]
+    };
+  }
+
+  const fields = clusters.slice(0, 5).map((c, i) => ({
+    name: `Cluster ${i + 1} (${Math.round(c.confidence * 100)}% confidence)`,
+    value: `**Agents:** ${c.agents.slice(0, 5).join(', ')}${c.agents.length > 5 ? ` +${c.agents.length - 5} more` : ''}\n**Signals:** ${c.signals.map(s => s.type.replace('_', ' ')).join(', ')}`,
+    inline: false
+  }));
+
+  return {
+    embeds: [{
+      title: `🤖 Bot Farm Detection — ${clusters.length} Cluster(s) Found`,
+      description: `Detected ${result.stats?.totalAgentsInClusters || 0} agents in ${clusters.length} suspected bot cluster(s).`,
+      color: 0xE74C3C,
+      fields,
+      footer: { text: 'AuraSecurity | AI Jail System' },
+      timestamp: new Date().toISOString()
+    }]
+  };
+}
+
+/**
  * Handle slash commands
  */
 async function handleSlashCommand(interaction) {
@@ -860,6 +945,16 @@ async function handleSlashCommand(interaction) {
               {
                 name: '/compare <repo1> <repo2>',
                 value: 'Compare two projects side-by-side - which one to ape?',
+                inline: false
+              },
+              {
+                name: '/trustagent <agent>',
+                value: 'Check a Moltbook agent\'s trust score — identity, behavior, network, and content signals.',
+                inline: false
+              },
+              {
+                name: '/botcheck',
+                value: 'Run bot farm detection — finds coordinated agent clusters on Moltbook.',
                 inline: false
               },
               {
@@ -979,6 +1074,14 @@ export const handler = async (event) => {
         // Compare two repos
         result = await callScannerApi('compare', { repo1: event.repo1, repo2: event.repo2 });
         formattedResponse = formatCompareResults(result);
+      } else if (event.command === 'trustagent') {
+        // Moltbook agent trust score
+        result = await callScannerApi('agent-trust', { agentName: event.agentName });
+        formattedResponse = formatAgentTrustResults(result);
+      } else if (event.command === 'botcheck') {
+        // Bot farm detection
+        result = await callScannerApi('bot-detect', {});
+        formattedResponse = formatBotDetectResults(result);
       } else {
         // rugcheck - quick trust scan
         result = await callScannerApi('trust-scan', { gitUrl: event.repoUrl });
@@ -1212,6 +1315,74 @@ export const handler = async (event) => {
             interactionToken: interaction.token
           })
         }));
+
+        return {
+          statusCode: 200,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 5 })
+        };
+      }
+
+      // Handle trustagent command
+      if (name === 'trustagent') {
+        const agentName = options?.find(o => o.name === 'agent')?.value;
+
+        if (!agentName) {
+          return {
+            statusCode: 200,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 4,
+              data: { content: ':x: Please provide a Moltbook agent name.', flags: 64 }
+            })
+          };
+        }
+
+        console.log(`Deferring trustagent for ${agentName}`);
+
+        try {
+          const lambdaClient = new LambdaClient({ region: 'us-east-1' });
+          await lambdaClient.send(new InvokeCommand({
+            FunctionName: 'AuraSecurityDiscordBot',
+            InvocationType: 'Event',
+            Payload: JSON.stringify({
+              type: 'deferred_command',
+              command: 'trustagent',
+              agentName: agentName,
+              applicationId: interaction.application_id,
+              interactionToken: interaction.token
+            })
+          }));
+        } catch (invokeErr) {
+          console.error('Lambda invoke failed:', invokeErr);
+        }
+
+        return {
+          statusCode: 200,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 5 })
+        };
+      }
+
+      // Handle botcheck command (no args)
+      if (name === 'botcheck') {
+        console.log('Deferring botcheck');
+
+        try {
+          const lambdaClient = new LambdaClient({ region: 'us-east-1' });
+          await lambdaClient.send(new InvokeCommand({
+            FunctionName: 'AuraSecurityDiscordBot',
+            InvocationType: 'Event',
+            Payload: JSON.stringify({
+              type: 'deferred_command',
+              command: 'botcheck',
+              applicationId: interaction.application_id,
+              interactionToken: interaction.token
+            })
+          }));
+        } catch (invokeErr) {
+          console.error('Lambda invoke failed:', invokeErr);
+        }
 
         return {
           statusCode: 200,
