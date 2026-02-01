@@ -11,6 +11,7 @@
 import Database from 'better-sqlite3';
 import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
+import { createHash, randomBytes } from 'crypto';
 import type { AuditorOutput } from '../types/events.js';
 import type { LocalScanResult } from '../integrations/local-scanner.js';
 import type { AWSScanResult } from '../integrations/aws-scanner.js';
@@ -46,6 +47,17 @@ export interface NotificationRecord {
   message: string;
   timestamp: string;
   error?: string;
+}
+
+export interface ApiKeyRecord {
+  id: string;
+  name: string;
+  key_hash: string;
+  scopes: string[];
+  created_at: string;
+  last_used_at: string | null;
+  expires_at: string | null;
+  active: boolean;
 }
 
 // ============ DEFAULT SETTINGS ============
@@ -181,6 +193,20 @@ export class AuditorDatabase {
       )
     `);
 
+    // API Keys table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS api_keys (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        key_hash TEXT NOT NULL UNIQUE,
+        scopes TEXT DEFAULT '[]',
+        created_at TEXT NOT NULL,
+        last_used_at TEXT,
+        expires_at TEXT,
+        active INTEGER DEFAULT 1
+      )
+    `);
+
     // Create indexes
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_audits_timestamp ON audits(timestamp DESC);
@@ -188,6 +214,7 @@ export class AuditorDatabase {
       CREATE INDEX IF NOT EXISTS idx_notifications_audit ON notifications(audit_id);
       CREATE INDEX IF NOT EXISTS idx_score_history_target ON score_history(target);
       CREATE INDEX IF NOT EXISTS idx_score_history_timestamp ON score_history(timestamp DESC);
+      CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
     `);
 
     // Initialize default settings
@@ -651,6 +678,101 @@ export class AuditorDatabase {
     // No scores yet - return perfect score
     const score = calculateSecurityScore({ critical: 0, high: 0, medium: 0, low: 0 });
     return { ...score, trend };
+  }
+
+  // ============ API KEY METHODS ============
+
+  private hashApiKey(key: string): string {
+    return createHash('sha256').update(key).digest('hex');
+  }
+
+  /**
+   * Create a new API key. Returns the plaintext key (only shown once).
+   */
+  createApiKey(
+    name: string,
+    scopes: string[] = ['read', 'write', 'scan'],
+    expiresInDays?: number
+  ): { id: string; key: string; name: string; scopes: string[]; expiresAt: string | null } {
+    const id = `aura_key_${Date.now()}_${randomBytes(4).toString('hex')}`;
+    const plainKey = `aura_${randomBytes(32).toString('hex')}`;
+    const keyHash = this.hashApiKey(plainKey);
+    const now = new Date().toISOString();
+    const expiresAt = expiresInDays
+      ? new Date(Date.now() + expiresInDays * 86400000).toISOString()
+      : null;
+
+    const stmt = this.db.prepare(`
+      INSERT INTO api_keys (id, name, key_hash, scopes, created_at, expires_at, active)
+      VALUES (?, ?, ?, ?, ?, ?, 1)
+    `);
+    stmt.run(id, name, keyHash, JSON.stringify(scopes), now, expiresAt);
+
+    console.log(`[DB] Created API key "${name}" (${id})`);
+    return { id, key: plainKey, name, scopes, expiresAt };
+  }
+
+  /**
+   * Validate an API key. Returns the key record if valid, null otherwise.
+   */
+  validateApiKey(plainKey: string): ApiKeyRecord | null {
+    const keyHash = this.hashApiKey(plainKey);
+    const now = new Date().toISOString();
+
+    const stmt = this.db.prepare(`
+      SELECT id, name, key_hash, scopes, created_at, last_used_at, expires_at, active
+      FROM api_keys
+      WHERE key_hash = ? AND active = 1 AND (expires_at IS NULL OR expires_at > ?)
+    `);
+    const row = stmt.get(keyHash, now) as any;
+    if (!row) return null;
+
+    // Update last_used_at
+    const update = this.db.prepare('UPDATE api_keys SET last_used_at = ? WHERE id = ?');
+    update.run(now, row.id);
+
+    return {
+      id: row.id,
+      name: row.name,
+      key_hash: row.key_hash,
+      scopes: JSON.parse(row.scopes || '[]'),
+      created_at: row.created_at,
+      last_used_at: now,
+      expires_at: row.expires_at,
+      active: !!row.active,
+    };
+  }
+
+  /**
+   * List all API keys (without hashes).
+   */
+  listApiKeys(): Array<Omit<ApiKeyRecord, 'key_hash'>> {
+    const stmt = this.db.prepare(`
+      SELECT id, name, scopes, created_at, last_used_at, expires_at, active
+      FROM api_keys ORDER BY created_at DESC
+    `);
+    const rows = stmt.all() as any[];
+    return rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      scopes: JSON.parse(row.scopes || '[]'),
+      created_at: row.created_at,
+      last_used_at: row.last_used_at,
+      expires_at: row.expires_at,
+      active: !!row.active,
+    }));
+  }
+
+  /**
+   * Revoke an API key.
+   */
+  revokeApiKey(id: string): boolean {
+    const stmt = this.db.prepare('UPDATE api_keys SET active = 0 WHERE id = ?');
+    const result = stmt.run(id);
+    if (result.changes > 0) {
+      console.log(`[DB] Revoked API key ${id}`);
+    }
+    return result.changes > 0;
   }
 
   // ============ CLEANUP ============

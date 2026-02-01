@@ -833,6 +833,46 @@ function formatBotDetectResults(result) {
 }
 
 /**
+ * Format report generation results for Discord
+ */
+function formatReportResults(result, repoUrl) {
+  if (result.error) {
+    return { content: `:x: Report generation failed: ${result.error}` };
+  }
+
+  const repoName = repoUrl.replace(/^https?:\/\/github\.com\//, '');
+  const trustScore = result.report ? 'Generated' : 'Failed';
+
+  // The report is HTML — we can't embed it in Discord, so provide a summary
+  const fields = [];
+
+  if (result.report) {
+    // Extract key info from the report data
+    fields.push({
+      name: 'Format',
+      value: result.format?.toUpperCase() || 'HTML',
+      inline: true
+    });
+    fields.push({
+      name: 'Report Size',
+      value: `${Math.round((result.reportLength || 0) / 1024)} KB`,
+      inline: true
+    });
+  }
+
+  return {
+    embeds: [{
+      title: `📄 Security Report: ${repoName}`,
+      description: `Full security report generated for \`${repoName}\`.\n\nUse the API endpoint to retrieve the HTML report:\n\`\`\`\ncurl -s "https://app.aurasecurity.io/tools" -X POST -H "Content-Type: application/json" -d '{"tool":"generate-report","arguments":{"repoUrl":"${repoUrl}"}}'\n\`\`\``,
+      color: 0x00E5FF,
+      fields,
+      footer: { text: 'AuraSecurity | Report Generation' },
+      timestamp: new Date().toISOString()
+    }]
+  };
+}
+
+/**
  * Handle slash commands
  */
 async function handleSlashCommand(interaction) {
@@ -955,6 +995,11 @@ async function handleSlashCommand(interaction) {
               {
                 name: '/botcheck',
                 value: 'Run bot farm detection — finds coordinated agent clusters on Moltbook.',
+                inline: false
+              },
+              {
+                name: '/report <repo>',
+                value: 'Generate a full HTML security report for a repository.',
                 inline: false
               },
               {
@@ -1082,6 +1127,10 @@ export const handler = async (event) => {
         // Bot farm detection
         result = await callScannerApi('bot-detect', {});
         formattedResponse = formatBotDetectResults(result);
+      } else if (event.command === 'report') {
+        // Generate security report
+        result = await callScannerApi('generate-report', { repoUrl: event.repoUrl, format: 'html' });
+        formattedResponse = formatReportResults(result, event.repoUrl);
       } else {
         // rugcheck - quick trust scan
         result = await callScannerApi('trust-scan', { gitUrl: event.repoUrl });
@@ -1173,7 +1222,7 @@ export const handler = async (event) => {
       const { name, options } = interaction.data;
 
       // Handle repo-based scan commands
-      if (name === 'rugcheck' || name === 'scan' || name === 'devcheck' || name === 'aicheck' || name === 'scamcheck') {
+      if (name === 'rugcheck' || name === 'scan' || name === 'devcheck' || name === 'aicheck' || name === 'scamcheck' || name === 'report') {
         const repoUrl = options?.find(o => o.name === 'repo')?.value;
 
         if (!repoUrl) {

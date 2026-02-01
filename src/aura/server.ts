@@ -17,6 +17,17 @@ export interface AuraServerConfig {
   port: number;
   host?: string;
   dbPath?: string;
+  authEnabled?: boolean;
+  /** A master key that grants full access without DB lookup */
+  masterKey?: string;
+}
+
+interface AuthResult {
+  valid: boolean;
+  status: number;
+  message: string;
+  keyName?: string;
+  scopes?: string[];
 }
 
 export class AuraServer {
@@ -31,7 +42,9 @@ export class AuraServer {
     this.config = {
       port: config.port,
       host: config.host ?? '127.0.0.1',
-      dbPath: config.dbPath ?? process.cwd()
+      dbPath: config.dbPath ?? process.cwd(),
+      authEnabled: config.authEnabled ?? false,
+      masterKey: config.masterKey ?? '',
     };
     // Initialize database
     this.db = getDatabase(this.config.dbPath);
@@ -52,6 +65,10 @@ export class AuraServer {
     this.tools.set(tool.name, tool);
   }
 
+  getTool(name: string): AuraTool | undefined {
+    return this.tools.get(name);
+  }
+
   getDatabase(): AuditorDatabase {
     return this.db;
   }
@@ -63,7 +80,7 @@ export class AuraServer {
     // CORS headers for visualizer access
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     res.setHeader('Content-Type', 'application/json');
 
     // Handle preflight
@@ -73,9 +90,34 @@ export class AuraServer {
       return;
     }
 
+    // Public endpoints that never require auth
+    const isPublic = path === '/health' || path === '/info' || path.startsWith('/badge/');
+
+    // Auth check (when enabled)
+    if (this.config.authEnabled && !isPublic) {
+      // Auth key management endpoints use master key only
+      const isAuthEndpoint = path.startsWith('/auth/');
+
+      const authResult = this.validateAuth(req, isAuthEndpoint);
+      if (!authResult.valid) {
+        res.statusCode = authResult.status;
+        res.end(JSON.stringify({ error: authResult.message }));
+        return;
+      }
+    }
+
     try {
+      // Auth key management endpoints
+      if (path === '/auth/keys' && req.method === 'POST') {
+        await this.handleCreateApiKey(req, res);
+      } else if (path === '/auth/keys' && req.method === 'GET') {
+        await this.handleListApiKeys(res);
+      } else if (path.startsWith('/auth/keys/') && req.method === 'DELETE') {
+        const keyId = path.slice(11); // "/auth/keys/".length
+        await this.handleRevokeApiKey(keyId, res);
+      }
       // Core Aura endpoints
-      if (path === '/info' && req.method === 'GET') {
+      else if (path === '/info' && req.method === 'GET') {
         await this.handleInfo(res);
       } else if (path === '/tools' && req.method === 'GET') {
         await this.handleListTools(res);
@@ -155,10 +197,11 @@ export class AuraServer {
     res.statusCode = 200;
     res.end(JSON.stringify({
       name: 'aura-security',
-      version: '0.5.2',
-      endpoints: ['/info', '/tools', '/memory', '/settings', '/audits', '/stats', '/notifications', '/score', '/badge'],
+      version: '0.6.0',
+      endpoints: ['/info', '/tools', '/memory', '/settings', '/audits', '/stats', '/notifications', '/score', '/badge', '/auth/keys'],
       tools: Array.from(this.tools.keys()),
-      database: true
+      database: true,
+      auth: this.config.authEnabled ? 'enabled' : 'disabled'
     }));
   }
 
@@ -548,6 +591,83 @@ export class AuraServer {
 
     res.statusCode = health.status === 'healthy' ? 200 : 503;
     res.end(JSON.stringify(health));
+  }
+
+  // ============ AUTH METHODS ============
+
+  private validateAuth(req: IncomingMessage, requireMaster = false): AuthResult {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader) {
+      return { valid: false, status: 401, message: 'Authorization header required. Use: Bearer <api-key>' };
+    }
+
+    const parts = authHeader.split(' ');
+    if (parts.length !== 2 || parts[0] !== 'Bearer') {
+      return { valid: false, status: 401, message: 'Invalid authorization format. Use: Bearer <api-key>' };
+    }
+
+    const token = parts[1];
+
+    // Check master key first
+    if (this.config.masterKey && token === this.config.masterKey) {
+      return { valid: true, status: 200, message: 'OK', keyName: 'master', scopes: ['admin', 'read', 'write', 'scan'] };
+    }
+
+    // Auth management endpoints require master key
+    if (requireMaster) {
+      return { valid: false, status: 403, message: 'Master key required for auth management' };
+    }
+
+    // Validate against database
+    const keyRecord = this.db.validateApiKey(token);
+    if (!keyRecord) {
+      return { valid: false, status: 401, message: 'Invalid or expired API key' };
+    }
+
+    return {
+      valid: true,
+      status: 200,
+      message: 'OK',
+      keyName: keyRecord.name,
+      scopes: keyRecord.scopes,
+    };
+  }
+
+  private async handleCreateApiKey(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const body = JSON.parse(await this.readBody(req));
+    const name = body.name;
+    if (!name || typeof name !== 'string') {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: 'name is required' }));
+      return;
+    }
+    const scopes = Array.isArray(body.scopes) ? body.scopes : ['read', 'write', 'scan'];
+    const expiresInDays = typeof body.expiresInDays === 'number' ? body.expiresInDays : undefined;
+
+    const result = this.db.createApiKey(name, scopes, expiresInDays);
+    res.statusCode = 201;
+    res.end(JSON.stringify({
+      message: 'API key created. Save the key — it cannot be retrieved again.',
+      ...result,
+    }));
+  }
+
+  private async handleListApiKeys(res: ServerResponse): Promise<void> {
+    const keys = this.db.listApiKeys();
+    res.statusCode = 200;
+    res.end(JSON.stringify({ keys }));
+  }
+
+  private async handleRevokeApiKey(keyId: string, res: ServerResponse): Promise<void> {
+    const revoked = this.db.revokeApiKey(keyId);
+    if (!revoked) {
+      res.statusCode = 404;
+      res.end(JSON.stringify({ error: 'API key not found' }));
+      return;
+    }
+    res.statusCode = 200;
+    res.end(JSON.stringify({ message: 'API key revoked', id: keyId }));
   }
 
   private readBody(req: IncomingMessage): Promise<string> {
