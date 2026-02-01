@@ -46,10 +46,13 @@ import { performXScan } from './integrations/x-scanner.js';
 import { performAIVerification } from './integrations/ai-verifier.js';
 import { detectScamPatterns, quickScamScan } from './integrations/scam-detector.js';
 import { MoltbookAgent as MoltbookAgentRunner } from './integrations/moltbook/agent.js';
+import { generateReport, type ReportData, type ReportFormat } from './reporting/index.js';
 
 const PORT = parseInt(process.env.AURA_PORT ?? '3000', 10);
 const WS_PORT = parseInt(process.env.WS_PORT ?? '3001', 10);
 const AURA_BUS_URL = process.env.AURA_BUS_URL;
+const AUTH_ENABLED = process.env.AUTH_ENABLED === 'true';
+const AUTH_MASTER_KEY = process.env.AUTH_MASTER_KEY || '';
 
 // Secret patterns for remote scanning - stricter patterns to avoid false positives
 const REMOTE_SECRET_PATTERNS = [
@@ -314,7 +317,11 @@ async function main(): Promise<void> {
   console.log('[AURA] Starting auditor pipeline...');
 
   // Create Aura server
-  const server = new AuraServer({ port: PORT });
+  const server = new AuraServer({
+    port: PORT,
+    authEnabled: AUTH_ENABLED,
+    masterKey: AUTH_MASTER_KEY,
+  });
 
   // Create Aura client for publishing to bus (if configured)
   let busClient: AuraClient | null = null;
@@ -1497,6 +1504,102 @@ async function main(): Promise<void> {
     }
   });
 
+  // Register Report Generation tool
+  server.registerTool({
+    name: 'generate-report',
+    description: 'Generate an HTML or JSON security report for a GitHub repository. Runs trust-scan and scam-scan, then produces a formatted report.',
+    parameters: {
+      type: 'object',
+      required: ['repoUrl'],
+      properties: {
+        repoUrl: { type: 'string', description: 'GitHub repository URL' },
+        format: { type: 'string', enum: ['html', 'json'], description: 'Report format (default: html)' },
+        includeLocalScan: { type: 'boolean', description: 'Include local code scan (default: false)' },
+      }
+    },
+    handler: async (args) => {
+      const repoUrl = args.repoUrl as string;
+      const format = (args.format as ReportFormat) || 'html';
+
+      console.log(`[AURA] Generating ${format} report for: ${repoUrl}`);
+
+      const reportData: ReportData = {
+        repoUrl,
+        generatedAt: new Date().toISOString(),
+      };
+
+      // Run trust scan
+      try {
+        const trustResult = await performTrustScan(repoUrl);
+        reportData.trustScan = {
+          trustScore: trustResult.trustScore,
+          grade: trustResult.grade,
+          verdict: trustResult.verdict,
+          checks: trustResult.checks?.map(c => ({
+            name: c.name,
+            passed: c.status === 'good',
+            details: c.explanation,
+            weight: c.points,
+          })),
+          metrics: trustResult.metrics as unknown as Record<string, unknown>,
+        };
+      } catch (err) {
+        console.error('[AURA] Report trust-scan failed:', err);
+      }
+
+      // Run scam scan (use the registered tool handler to get the full result)
+      try {
+        const scamTool = server.getTool('scam-scan');
+        if (scamTool) {
+          const scamResult = await scamTool.handler({ gitUrl: repoUrl }) as any;
+          reportData.scamScan = {
+            scamScore: scamResult.scamScore ?? scamResult.codeSafety?.scamScore ?? 0,
+            riskLevel: scamResult.riskLevel ?? (scamResult.isLikelyScam ? 'high' : 'low'),
+            isLikelyScam: scamResult.isLikelyScam ?? false,
+            flags: scamResult.redFlags ?? scamResult.warnings ?? [],
+            summary: scamResult.summary ?? scamResult.analysis ?? '',
+          };
+        }
+      } catch (err) {
+        console.error('[AURA] Report scam-scan failed:', err);
+      }
+
+      // Optionally run local scan (clones repo)
+      if (args.includeLocalScan) {
+        try {
+          const localResult = await scanRemoteGit({ gitUrl: repoUrl, scanSecrets: true, scanPackages: true, fastMode: true });
+          reportData.localScan = {
+            secrets_found: localResult.secrets.length,
+            package_vulns: localResult.packages.filter((p: PackageFinding) => p.severity === 'critical' || p.severity === 'high').length,
+            sast_findings: localResult.sastFindings?.length ?? 0,
+            tools_used: localResult.toolsUsed,
+            findings: [
+              ...localResult.secrets.map((s: SecretFinding) => ({
+                type: 'secret', severity: 'high' as string, file: s.file, line: s.line, message: `${s.type}: ${s.snippet || 'Secret detected'}`
+              })),
+              ...localResult.packages.map((p: PackageFinding) => ({
+                type: 'vulnerability', severity: p.severity || 'medium', file: p.name, message: `${p.name}@${p.version}: ${p.title || 'vulnerable'}`
+              })),
+            ],
+          };
+        } catch (err) {
+          console.error('[AURA] Report local-scan failed:', err);
+        }
+      }
+
+      const report = generateReport(reportData, format);
+      console.log(`[AURA] Report generated: ${report.length} chars (${format})`);
+
+      return {
+        format,
+        repoUrl,
+        reportLength: report.length,
+        report,
+        generatedAt: reportData.generatedAt,
+      };
+    }
+  });
+
   // Start HTTP server
   await server.start();
   console.log(`[AURA] Auditor listening on http://127.0.0.1:${PORT}`);
@@ -1590,7 +1693,7 @@ export type { AWSScanConfig, AWSScanResult, AWSFinding } from './integrations/aw
 
 // Database exports
 export { AuditorDatabase, getDatabase, closeDatabase } from './database/index.js';
-export type { AuditRecord, SettingsRecord, NotificationRecord } from './database/index.js';
+export type { AuditRecord, SettingsRecord, NotificationRecord, ApiKeyRecord } from './database/index.js';
 
 // Notification exports
 export { NotificationService, createNotificationFromAudit } from './integrations/notifications.js';
@@ -1611,6 +1714,10 @@ export type { AIVerifyResult } from './integrations/ai-verifier.js';
 // Scam Detector exports
 export { detectScamPatterns, quickScamScan, getScamSignatures, addScamSignature } from './integrations/scam-detector.js';
 export type { ScamSignature, ScamDetectionResult, SimilarityMatch } from './integrations/scam-detector.js';
+
+// Report Generation exports
+export { generateReport, generateHtmlReport, generateJsonReport } from './reporting/index.js';
+export type { ReportData, ReportFormat } from './reporting/index.js';
 
 // Moltbook Integration exports
 export { MoltbookClient, MoltbookScanner, MoltbookAgent, FeedMonitor, makePostDecision, formatScanResult, formatScanError, formatPostTitle, AgentScorer, BotFarmDetector, JailEnforcer } from './integrations/moltbook/index.js';

@@ -2327,7 +2327,8 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         `/devcheck <@username> - Full dev audit (identity + security)\n` +
         `/xcheck <@username> - Same as devcheck\n` +
         `/trustagent <name> - Moltbook agent trust score\n` +
-        `/botcheck - Detect bot farm clusters\n\n` +
+        `/botcheck - Detect bot farm clusters\n` +
+        `/report <repo> - Generate full HTML security report\n\n` +
         `*Example:*\n` +
         `/scan https://github.com/ethereum/go-ethereum\n` +
         `/scamcheck https://github.com/owner/repo\n` +
@@ -2346,7 +2347,8 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         `/devcheck <@user> - Full dev audit (identity + security)\n` +
         `/xcheck <@user> - Same as devcheck\n` +
         `/trustagent <name> - Moltbook agent trust score\n` +
-        `/botcheck - Detect bot farm clusters\n\n` +
+        `/botcheck - Detect bot farm clusters\n` +
+        `/report <repo> - Generate full HTML security report\n\n` +
         `*What I check:*\n\n` +
         `\u{1F6E1} *Security Scan (/scan):*\n` +
         `\u2022 Exposed secrets & API keys\n` +
@@ -2760,6 +2762,49 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
       } catch (err) {
         console.error('Bot check error:', err);
         await sendMessage(chatId, `\u274C Bot detection failed: ${err.message}`);
+      }
+    }
+    // /report command - Generate HTML security report
+    else if (text.startsWith('/report')) {
+      const repoUrl = text.replace(/^\/report(@[a-zA-Z0-9_]+)?/i, '').trim();
+      if (!repoUrl) {
+        await sendMessage(chatId, `\u274C Please provide a GitHub repository URL.\n\n*Example:*\n/report https://github.com/owner/repo`);
+        return { statusCode: 200, body: 'OK' };
+      }
+
+      await sendMessage(chatId, `\u{1F4C4} Generating security report for:\n\`${repoUrl}\`\n\n_Running trust scan + scam scan..._`);
+
+      try {
+        const result = await withRetry(async () => {
+          const response = await fetch(`${AURA_API_URL}/tools`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tool: 'generate-report', arguments: { repoUrl, format: 'html' } })
+          });
+          if (!response.ok) throw new Error(`API error: ${response.status}`);
+          return response.json();
+        });
+
+        const data = result.result || result;
+
+        if (data.error) {
+          await sendMessage(chatId, `\u274C Report generation failed: ${data.error}`);
+          return { statusCode: 200, body: 'OK' };
+        }
+
+        const repoName = repoUrl.replace(/^https?:\/\/github\.com\//, '');
+        const sizeKb = Math.round((data.reportLength || 0) / 1024);
+        let msg = `\u2705 *Security Report Generated*\n\n`;
+        msg += `*Repo:* \`${repoName}\`\n`;
+        msg += `*Format:* ${(data.format || 'html').toUpperCase()}\n`;
+        msg += `*Size:* ${sizeKb} KB\n\n`;
+        msg += `_Retrieve the full HTML report via API:_\n`;
+        msg += `\`\`\`\ncurl -s "https://app.aurasecurity.io/tools" -X POST -H "Content-Type: application/json" -d '{"tool":"generate-report","arguments":{"repoUrl":"${repoUrl}"}}'\n\`\`\``;
+
+        await sendMessage(chatId, msg);
+      } catch (err) {
+        console.error('Report generation error:', err);
+        await sendMessage(chatId, `\u274C Report generation failed: ${err.message}`);
       }
     }
     // Auto-detect URLs/usernames
