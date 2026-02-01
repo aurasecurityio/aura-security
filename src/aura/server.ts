@@ -131,6 +131,10 @@ export class AuraServer {
         const target = decodeURIComponent(path.slice(7));
         await this.handleGetBadgeForTarget(target, res);
       }
+      // Health check endpoint
+      else if (path === '/health' && req.method === 'GET') {
+        await this.handleHealthCheck(res);
+      }
       else {
         res.statusCode = 404;
         res.end(JSON.stringify({ error: 'Not found' }));
@@ -486,6 +490,64 @@ export class AuraServer {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.statusCode = 200;
     res.end(svg);
+  }
+
+  private async handleHealthCheck(res: ServerResponse): Promise<void> {
+    const health: Record<string, any> = {
+      status: 'healthy',
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString(),
+      memory_mb: Math.round(process.memoryUsage().rss / 1024 / 1024),
+      env: {
+        github_token: !!process.env.GITHUB_TOKEN,
+        x_bearer_token: !!process.env.X_BEARER_TOKEN,
+      },
+    };
+
+    // Check GitHub API reachability
+    try {
+      const ghRes = await fetch('https://api.github.com/rate_limit', {
+        headers: process.env.GITHUB_TOKEN
+          ? { 'Authorization': `token ${process.env.GITHUB_TOKEN}`, 'User-Agent': 'AuraSecurity' }
+          : { 'User-Agent': 'AuraSecurity' },
+        signal: AbortSignal.timeout(5000),
+      });
+      const ghData = await ghRes.json() as any;
+      health.github_api = {
+        status: 'ok',
+        rate_remaining: ghData?.rate?.remaining ?? 'unknown',
+        rate_limit: ghData?.rate?.limit ?? 'unknown',
+      };
+    } catch {
+      health.github_api = { status: 'unreachable' };
+      health.status = 'degraded';
+    }
+
+    // Check disk space (basic — check /tmp since that's where scans go)
+    try {
+      const { spawnSync } = await import('child_process');
+      const df = spawnSync('df', ['-m', '/tmp'], { encoding: 'utf-8', timeout: 3000 });
+      if (df.stdout) {
+        const lines = df.stdout.trim().split('\n');
+        if (lines.length > 1) {
+          const parts = lines[1].split(/\s+/);
+          health.disk_tmp_available_mb = parseInt(parts[3]) || 'unknown';
+        }
+      }
+    } catch { /* ignore */ }
+
+    // Database check
+    try {
+      const db = this.db;
+      const stats = db.getStats();
+      health.database = { status: 'ok', total_audits: stats.totalAudits ?? 0 };
+    } catch {
+      health.database = { status: 'error' };
+      health.status = 'degraded';
+    }
+
+    res.statusCode = health.status === 'healthy' ? 200 : 503;
+    res.end(JSON.stringify(health));
   }
 
   private readBody(req: IncomingMessage): Promise<string> {

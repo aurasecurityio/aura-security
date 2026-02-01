@@ -2380,8 +2380,16 @@ export async function scanRemoteGit(config: RemoteScanConfig): Promise<RemoteSca
   const cloneStart = Date.now();
 
   try {
-    // Clone the repository
-    const cloneArgs = ['clone', '--depth', String(depth)];
+    // Clone the repository (hardened: no hooks, no submodules, no symlinks)
+    const cloneArgs = [
+      'clone',
+      '--depth', String(depth),
+      '--no-recurse-submodules',
+      '-c', 'core.hooksPath=/dev/null',
+      '-c', 'core.symlinks=false',
+      '-c', 'transfer.fsckObjects=true',
+      '-c', 'fetch.fsckObjects=true',
+    ];
     if (branch) {
       cloneArgs.push('--branch', branch);
     }
@@ -2390,16 +2398,27 @@ export async function scanRemoteGit(config: RemoteScanConfig): Promise<RemoteSca
     const cloneResult = spawnSync('git', cloneArgs, {
       encoding: 'utf-8',
       timeout: 120000,  // 2 minute timeout for clone
-      maxBuffer: 50 * 1024 * 1024
+      maxBuffer: 50 * 1024 * 1024,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }  // Disable interactive prompts
     });
 
     if (cloneResult.status !== 0) {
       // Try without branch specification (maybe main vs master)
-      const retryArgs = ['clone', '--depth', String(depth), gitUrl, tempDir + '-retry'];
+      const retryArgs = [
+        'clone',
+        '--depth', String(depth),
+        '--no-recurse-submodules',
+        '-c', 'core.hooksPath=/dev/null',
+        '-c', 'core.symlinks=false',
+        '-c', 'transfer.fsckObjects=true',
+        '-c', 'fetch.fsckObjects=true',
+        gitUrl, tempDir + '-retry'
+      ];
       const retryResult = spawnSync('git', retryArgs, {
         encoding: 'utf-8',
         timeout: 120000,
-        maxBuffer: 50 * 1024 * 1024
+        maxBuffer: 50 * 1024 * 1024,
+        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
       });
 
       if (retryResult.status !== 0) {
