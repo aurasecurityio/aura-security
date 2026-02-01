@@ -123,28 +123,37 @@ function parseGitHubUrl(url) {
 }
 
 /**
- * Call the scanner API
+ * Call the scanner API with timeout
  */
 async function callScannerApi(tool, args) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 240000); // 4 minute timeout
+
   try {
     console.log(`Calling API: ${tool} with args:`, JSON.stringify(args));
     const response = await fetch(`${SCANNER_API}/tools`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tool, arguments: args })
+      body: JSON.stringify({ tool, arguments: args }),
+      signal: controller.signal
     });
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`Scanner API error: ${response.status} - ${text}`);
+      throw new Error(`Scanner API error: ${response.status}`);
     }
 
     const data = await response.json();
     console.log('API response received');
     return data.result || data;
   } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error('Scan timed out (4 min limit). Try again or use a smaller repo.');
+    }
     console.error('Scanner API error:', error);
     throw error;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -976,25 +985,39 @@ export const handler = async (event) => {
         formattedResponse = formatTrustResults(result, event.repoUrl);
       }
 
-      // Send followup message to Discord
-      const discordResponse = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formattedResponse)
-      });
-
-      console.log('Followup sent, status:', discordResponse.status);
+      // Send followup message to Discord (with timeout)
+      const webhookController = new AbortController();
+      const webhookTimeout = setTimeout(() => webhookController.abort(), 10000); // 10s timeout
+      try {
+        const discordResponse = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formattedResponse),
+          signal: webhookController.signal
+        });
+        console.log('Followup sent, status:', discordResponse.status);
+      } finally {
+        clearTimeout(webhookTimeout);
+      }
       return { statusCode: 200, body: 'OK' };
 
     } catch (error) {
       console.error('Deferred command error:', error);
 
-      // Send error message
-      await fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: `:x: ${event.command} failed: ${error.message}` })
-      });
+      // Send error message (best effort, with timeout)
+      try {
+        const errController = new AbortController();
+        const errTimeout = setTimeout(() => errController.abort(), 10000);
+        await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: `:x: ${event.command} failed: ${error.message}` }),
+          signal: errController.signal
+        });
+        clearTimeout(errTimeout);
+      } catch (e) {
+        console.error('Failed to send error to Discord:', e.message);
+      }
 
       return { statusCode: 200, body: 'Error handled' };
     }
@@ -1076,18 +1099,31 @@ export const handler = async (event) => {
         console.log(`Deferring ${name} for ${repoUrl}`);
 
         // Invoke self asynchronously to do the actual work
-        const lambdaClient = new LambdaClient({ region: 'us-east-1' });
-        await lambdaClient.send(new InvokeCommand({
-          FunctionName: 'AuraSecurityDiscordBot',
-          InvocationType: 'Event', // Async invocation
-          Payload: JSON.stringify({
-            type: 'deferred_command',
-            command: name,
-            repoUrl: repoUrl,
-            applicationId: interaction.application_id,
-            interactionToken: interaction.token
-          })
-        }));
+        try {
+          const lambdaClient = new LambdaClient({ region: 'us-east-1' });
+          await lambdaClient.send(new InvokeCommand({
+            FunctionName: 'AuraSecurityDiscordBot',
+            InvocationType: 'Event', // Async invocation
+            Payload: JSON.stringify({
+              type: 'deferred_command',
+              command: name,
+              repoUrl: repoUrl,
+              applicationId: interaction.application_id,
+              interactionToken: interaction.token
+            })
+          }));
+        } catch (invokeErr) {
+          console.error('Lambda invoke failed:', invokeErr);
+          // Post error to webhook since deferred response already committed
+          const webhookUrl = `https://discord.com/api/v10/webhooks/${interaction.application_id}/${interaction.token}`;
+          try {
+            await fetch(webhookUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ content: ':x: Scanner temporarily unavailable. Please try again.' })
+            });
+          } catch (e) { /* best effort */ }
+        }
 
         // Return deferred response immediately (within 3 seconds)
         return {

@@ -2672,6 +2672,15 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
 
   } catch (error) {
     console.error('Error:', error);
+    // Try to notify the user that something went wrong
+    try {
+      const chatId = body?.message?.chat?.id || body?.callback_query?.message?.chat?.id;
+      if (chatId) {
+        await safeSendMessage(chatId, '\u274C Something went wrong processing your request. Please try again.');
+      }
+    } catch (e) {
+      console.error('Failed to send error message to user:', e.message);
+    }
     return { statusCode: 200, body: 'OK' };
   }
 }
