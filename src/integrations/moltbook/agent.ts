@@ -98,17 +98,17 @@ export class MoltbookAgent {
     if (this.running) return;
     console.log('[AGENT] Starting AuraSecurity Moltbook agent...');
 
-    // Step 1: Register or verify agent identity
-    await this.ensureRegistered();
+    // Step 1: Register or verify agent identity (retries in background if Moltbook is down)
+    const registered = await this.ensureRegisteredWithRetry();
 
-    // Step 2: Ensure our submolt exists
-    await this.ensureSubmolt();
+    // Step 2: Ensure our submolt exists (skip if not yet registered)
+    if (registered) await this.ensureSubmolt();
 
-    // Step 3: Start the scanner (polls for scan requests in /s/security-audits)
-    this.scanner.start();
-
-    // Step 4: Start the feed monitor (watches global feed)
-    this.monitor.start();
+    // Step 3-4: Start scanner + monitor (only if registered, otherwise retry loop starts them)
+    if (registered) {
+      this.scanner.start();
+      this.monitor.start();
+    }
 
     // Step 5: Start periodic bot farm detection
     this.botDetectTimer = setInterval(() => this.runBotDetection(), BOT_DETECT_INTERVAL_MS);
@@ -119,8 +119,12 @@ export class MoltbookAgent {
     this.dailySummaryTimer = setInterval(() => this.checkDailySummary(), DAILY_SUMMARY_CHECK_MS);
 
     this.running = true;
-    console.log('[AGENT] AuraSecurity Moltbook agent is running');
-    console.log('[AGENT] Services: scanner, monitor, jail, daily-summary');
+    if (registered) {
+      console.log('[AGENT] AuraSecurity Moltbook agent is running');
+      console.log('[AGENT] Services: scanner, monitor, jail, daily-summary');
+    } else {
+      console.log('[AGENT] AuraSecurity server is running (Moltbook reconnecting in background)');
+    }
   }
 
   /**
@@ -356,18 +360,41 @@ export class MoltbookAgent {
 
   // === Registration & Setup ===
 
-  private async ensureRegistered(): Promise<void> {
+  private async ensureRegisteredWithRetry(): Promise<boolean> {
+    // Try immediately
+    const ok = await this.tryRegister();
+    if (ok) return true;
+
+    // Failed — start background retry loop (don't block startup)
+    console.log('[AGENT] Will retry Moltbook registration every 60s in background');
+    const retryTimer = setInterval(async () => {
+      const success = await this.tryRegister();
+      if (success) {
+        clearInterval(retryTimer);
+        // Start services that depend on registration
+        try { await this.ensureSubmolt(); } catch {}
+        this.scanner.start();
+        this.monitor.start();
+        console.log('[AGENT] Moltbook reconnected — all services started');
+      }
+    }, 60_000);
+
+    return false;
+  }
+
+  private async tryRegister(): Promise<boolean> {
+    // Try existing key first
     if (this.config.apiKey) {
       try {
         const profile = await this.client.getMyProfile();
         console.log(`[AGENT] Authenticated as ${profile.name} (karma: ${profile.karma}, verified: ${profile.verified})`);
-        return;
+        return true;
       } catch (err: any) {
-        console.warn(`[AGENT] API key invalid or expired: ${err.message}`);
-        console.log('[AGENT] Re-registering...');
+        console.warn(`[AGENT] API key failed: ${err.message}`);
       }
     }
 
+    // Try to register
     try {
       const res = await this.client.register(
         this.config.agentName,
@@ -379,9 +406,34 @@ export class MoltbookAgent {
       console.log(`[AGENT] API Key: ${res.api_key}`);
       console.log(`[AGENT] Claim URL: ${res.claim_url}`);
       console.log(`[AGENT] Verification Code: ${res.verification_code}`);
-      console.log('[AGENT] IMPORTANT: Save the API key to MOLTBOOK_API_KEY env var');
+
+      // Auto-save key to .env so we never lose it again
+      this.persistApiKey(res.api_key);
+      return true;
     } catch (err: any) {
-      throw new Error(`Failed to register agent: ${err.message}`);
+      console.warn(`[AGENT] Registration failed: ${err.message}`);
+      return false;
+    }
+  }
+
+  private persistApiKey(key: string): void {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const envPath = path.join(process.cwd(), '.env');
+      let envContent = '';
+      try { envContent = fs.readFileSync(envPath, 'utf-8'); } catch {}
+
+      if (envContent.includes('MOLTBOOK_API_KEY=')) {
+        envContent = envContent.replace(/MOLTBOOK_API_KEY=.*/g, `MOLTBOOK_API_KEY=${key}`);
+      } else {
+        envContent += `\nMOLTBOOK_API_KEY=${key}`;
+      }
+      fs.writeFileSync(envPath, envContent.trim() + '\n');
+      console.log(`[AGENT] API key saved to .env`);
+    } catch (err: any) {
+      console.error(`[AGENT] Could not save API key to .env: ${err.message}`);
+      console.log(`[AGENT] SAVE THIS KEY: ${key}`);
     }
   }
 
