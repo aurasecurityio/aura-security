@@ -60,14 +60,14 @@ export class FeedMonitor {
 
   // Repos we've already scanned (avoid re-triggering)
   private scannedRepos: Set<string> = new Set();
-  private onScanRequest?: (repoUrl: string, context: string) => void;
+  private onScanRequest?: (repoUrl: string, context: string, postId: string) => void;
 
   constructor(
     client: MoltbookClient,
     config: MoltbookAgentConfig,
     callbacks?: {
       onAlert?: (alert: MonitorAlert) => void;
-      onScanRequest?: (repoUrl: string, context: string) => void;
+      onScanRequest?: (repoUrl: string, context: string, postId: string) => void;
     }
   ) {
     this.client = client;
@@ -130,7 +130,7 @@ export class FeedMonitor {
       // Request scan if this is a new repo we haven't seen
       if (!this.scannedRepos.has(normalized) && this.onScanRequest) {
         this.scannedRepos.add(normalized);
-        this.onScanRequest(normalized, `Found in /s/${submoltName} by ${authorName}`);
+        this.onScanRequest(normalized, `Found in /s/${submoltName} by ${authorName}`, post.id);
         this.emitAlert({
           type: 'new_repo_detected',
           severity: 'low',

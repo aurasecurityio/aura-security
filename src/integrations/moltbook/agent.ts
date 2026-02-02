@@ -28,6 +28,19 @@ import { DEFAULT_CONFIG } from './types.js';
 // How often to run bot farm detection (expensive operation)
 const BOT_DETECT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
+// How often to check if daily summary should be posted
+const DAILY_SUMMARY_CHECK_MS = 60 * 60 * 1000; // 1 hour
+const DAILY_SUMMARY_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+interface DailyStats {
+  totalScans: number;
+  verdicts: Map<string, number>;
+  warningsPosted: number;
+  reposScanned: string[];
+  startedAt: number;
+  lastPostedAt: number;
+}
+
 export class MoltbookAgent {
   private client: MoltbookClient;
   private scanner: MoltbookScanner;
@@ -38,6 +51,15 @@ export class MoltbookAgent {
   private config: MoltbookAgentConfig;
   private running = false;
   private botDetectTimer: ReturnType<typeof setInterval> | null = null;
+  private dailySummaryTimer: ReturnType<typeof setInterval> | null = null;
+  private dailyStats: DailyStats = {
+    totalScans: 0,
+    verdicts: new Map(),
+    warningsPosted: 0,
+    reposScanned: [],
+    startedAt: Date.now(),
+    lastPostedAt: Date.now(),
+  };
 
   constructor(config: Partial<MoltbookAgentConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -65,7 +87,7 @@ export class MoltbookAgent {
     // Feed monitor with callbacks
     this.monitor = new FeedMonitor(this.client, this.config, {
       onAlert: (alert) => this.handleAlert(alert),
-      onScanRequest: (repoUrl, context) => this.handleProactiveScan(repoUrl, context),
+      onScanRequest: (repoUrl, context, postId) => this.handleProactiveScan(repoUrl, context, postId),
     });
   }
 
@@ -91,9 +113,14 @@ export class MoltbookAgent {
     // Step 5: Start periodic bot farm detection
     this.botDetectTimer = setInterval(() => this.runBotDetection(), BOT_DETECT_INTERVAL_MS);
 
+    // Step 6: Start daily summary timer
+    this.dailyStats.startedAt = Date.now();
+    this.dailyStats.lastPostedAt = Date.now();
+    this.dailySummaryTimer = setInterval(() => this.checkDailySummary(), DAILY_SUMMARY_CHECK_MS);
+
     this.running = true;
     console.log('[AGENT] AuraSecurity Moltbook agent is running');
-    console.log('[AGENT] Services: scanner, monitor, jail');
+    console.log('[AGENT] Services: scanner, monitor, jail, daily-summary');
   }
 
   /**
@@ -106,6 +133,10 @@ export class MoltbookAgent {
     if (this.botDetectTimer) {
       clearInterval(this.botDetectTimer);
       this.botDetectTimer = null;
+    }
+    if (this.dailySummaryTimer) {
+      clearInterval(this.dailySummaryTimer);
+      this.dailySummaryTimer = null;
     }
     this.running = false;
     console.log('[AGENT] AuraSecurity Moltbook agent stopped');
@@ -122,15 +153,15 @@ export class MoltbookAgent {
     }
   }
 
-  private handleProactiveScan(repoUrl: string, context: string): void {
-    console.log(`[AGENT] Proactive scan requested: ${repoUrl} (${context})`);
-    // Trigger a scan via the local scanner API and post results to our submolt
-    this.runProactiveScan(repoUrl, context).catch(err => {
+  private handleProactiveScan(repoUrl: string, context: string, postId: string): void {
+    console.log(`[AGENT] Proactive scan requested: ${repoUrl} (${context}) [post: ${postId}]`);
+    // Trigger a scan via the local scanner API, comment on original post, and post to our submolt
+    this.runProactiveScan(repoUrl, context, postId).catch(err => {
       console.error(`[AGENT] Proactive scan failed for ${repoUrl}:`, err.message);
     });
   }
 
-  private async runProactiveScan(repoUrl: string, context: string): Promise<void> {
+  private async runProactiveScan(repoUrl: string, context: string, postId: string): Promise<void> {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 240_000);
@@ -165,25 +196,86 @@ export class MoltbookAgent {
         return;
       }
 
-      // Only post to our submolt if there's something notable (warning or high confidence)
       const { makePostDecision } = await import('./confidence.js');
       const { formatScanResult, formatPostTitle } = await import('./formatter.js');
       const decision = makePostDecision(scam, trust);
+      const verdict = scam?.verdict ?? trust?.verdict ?? 'SCANNED';
 
+      // Record daily stats regardless of whether we post
+      this.recordDailyScan(repoUrl, verdict, decision.postType === 'warning');
+
+      const content = formatScanResult(repoUrl, scam, trust, decision) +
+        `\n\n*Proactively scanned — ${context}*`;
+
+      // 1. Always comment on the original post so the author sees it
+      try {
+        await this.client.createComment(postId, content);
+        console.log(`[AGENT] Commented scan result on post ${postId} for ${repoUrl}`);
+      } catch (commentErr: any) {
+        console.error(`[AGENT] Failed to comment on post ${postId}:`, commentErr.message);
+      }
+
+      // 2. Also post to /s/builds if notable (warning or high confidence)
       if (decision.shouldPost && (decision.postType === 'warning' || decision.confidence === 'high')) {
-        const score = scam?.score ?? trust?.trustScore ?? null;
-        const verdict = scam?.verdict ?? trust?.verdict ?? 'SCANNED';
-        const title = formatPostTitle(repoUrl, verdict, score);
-        const content = formatScanResult(repoUrl, scam, trust, decision) +
-          `\n\n*Proactively scanned — ${context}*`;
-
-        await this.client.createTextPost(this.config.submoltName, title, content);
-        console.log(`[AGENT] Posted proactive scan for ${repoUrl} to /s/${this.config.submoltName}`);
+        try {
+          const score = scam?.score ?? trust?.trustScore ?? null;
+          const title = formatPostTitle(repoUrl, verdict, score);
+          await this.client.createTextPost(this.config.submoltName, title, content);
+          console.log(`[AGENT] Posted proactive scan for ${repoUrl} to /s/${this.config.submoltName}`);
+        } catch (postErr: any) {
+          console.error(`[AGENT] Failed to post to /s/${this.config.submoltName}:`, postErr.message);
+        }
       } else {
-        console.log(`[AGENT] Proactive scan for ${repoUrl}: ${decision.postType} (${decision.confidence}) — not posting`);
+        console.log(`[AGENT] Proactive scan for ${repoUrl}: ${decision.postType} (${decision.confidence}) — not posting to submolt`);
       }
     } catch (err: any) {
       console.error(`[AGENT] Proactive scan error for ${repoUrl}:`, err.message);
+    }
+  }
+
+  // === Daily Summary ===
+
+  private recordDailyScan(repoUrl: string, verdict: string, isWarning: boolean): void {
+    this.dailyStats.totalScans++;
+    this.dailyStats.reposScanned.push(repoUrl);
+    const count = this.dailyStats.verdicts.get(verdict) ?? 0;
+    this.dailyStats.verdicts.set(verdict, count + 1);
+    if (isWarning) this.dailyStats.warningsPosted++;
+  }
+
+  private async checkDailySummary(): Promise<void> {
+    const elapsed = Date.now() - this.dailyStats.lastPostedAt;
+    if (elapsed < DAILY_SUMMARY_INTERVAL_MS) return;
+    if (this.dailyStats.totalScans === 0) {
+      // Nothing to report, just reset the timer
+      this.dailyStats.lastPostedAt = Date.now();
+      return;
+    }
+    await this.postDailySummary();
+  }
+
+  private async postDailySummary(): Promise<void> {
+    try {
+      const { formatDailySummary } = await import('./formatter.js');
+      const monitorStats = this.monitor.getStats();
+
+      const title = `[Daily Report] ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} — ${this.dailyStats.totalScans} repos scanned`;
+      const content = formatDailySummary(this.dailyStats, monitorStats.trackedAgents);
+
+      await this.client.createTextPost(this.config.submoltName, title, content);
+      console.log(`[AGENT] Posted daily summary to /s/${this.config.submoltName} (${this.dailyStats.totalScans} scans)`);
+
+      // Reset stats
+      this.dailyStats = {
+        totalScans: 0,
+        verdicts: new Map(),
+        warningsPosted: 0,
+        reposScanned: [],
+        startedAt: Date.now(),
+        lastPostedAt: Date.now(),
+      };
+    } catch (err: any) {
+      console.error(`[AGENT] Failed to post daily summary:`, err.message);
     }
   }
 
@@ -328,6 +420,7 @@ export class MoltbookAgent {
     monitor: ReturnType<FeedMonitor['getStats']>;
     jail: ReturnType<JailEnforcer['getStats']>;
     botDetector: ReturnType<BotFarmDetector['getStats']>;
+    dailyStats: { totalScans: number; warningsPosted: number; verdicts: Record<string, number>; hoursSinceLastSummary: number };
   } {
     return {
       running: this.running,
@@ -336,6 +429,12 @@ export class MoltbookAgent {
       monitor: this.monitor.getStats(),
       jail: this.enforcer.getStats(),
       botDetector: this.botDetector.getStats(),
+      dailyStats: {
+        totalScans: this.dailyStats.totalScans,
+        warningsPosted: this.dailyStats.warningsPosted,
+        verdicts: Object.fromEntries(this.dailyStats.verdicts),
+        hoursSinceLastSummary: Math.round((Date.now() - this.dailyStats.lastPostedAt) / (60 * 60 * 1000)),
+      },
     };
   }
 
@@ -368,7 +467,8 @@ async function main(): Promise<void> {
       `[AGENT] Status: scanner(cache=${s.scanner.cacheSize},active=${s.scanner.activeScans}) ` +
       `monitor(agents=${s.monitor.trackedAgents},alerts=${s.monitor.alertCount}) ` +
       `jail(warn=${s.jail.warnings},watch=${s.jail.watchList},jailed=${s.jail.jailed}) ` +
-      `bots(clusters=${s.botDetector.clustersDetected})`
+      `bots(clusters=${s.botDetector.clustersDetected}) ` +
+      `daily(scans=${s.dailyStats.totalScans},warnings=${s.dailyStats.warningsPosted},hrs=${s.dailyStats.hoursSinceLastSummary})`
     );
   }, 60_000);
 

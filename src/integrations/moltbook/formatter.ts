@@ -138,6 +138,54 @@ export function formatPostTitle(repoUrl: string, verdict: string, score: number 
   return `[Scan] ${repoName} — ${verdict}`;
 }
 
+/**
+ * Format a daily summary post
+ */
+export function formatDailySummary(
+  stats: { totalScans: number; verdicts: Map<string, number>; warningsPosted: number; reposScanned: string[]; startedAt: number },
+  trackedAgents: number
+): string {
+  const parts: string[] = [];
+  const date = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+  parts.push(`## AuraSecurity Daily Report\n`);
+  parts.push(`**${date}**\n`);
+
+  parts.push(`### Overview`);
+  parts.push(`- **Repos scanned:** ${stats.totalScans}`);
+  parts.push(`- **Warnings posted:** ${stats.warningsPosted}`);
+  parts.push(`- **Agents tracked:** ${trackedAgents}`);
+  parts.push('');
+
+  // Verdict breakdown
+  if (stats.verdicts.size > 0) {
+    parts.push('### Verdict Breakdown');
+    const sorted = [...stats.verdicts.entries()].sort((a, b) => b[1] - a[1]);
+    for (const [verdict, count] of sorted) {
+      const emoji = verdict === 'SAFU' ? '\u2705' : verdict === 'DYOR' ? '\u{1F7E1}' : verdict === 'RISKY' ? '\u{1F7E0}' : '\u{1F6A8}';
+      parts.push(`- ${emoji} **${verdict}**: ${count}`);
+    }
+    parts.push('');
+  }
+
+  // Recent repos (show up to 10)
+  if (stats.reposScanned.length > 0) {
+    parts.push('### Repos Scanned');
+    const unique = [...new Set(stats.reposScanned)];
+    for (const repo of unique.slice(0, 10)) {
+      const name = repo.replace(/^https?:\/\/github\.com\//i, '');
+      parts.push(`- ${name}`);
+    }
+    if (unique.length > 10) {
+      parts.push(`- *...and ${unique.length - 10} more*`);
+    }
+    parts.push('');
+  }
+
+  parts.push(DISCLAIMER);
+  return parts.join('\n');
+}
+
 // === Helpers ===
 
 function extractRepoName(url: string): string {
