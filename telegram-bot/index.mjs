@@ -19,6 +19,7 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const AURA_API_PRIMARY = process.env.AURA_API_URL || 'https://app.aurasecurity.io';
 const AURA_API_FALLBACK = 'https://app.aurasecurity.io'; // Same for now, can add backup server later
 const AURA_API_URL = AURA_API_PRIMARY;
+const AURA_API_KEY = process.env.AURA_API_KEY || '';
 
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
@@ -205,16 +206,19 @@ async function callAuraScanInternal(gitUrl, apiUrl = AURA_API_PRIMARY) {
       }
     });
 
+    const reqHeaders = {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(payload),
+      'User-Agent': 'AuraSecurityBot/1.0'
+    };
+    if (AURA_API_KEY) reqHeaders['Authorization'] = `Bearer ${AURA_API_KEY}`;
+
     const options = {
       hostname: url.hostname,
       port: url.port || 443,
       path: url.pathname,
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(payload),
-        'User-Agent': 'AuraSecurityBot/1.0'
-      }
+      headers: reqHeaders
     };
 
     console.log('Calling Aura API:', apiUrl, 'for', gitUrl);
@@ -2558,7 +2562,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         const result = await withRetry(async () => {
           const response = await fetch(`${AURA_API_URL}/tools`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...(AURA_API_KEY ? { 'Authorization': `Bearer ${AURA_API_KEY}` } : {}) },
             body: JSON.stringify({ tool: 'scam-scan', arguments: { gitUrl: url } })
           });
           if (!response.ok) throw new Error(`API error: ${response.status}`);
@@ -2680,7 +2684,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         const result = await withRetry(async () => {
           const response = await fetch(`${AURA_API_URL}/tools`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...(AURA_API_KEY ? { 'Authorization': `Bearer ${AURA_API_KEY}` } : {}) },
             body: JSON.stringify({ tool: 'agent-trust', arguments: { agentName } })
           });
           if (!response.ok) throw new Error(`API error: ${response.status}`);
@@ -2728,7 +2732,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         const result = await withRetry(async () => {
           const response = await fetch(`${AURA_API_URL}/tools`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...(AURA_API_KEY ? { 'Authorization': `Bearer ${AURA_API_KEY}` } : {}) },
             body: JSON.stringify({ tool: 'bot-detect', arguments: {} })
           });
           if (!response.ok) throw new Error(`API error: ${response.status}`);
@@ -2778,7 +2782,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         const result = await withRetry(async () => {
           const response = await fetch(`${AURA_API_URL}/tools`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...(AURA_API_KEY ? { 'Authorization': `Bearer ${AURA_API_KEY}` } : {}) },
             body: JSON.stringify({ tool: 'generate-report', arguments: { repoUrl, format: 'html' } })
           });
           if (!response.ok) throw new Error(`API error: ${response.status}`);
