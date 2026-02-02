@@ -1126,9 +1126,7 @@ async function main(): Promise<void> {
         const noCodeScore = hasNoCode ? 35 : 0;
         const finalScamScore = Math.max(deepScore, quickImpliedScore, noCodeScore);
 
-        // isLikelyScam: true if ANY signal says so
         const hasScamMatches = (deepResult?.matches?.length || 0) > 0;
-        const isLikelyScam = deepResult?.isLikelyScam || quickResult.riskLevel === 'critical' || hasNoCode || hasScamMatches;
 
         // Summary: pick the most relevant one, never contradict
         let finalSummary: string;
@@ -1159,17 +1157,50 @@ async function main(): Promise<void> {
         const trustScore = trustFailed ? null : (trustResult?.trustScore ?? 50);
         let unifiedScore = trustScore ?? 50;
         let scamCap = 100;
-        if (deepResult?.matches?.some((m: any) => m.severity === 'critical')) {
+
+        // Check match quality: high-confidence critical matches are real threats,
+        // low-confidence or generic pattern matches on high-trust repos are likely false positives
+        const highConfidenceCritical = deepResult?.matches?.some(
+          (m: any) => m.severity === 'critical' && (m.confidence ?? 50) >= 60
+        );
+        const anyCritical = deepResult?.matches?.some((m: any) => m.severity === 'critical');
+        const anyHigh = deepResult?.matches?.some((m: any) => m.severity === 'high');
+        const hasMatches = (deepResult?.matches?.length ?? 0) > 0;
+
+        // When trust is very high (90+), only high-confidence critical matches
+        // should force a low cap. Generic/low-confidence matches get tempered.
+        const highTrust = (trustScore ?? 0) >= 90;
+
+        if (highConfidenceCritical) {
+          // Real threat — hard cap regardless of trust
           scamCap = 20;
-        } else if (deepResult?.matches?.some((m: any) => m.severity === 'high')) {
+        } else if (anyCritical && !highTrust) {
+          // Low-confidence critical on low-trust repo — still cap hard
+          scamCap = 20;
+        } else if (anyCritical && highTrust) {
+          // Low-confidence critical on high-trust repo — temper it
+          scamCap = 60;
+        } else if (anyHigh && !highTrust) {
           scamCap = 35;
-        } else if ((deepResult?.matches?.length ?? 0) > 0) {
+        } else if (anyHigh && highTrust) {
+          // Generic high-severity matches on established repo — temper
+          scamCap = 70;
+        } else if (hasMatches) {
           scamCap = 50;
         }
         if (hasNoCode) {
           scamCap = Math.min(scamCap, 40);
         }
         unifiedScore = Math.min(unifiedScore, scamCap);
+
+        // isLikelyScam: true if real threat signals present
+        // High-trust repos with only low-confidence matches are NOT likely scams
+        const hasHighConfidenceMatches = deepResult?.matches?.some(
+          (m: any) => (m.confidence ?? 50) >= 60
+        );
+        const isLikelyScam = highTrust
+          ? (hasHighConfidenceMatches || quickResult.riskLevel === 'critical')
+          : (deepResult?.isLikelyScam || quickResult.riskLevel === 'critical' || hasNoCode || hasScamMatches);
 
         // Unified grade and verdict
         let unifiedGrade: string, unifiedVerdict: string, unifiedEmoji: string;
@@ -1254,7 +1285,7 @@ async function main(): Promise<void> {
         // === DETERMINISTIC COMMENTARY ===
         let analysis = '';
         const codeClean = !isLikelyScam && finalScamScore === 0 && !hasNoCode;
-        const highTrust = unifiedScore >= 80;
+        const highTrustVerdict = unifiedScore >= 80;
         const lowTrust = unifiedScore < 60;
 
         if (hasNoCode) {
