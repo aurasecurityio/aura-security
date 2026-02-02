@@ -1535,6 +1535,26 @@ async function main(): Promise<void> {
     }
   });
 
+  // Manually trigger daily summary post
+  server.registerTool({
+    name: 'moltbook-daily-summary',
+    description: 'Manually trigger a daily summary post to /s/builds with current scan stats',
+    parameters: {
+      type: 'object',
+      properties: {}
+    },
+    handler: async () => {
+      try {
+        const agent = getMoltbookAgent();
+        await agent.postDailySummary();
+        return { success: true, message: 'Daily summary posted' };
+      } catch (err) {
+        console.error('[AURA] Daily summary error:', err);
+        return { error: err instanceof Error ? err.message : 'Unknown error' };
+      }
+    }
+  });
+
   // Register Report Generation tool
   server.registerTool({
     name: 'generate-report',

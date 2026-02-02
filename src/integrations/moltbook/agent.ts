@@ -258,7 +258,7 @@ export class MoltbookAgent {
     await this.postDailySummary();
   }
 
-  private async postDailySummary(): Promise<void> {
+  async postDailySummary(): Promise<void> {
     try {
       const { formatDailySummary } = await import('./formatter.js');
       const monitorStats = this.monitor.getStats();
