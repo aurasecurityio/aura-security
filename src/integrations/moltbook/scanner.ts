@@ -178,9 +178,14 @@ export class MoltbookScanner {
     const timeout = setTimeout(() => controller.abort(), SCAN_TIMEOUT_MS);
 
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (this.config.scannerApiKey) {
+        headers['Authorization'] = `Bearer ${this.config.scannerApiKey}`;
+      }
+
       const response = await fetch(`${this.config.scannerApiUrl}/tools`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ tool, arguments: args }),
         signal: controller.signal,
       });

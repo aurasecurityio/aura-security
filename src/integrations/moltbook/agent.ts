@@ -52,6 +52,9 @@ export class MoltbookAgent {
     if (process.env.MOLTBOOK_SUBMOLT) {
       this.config.submoltName = process.env.MOLTBOOK_SUBMOLT;
     }
+    if (!this.config.scannerApiKey && process.env.AUTH_MASTER_KEY) {
+      this.config.scannerApiKey = process.env.AUTH_MASTER_KEY;
+    }
 
     this.client = new MoltbookClient(this.config.apiKey || '');
     this.scanner = new MoltbookScanner(this.client, this.config);
@@ -132,16 +135,21 @@ export class MoltbookAgent {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 240_000);
 
+      const scanHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (this.config.scannerApiKey) {
+        scanHeaders['Authorization'] = `Bearer ${this.config.scannerApiKey}`;
+      }
+
       const [trustRes, scamRes] = await Promise.allSettled([
         fetch(`${this.config.scannerApiUrl}/tools`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: scanHeaders,
           body: JSON.stringify({ tool: 'trust-scan', arguments: { gitUrl: repoUrl } }),
           signal: controller.signal,
         }).then(r => r.ok ? r.json() : null).then((d: any) => d?.result || d),
         fetch(`${this.config.scannerApiUrl}/tools`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: scanHeaders,
           body: JSON.stringify({ tool: 'scam-scan', arguments: { gitUrl: repoUrl } }),
           signal: controller.signal,
         }).then(r => r.ok ? r.json() : null).then((d: any) => d?.result || d),
