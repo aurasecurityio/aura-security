@@ -121,8 +121,62 @@ export class MoltbookAgent {
 
   private handleProactiveScan(repoUrl: string, context: string): void {
     console.log(`[AGENT] Proactive scan requested: ${repoUrl} (${context})`);
-    // The scanner handles the actual scanning — we could post to our submolt
-    // or just track it. For now, log it.
+    // Trigger a scan via the local scanner API and post results to our submolt
+    this.runProactiveScan(repoUrl, context).catch(err => {
+      console.error(`[AGENT] Proactive scan failed for ${repoUrl}:`, err.message);
+    });
+  }
+
+  private async runProactiveScan(repoUrl: string, context: string): Promise<void> {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 240_000);
+
+      const [trustRes, scamRes] = await Promise.allSettled([
+        fetch(`${this.config.scannerApiUrl}/tools`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tool: 'trust-scan', arguments: { gitUrl: repoUrl } }),
+          signal: controller.signal,
+        }).then(r => r.ok ? r.json() : null).then((d: any) => d?.result || d),
+        fetch(`${this.config.scannerApiUrl}/tools`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tool: 'scam-scan', arguments: { gitUrl: repoUrl } }),
+          signal: controller.signal,
+        }).then(r => r.ok ? r.json() : null).then((d: any) => d?.result || d),
+      ]);
+
+      clearTimeout(timeout);
+
+      const trust = trustRes.status === 'fulfilled' ? trustRes.value : null;
+      const scam = scamRes.status === 'fulfilled' ? scamRes.value : null;
+
+      if (!trust && !scam) {
+        console.log(`[AGENT] Proactive scan: both scanners failed for ${repoUrl}`);
+        return;
+      }
+
+      // Only post to our submolt if there's something notable (warning or high confidence)
+      const { makePostDecision } = await import('./confidence.js');
+      const { formatScanResult, formatPostTitle } = await import('./formatter.js');
+      const decision = makePostDecision(scam, trust);
+
+      if (decision.shouldPost && (decision.postType === 'warning' || decision.confidence === 'high')) {
+        const score = scam?.score ?? trust?.trustScore ?? null;
+        const verdict = scam?.verdict ?? trust?.verdict ?? 'SCANNED';
+        const title = formatPostTitle(repoUrl, verdict, score);
+        const content = formatScanResult(repoUrl, scam, trust, decision) +
+          `\n\n*Proactively scanned — ${context}*`;
+
+        await this.client.createTextPost(this.config.submoltName, title, content);
+        console.log(`[AGENT] Posted proactive scan for ${repoUrl} to /s/${this.config.submoltName}`);
+      } else {
+        console.log(`[AGENT] Proactive scan for ${repoUrl}: ${decision.postType} (${decision.confidence}) — not posting`);
+      }
+    } catch (err: any) {
+      console.error(`[AGENT] Proactive scan error for ${repoUrl}:`, err.message);
+    }
   }
 
   /**

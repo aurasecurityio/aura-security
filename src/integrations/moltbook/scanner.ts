@@ -12,6 +12,7 @@ import { MoltbookClient } from './client.js';
 import { formatScanResult, formatScanError } from './formatter.js';
 import { makePostDecision } from './confidence.js';
 import type { MoltbookPost, MoltbookAgentConfig, ScanCacheEntry } from './types.js';
+import { getAuthorName } from './types.js';
 
 const GITHUB_URL_REGEX = /https?:\/\/github\.com\/([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)/gi;
 const MAX_CONCURRENT_SCANS = 2;
@@ -102,12 +103,12 @@ export class MoltbookScanner {
    */
   private async scanAndReply(post: MoltbookPost, repoUrl: string): Promise<void> {
     this.activeScans++;
-    console.log(`[SCANNER] Scanning ${repoUrl} (requested by ${post.author})`);
+    console.log(`[SCANNER] Scanning ${repoUrl} (requested by ${getAuthorName(post)})`);
 
     try {
       const [trustResult, scamResult] = await Promise.allSettled([
-        this.callScannerApi('trust-scan', { repoUrl }),
-        this.callScannerApi('scam-scan', { repoUrl }),
+        this.callScannerApi('trust-scan', { gitUrl: repoUrl }),
+        this.callScannerApi('scam-scan', { gitUrl: repoUrl }),
       ]);
 
       const trust = trustResult.status === 'fulfilled' ? trustResult.value : null;
