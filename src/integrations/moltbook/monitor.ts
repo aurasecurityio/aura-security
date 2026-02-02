@@ -12,6 +12,7 @@
 
 import { MoltbookClient } from './client.js';
 import type { MoltbookPost, MoltbookAgentConfig } from './types.js';
+import { getAuthorName, getSubmoltName } from './types.js';
 
 const GITHUB_URL_REGEX = /https?:\/\/github\.com\/([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)/gi;
 
@@ -112,6 +113,8 @@ export class FeedMonitor {
 
   private processPost(post: MoltbookPost): void {
     const urls = this.extractGitHubUrls(post);
+    const authorName = getAuthorName(post);
+    const submoltName = getSubmoltName(post);
 
     // Track agent activity regardless of GitHub URLs
     this.trackAgent(post);
@@ -127,13 +130,13 @@ export class FeedMonitor {
       // Request scan if this is a new repo we haven't seen
       if (!this.scannedRepos.has(normalized) && this.onScanRequest) {
         this.scannedRepos.add(normalized);
-        this.onScanRequest(normalized, `Found in /s/${post.submolt} by ${post.author}`);
+        this.onScanRequest(normalized, `Found in /s/${submoltName} by ${authorName}`);
         this.emitAlert({
           type: 'new_repo_detected',
           severity: 'low',
           repoUrl: normalized,
-          agentName: post.author,
-          details: `New repo ${normalized} found in /s/${post.submolt} by ${post.author}`,
+          agentName: authorName,
+          details: `New repo ${normalized} found in /s/${submoltName} by ${authorName}`,
           timestamp: Date.now(),
         });
       }
@@ -141,16 +144,19 @@ export class FeedMonitor {
   }
 
   private trackAgent(post: MoltbookPost): void {
-    let activity = this.agentActivity.get(post.author);
+    const authorName = getAuthorName(post);
+    const submoltName = getSubmoltName(post);
+
+    let activity = this.agentActivity.get(authorName);
     if (!activity) {
       activity = {
-        agentName: post.author,
+        agentName: authorName,
         reposShared: new Map(),
         totalPosts: 0,
         flaggedRepos: 0,
         lastSeen: Date.now(),
       };
-      this.agentActivity.set(post.author, activity);
+      this.agentActivity.set(authorName, activity);
     }
 
     activity.totalPosts++;
@@ -165,11 +171,14 @@ export class FeedMonitor {
         activity.reposShared.set(normalized, repoTrack);
       }
       repoTrack.count++;
-      repoTrack.submolts.add(post.submolt);
+      repoTrack.submolts.add(submoltName);
     }
   }
 
   private trackRepoPromotion(repoUrl: string, post: MoltbookPost): void {
+    const authorName = getAuthorName(post);
+    const submoltName = getSubmoltName(post);
+
     let promo = this.repoPromotions.get(repoUrl);
     if (!promo) {
       promo = {
@@ -181,12 +190,12 @@ export class FeedMonitor {
       this.repoPromotions.set(repoUrl, promo);
     }
 
-    let promoter = promo.promoters.get(post.author);
+    let promoter = promo.promoters.get(authorName);
     if (!promoter) {
       promoter = { submolts: [], timestamps: [] };
-      promo.promoters.set(post.author, promoter);
+      promo.promoters.set(authorName, promoter);
     }
-    promoter.submolts.push(post.submolt);
+    promoter.submolts.push(submoltName);
     promoter.timestamps.push(Date.now());
 
     // Count unique submolts this repo has been posted in
