@@ -17,6 +17,7 @@ let cachedSecrets = null;
 
 // Scanner API endpoint
 const SCANNER_API = process.env.SCANNER_API_URL || 'https://app.aurasecurity.io';
+const SCANNER_API_KEY = process.env.SCANNER_API_KEY || '';
 
 /**
  * Get Discord credentials from Secrets Manager
@@ -131,9 +132,11 @@ async function callScannerApi(tool, args) {
 
   try {
     console.log(`Calling API: ${tool} with args:`, JSON.stringify(args));
+    const headers = { 'Content-Type': 'application/json' };
+    if (SCANNER_API_KEY) headers['Authorization'] = `Bearer ${SCANNER_API_KEY}`;
     const response = await fetch(`${SCANNER_API}/tools`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ tool, arguments: args }),
       signal: controller.signal
     });
