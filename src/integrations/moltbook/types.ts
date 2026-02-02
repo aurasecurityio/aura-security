@@ -118,6 +118,7 @@ export interface PostDecision {
 
 export interface MoltbookAgentConfig {
   apiKey?: string;
+  scannerApiKey?: string;
   agentName: string;
   scannerApiUrl: string;
   submoltName: string;
