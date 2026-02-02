@@ -2,7 +2,7 @@
 // Supports GitHub, GitLab, Jenkins, and custom webhooks
 
 import { createServer, IncomingMessage, ServerResponse } from 'http';
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 import type { AuditorInput, ChangeEvent } from '../types/events.js';
 
 export interface WebhookConfig {
@@ -141,21 +141,31 @@ export class WebhookServer {
     return (payload.type as string) || 'unknown';
   }
 
+  private safeCompare(a: string, b: string): boolean {
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    if (bufA.length !== bufB.length) {
+      timingSafeEqual(bufA, bufA);
+      return false;
+    }
+    return timingSafeEqual(bufA, bufB);
+  }
+
   private verifySignature(body: string, signature: string | undefined, source: string): boolean {
     if (!signature || !this.config.secret) return false;
 
     if (source === 'github') {
       const expected = 'sha256=' + createHmac('sha256', this.config.secret).update(body).digest('hex');
-      return signature === expected;
+      return this.safeCompare(signature, expected);
     }
 
     if (source === 'gitlab') {
-      return signature === this.config.secret;
+      return this.safeCompare(signature, this.config.secret);
     }
 
     // Generic HMAC verification
     const expected = createHmac('sha256', this.config.secret).update(body).digest('hex');
-    return signature === expected;
+    return this.safeCompare(signature, expected);
   }
 
   private readBody(req: IncomingMessage): Promise<string> {

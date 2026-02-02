@@ -2,6 +2,7 @@
 // Exposes /tools, /memory, /info, /settings, /audits, /stats endpoints
 
 import { createServer, IncomingMessage, ServerResponse } from 'http';
+import { timingSafeEqual } from 'crypto';
 import { getDatabase, type AuditorDatabase } from '../database/index.js';
 import { NotificationService, createNotificationFromAudit } from '../integrations/notifications.js';
 import { generateScoreBadge } from '../scoring/index.js';
@@ -77,8 +78,20 @@ export class AuraServer {
     const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
     const path = url.pathname;
 
-    // CORS headers for visualizer access
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    // CORS headers — restrict to known origins in production
+    const allowedOrigins = [
+      'https://app.aurasecurity.io',
+      'https://aurasecurity.io',
+      'http://127.0.0.1:8080',
+      'http://localhost:8080',
+    ];
+    const origin = req.headers.origin;
+    if (origin && allowedOrigins.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    } else if (!origin) {
+      // Non-browser requests (curl, server-to-server) don't send Origin
+      res.setHeader('Access-Control-Allow-Origin', 'https://app.aurasecurity.io');
+    }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     res.setHeader('Content-Type', 'application/json');
@@ -603,14 +616,14 @@ export class AuraServer {
     }
 
     const parts = authHeader.split(' ');
-    if (parts.length !== 2 || parts[0] !== 'Bearer') {
+    if (parts.length !== 2 || parts[0].toLowerCase() !== 'bearer') {
       return { valid: false, status: 401, message: 'Invalid authorization format. Use: Bearer <api-key>' };
     }
 
     const token = parts[1];
 
-    // Check master key first
-    if (this.config.masterKey && token === this.config.masterKey) {
+    // Check master key first (constant-time comparison to prevent timing attacks)
+    if (this.config.masterKey && this.safeCompare(token, this.config.masterKey)) {
       return { valid: true, status: 200, message: 'OK', keyName: 'master', scopes: ['admin', 'read', 'write', 'scan'] };
     }
 
@@ -632,6 +645,17 @@ export class AuraServer {
       keyName: keyRecord.name,
       scopes: keyRecord.scopes,
     };
+  }
+
+  private safeCompare(a: string, b: string): boolean {
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    if (bufA.length !== bufB.length) {
+      // Still do a comparison to avoid leaking length info via timing
+      timingSafeEqual(bufA, bufA);
+      return false;
+    }
+    return timingSafeEqual(bufA, bufB);
   }
 
   private async handleCreateApiKey(req: IncomingMessage, res: ServerResponse): Promise<void> {
