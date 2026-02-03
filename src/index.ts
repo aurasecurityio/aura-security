@@ -54,7 +54,10 @@ import {
   getDbStats as getRugDbStats,
   getRecentRugs,
   getFlaggedDevs,
-  getAccuracyStats
+  getAccuracyStats,
+  getXDbStats,
+  flagXAccount,
+  getXAccountReputation
 } from './integrations/rug-database.js';
 import { performEnhancedTrustScan } from './integrations/enhanced-scanner.js';
 import { MoltbookAgent as MoltbookAgentRunner } from './integrations/moltbook/agent.js';
@@ -1787,9 +1790,11 @@ async function main(): Promise<void> {
         const accuracy = getAccuracyStats();
         const recentRugs = getRecentRugs(5);
         const flaggedDevs = getFlaggedDevs();
+        const xStats = getXDbStats();
 
         return {
           database: dbStats,
+          xAccounts: xStats,
           accuracy: {
             ...accuracy,
             note: accuracy.totalWithFeedback > 0
@@ -1912,6 +1917,82 @@ async function main(): Promise<void> {
         }
       } catch (err) {
         console.error('[AURA] Flag dev error:', err);
+        return { error: err instanceof Error ? err.message : 'Unknown error' };
+      }
+    }
+  });
+
+  // X Account Reputation Check
+  server.registerTool({
+    name: 'x-reputation',
+    description: 'Check X/Twitter account reputation from our database',
+    parameters: {
+      type: 'object',
+      required: ['username'],
+      properties: {
+        username: { type: 'string', description: 'X/Twitter username (without @)' }
+      }
+    },
+    handler: async (args) => {
+      try {
+        const username = (args.username as string).replace(/^@/, '');
+        const reputation = getXAccountReputation(username);
+
+        if (!reputation) {
+          return {
+            username,
+            status: 'unknown',
+            message: 'No data on this X account yet. Run an x-scan first.'
+          };
+        }
+
+        return {
+          username,
+          reputation,
+          warning: reputation.flagged ? `⚠️ This account is flagged: ${reputation.flagReason}` : null,
+          summary: reputation.scamCount > 0
+            ? `⚠️ Linked to ${reputation.scamCount} scam project(s)`
+            : reputation.legitCount > 0
+              ? `✅ ${reputation.legitCount} verified legit project(s)`
+              : 'No project history yet'
+        };
+      } catch (err) {
+        console.error('[AURA] X reputation error:', err);
+        return { error: err instanceof Error ? err.message : 'Unknown error' };
+      }
+    }
+  });
+
+  // Flag X Account
+  server.registerTool({
+    name: 'flag-x-account',
+    description: 'Manually flag an X/Twitter account as suspicious or scammer',
+    parameters: {
+      type: 'object',
+      required: ['username', 'reason'],
+      properties: {
+        username: { type: 'string', description: 'X/Twitter username to flag' },
+        reason: { type: 'string', description: 'Reason for flagging' }
+      }
+    },
+    handler: async (args) => {
+      try {
+        const username = (args.username as string).replace(/^@/, '');
+        const reason = args.reason as string;
+
+        const success = flagXAccount(username, reason);
+
+        if (success) {
+          return {
+            success: true,
+            message: `X account @${username} flagged: ${reason}`,
+            note: 'All future x-scans of this account will show warnings.'
+          };
+        } else {
+          return { error: 'Failed to flag X account' };
+        }
+      } catch (err) {
+        console.error('[AURA] Flag X account error:', err);
         return { error: err instanceof Error ? err.message : 'Unknown error' };
       }
     }

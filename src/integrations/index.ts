@@ -40,9 +40,20 @@ export {
   ownerHasScamSignatures,
   getDbStats,
   getRecentRugs,
-  getFlaggedDevs
+  getFlaggedDevs,
+  // X Account tracking (Phase 3)
+  getXAccountReputation,
+  updateXAccountReputation,
+  recordXScan,
+  isXAccountFlagged,
+  flagXAccount,
+  linkXToGithub,
+  linkXToProject,
+  submitXFeedback,
+  getXScanHistory,
+  getXDbStats
 } from './rug-database.js';
-export type { RugReport, DevReputation } from './rug-database.js';
+export type { RugReport, DevReputation, XAccountReputation } from './rug-database.js';
 
 // Enhanced Scanner - Trust scan with rug database intelligence
 export { performEnhancedTrustScan, quickRugDbCheck } from './enhanced-scanner.js';

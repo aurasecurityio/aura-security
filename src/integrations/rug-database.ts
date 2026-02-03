@@ -97,12 +97,42 @@ function getDb(): Database.Database {
         severity TEXT DEFAULT 'high'
       );
 
+      -- X/Twitter account tracking (Phase 3)
+      CREATE TABLE IF NOT EXISTS x_accounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        total_scans INTEGER DEFAULT 0,
+        legit_count INTEGER DEFAULT 0,
+        scam_count INTEGER DEFAULT 0,
+        reputation_score INTEGER DEFAULT 50,
+        first_seen TEXT NOT NULL,
+        last_seen TEXT NOT NULL,
+        flagged INTEGER DEFAULT 0,
+        flag_reason TEXT,
+        linked_github TEXT,
+        linked_projects TEXT
+      );
+
+      -- X scan history
+      CREATE TABLE IF NOT EXISTS x_scan_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL,
+        scanned_at TEXT NOT NULL,
+        score INTEGER NOT NULL,
+        verdict TEXT NOT NULL,
+        linked_project TEXT,
+        feedback TEXT
+      );
+
       -- Indexes for fast lookups
       CREATE INDEX IF NOT EXISTS idx_rugs_owner ON rugs(owner);
       CREATE INDEX IF NOT EXISTS idx_rugs_repo ON rugs(repo_name);
       CREATE INDEX IF NOT EXISTS idx_devs_username ON developers(github_username);
       CREATE INDEX IF NOT EXISTS idx_devs_flagged ON developers(flagged);
       CREATE INDEX IF NOT EXISTS idx_signatures_owner ON scam_signatures(owner);
+      CREATE INDEX IF NOT EXISTS idx_x_accounts_username ON x_accounts(username);
+      CREATE INDEX IF NOT EXISTS idx_x_accounts_flagged ON x_accounts(flagged);
+      CREATE INDEX IF NOT EXISTS idx_x_scan_history_username ON x_scan_history(username);
     `);
 
     console.log(`[RUG-DB] Database initialized at: ${DB_PATH}`);
@@ -572,6 +602,317 @@ export function getFlaggedDevs(): Array<{ username: string; rugCount: number; re
     }));
   } catch {
     return [];
+  }
+}
+
+// ============ X/TWITTER ACCOUNT TRACKING (Phase 3) ============
+
+export interface XAccountReputation {
+  username: string;
+  totalScans: number;
+  legitCount: number;
+  scamCount: number;
+  reputationScore: number;
+  flagged: boolean;
+  flagReason?: string;
+  linkedGithub?: string;
+  linkedProjects?: string[];
+}
+
+/**
+ * Get or create X account record
+ */
+function getOrCreateXAccount(username: string): number {
+  const database = getDb();
+  const lowerUsername = username.toLowerCase();
+
+  // Try to get existing
+  const existing = database.prepare('SELECT id FROM x_accounts WHERE username = ?').get(lowerUsername) as { id: number } | undefined;
+
+  if (existing) {
+    // Update last_seen
+    database.prepare('UPDATE x_accounts SET last_seen = ? WHERE id = ?').run(new Date().toISOString(), existing.id);
+    return existing.id;
+  }
+
+  // Create new
+  const now = new Date().toISOString();
+  const result = database.prepare(`
+    INSERT INTO x_accounts (username, first_seen, last_seen)
+    VALUES (?, ?, ?)
+  `).run(lowerUsername, now, now);
+
+  return result.lastInsertRowid as number;
+}
+
+/**
+ * Get X account reputation
+ */
+export function getXAccountReputation(username: string): XAccountReputation | null {
+  try {
+    const database = getDb();
+    const result = database.prepare(`
+      SELECT username, total_scans, legit_count, scam_count, reputation_score, flagged, flag_reason, linked_github, linked_projects
+      FROM x_accounts WHERE username = ?
+    `).get(username.toLowerCase()) as any;
+
+    if (!result) return null;
+
+    return {
+      username: result.username,
+      totalScans: result.total_scans,
+      legitCount: result.legit_count,
+      scamCount: result.scam_count,
+      reputationScore: result.reputation_score,
+      flagged: result.flagged === 1,
+      flagReason: result.flag_reason,
+      linkedGithub: result.linked_github,
+      linkedProjects: result.linked_projects ? JSON.parse(result.linked_projects) : []
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Update X account reputation
+ */
+export function updateXAccountReputation(username: string, outcome: 'scammed' | 'legit' | 'scanned'): void {
+  try {
+    const database = getDb();
+    const accountId = getOrCreateXAccount(username);
+
+    if (outcome === 'scammed') {
+      database.prepare(`
+        UPDATE x_accounts
+        SET scam_count = scam_count + 1,
+            total_scans = total_scans + 1,
+            reputation_score = MAX(0, reputation_score - 25),
+            flagged = CASE WHEN scam_count >= 1 THEN 1 ELSE flagged END,
+            flag_reason = CASE WHEN scam_count >= 1 THEN 'Linked to scam projects' ELSE flag_reason END
+        WHERE id = ?
+      `).run(accountId);
+    } else if (outcome === 'legit') {
+      database.prepare(`
+        UPDATE x_accounts
+        SET legit_count = legit_count + 1,
+            total_scans = total_scans + 1,
+            reputation_score = MIN(100, reputation_score + 5)
+        WHERE id = ?
+      `).run(accountId);
+    } else {
+      database.prepare(`
+        UPDATE x_accounts
+        SET total_scans = total_scans + 1
+        WHERE id = ?
+      `).run(accountId);
+    }
+
+    console.log(`[RUG-DB] X account reputation updated: @${username} (${outcome})`);
+  } catch (err) {
+    console.error(`[RUG-DB] Error updating X account reputation:`, err);
+  }
+}
+
+/**
+ * Record an X scan for history
+ */
+export function recordXScan(username: string, score: number, verdict: string, linkedProject?: string): void {
+  try {
+    const database = getDb();
+    database.prepare(`
+      INSERT INTO x_scan_history (username, scanned_at, score, verdict, linked_project)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(username.toLowerCase(), new Date().toISOString(), score, verdict, linkedProject || null);
+
+    // Also update the account's scan count
+    getOrCreateXAccount(username);
+  } catch (err) {
+    console.error(`[RUG-DB] Error recording X scan:`, err);
+  }
+}
+
+/**
+ * Check if X account is flagged
+ */
+export function isXAccountFlagged(username: string): { flagged: boolean; reason?: string; scamCount?: number } {
+  try {
+    const database = getDb();
+    const result = database.prepare(`
+      SELECT flagged, flag_reason, scam_count FROM x_accounts WHERE username = ?
+    `).get(username.toLowerCase()) as any;
+
+    if (!result) return { flagged: false };
+
+    return {
+      flagged: result.flagged === 1,
+      reason: result.flag_reason,
+      scamCount: result.scam_count
+    };
+  } catch {
+    return { flagged: false };
+  }
+}
+
+/**
+ * Manually flag an X account
+ */
+export function flagXAccount(username: string, reason: string): boolean {
+  try {
+    const database = getDb();
+    const accountId = getOrCreateXAccount(username);
+
+    database.prepare(`
+      UPDATE x_accounts SET flagged = 1, flag_reason = ? WHERE id = ?
+    `).run(reason, accountId);
+
+    console.log(`[RUG-DB] X account flagged: @${username} - ${reason}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Link X account to GitHub
+ */
+export function linkXToGithub(xUsername: string, githubUsername: string): boolean {
+  try {
+    const database = getDb();
+    const accountId = getOrCreateXAccount(xUsername);
+
+    database.prepare(`
+      UPDATE x_accounts SET linked_github = ? WHERE id = ?
+    `).run(githubUsername.toLowerCase(), accountId);
+
+    console.log(`[RUG-DB] Linked X @${xUsername} to GitHub ${githubUsername}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Link X account to a project
+ */
+export function linkXToProject(xUsername: string, projectUrl: string): boolean {
+  try {
+    const database = getDb();
+    const accountId = getOrCreateXAccount(xUsername);
+
+    // Get current projects
+    const current = database.prepare('SELECT linked_projects FROM x_accounts WHERE id = ?').get(accountId) as { linked_projects: string } | undefined;
+    const projects = current?.linked_projects ? JSON.parse(current.linked_projects) : [];
+
+    if (!projects.includes(projectUrl.toLowerCase())) {
+      projects.push(projectUrl.toLowerCase());
+    }
+
+    database.prepare(`
+      UPDATE x_accounts SET linked_projects = ? WHERE id = ?
+    `).run(JSON.stringify(projects), accountId);
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Submit feedback on X account (was the project legit or scam?)
+ */
+export function submitXFeedback(username: string, outcome: 'scammed' | 'legit', projectUrl?: string): boolean {
+  try {
+    const database = getDb();
+
+    // Update the most recent scan
+    database.prepare(`
+      UPDATE x_scan_history
+      SET feedback = ?
+      WHERE username = ? AND feedback IS NULL
+      ORDER BY scanned_at DESC LIMIT 1
+    `).run(outcome, username.toLowerCase());
+
+    // Update reputation
+    updateXAccountReputation(username, outcome);
+
+    // If scammed and project URL provided, report the rug
+    if (outcome === 'scammed' && projectUrl) {
+      const urlMatch = projectUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/i);
+      if (urlMatch) {
+        reportRug({
+          repoUrl: projectUrl,
+          owner: urlMatch[1],
+          repoName: urlMatch[2],
+          reportedBy: `x-feedback:${username}`
+        });
+      }
+    }
+
+    console.log(`[RUG-DB] X feedback submitted: @${username} = ${outcome}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Get X account scan history
+ */
+export function getXScanHistory(username: string, limit = 10): Array<{
+  scannedAt: string;
+  score: number;
+  verdict: string;
+  linkedProject?: string;
+  feedback?: string;
+}> {
+  try {
+    const database = getDb();
+    const results = database.prepare(`
+      SELECT scanned_at, score, verdict, linked_project, feedback
+      FROM x_scan_history
+      WHERE username = ?
+      ORDER BY scanned_at DESC
+      LIMIT ?
+    `).all(username.toLowerCase(), limit) as any[];
+
+    return results.map(r => ({
+      scannedAt: r.scanned_at,
+      score: r.score,
+      verdict: r.verdict,
+      linkedProject: r.linked_project,
+      feedback: r.feedback
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Get X database stats
+ */
+export function getXDbStats(): {
+  totalAccounts: number;
+  flaggedAccounts: number;
+  totalScans: number;
+  avgReputationScore: number;
+} {
+  try {
+    const database = getDb();
+
+    const accounts = database.prepare('SELECT COUNT(*) as count FROM x_accounts').get() as { count: number };
+    const flagged = database.prepare('SELECT COUNT(*) as count FROM x_accounts WHERE flagged = 1').get() as { count: number };
+    const scans = database.prepare('SELECT COUNT(*) as count FROM x_scan_history').get() as { count: number };
+    const avgScore = database.prepare('SELECT AVG(reputation_score) as avg FROM x_accounts').get() as { avg: number };
+
+    return {
+      totalAccounts: accounts.count,
+      flaggedAccounts: flagged.count,
+      totalScans: scans.count,
+      avgReputationScore: Math.round(avgScore.avg || 50)
+    };
+  } catch {
+    return { totalAccounts: 0, flaggedAccounts: 0, totalScans: 0, avgReputationScore: 50 };
   }
 }
 
