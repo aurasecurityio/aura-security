@@ -1,0 +1,18 @@
+[Unit]
+Description=Aura Security x402 Pay-Per-Scan API
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/var/www/aura-security
+ExecStart=/usr/bin/node dist/x402/server.js
+Restart=on-failure
+RestartSec=10
+Environment=NODE_ENV=production
+Environment=X402_PORT=3002
+Environment=SOLANA_WALLET=AuRaSecurityPayments111111111111111111111
+Environment=GITHUB_TOKEN=
+
+[Install]
+WantedBy=multi-user.target
