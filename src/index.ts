@@ -1833,3 +1833,7 @@ export type { ReportData, ReportFormat } from './reporting/index.js';
 // Moltbook Integration exports
 export { MoltbookClient, MoltbookScanner, MoltbookAgent, FeedMonitor, makePostDecision, formatScanResult, formatScanError, formatPostTitle, AgentScorer, BotFarmDetector, JailEnforcer } from './integrations/moltbook/index.js';
 export type { MoltbookAgentConfig, PostDecision, AgentTrustScore, JailLevel, BotCluster, AgentReputation, RepoScanRecord } from './integrations/moltbook/index.js';
+
+// x402 Payment API exports
+export { startX402Server, PRICING, getPrice, createPayment, getPayment, getPaymentStats, verifySolanaPayment } from './x402/index.js';
+export type { Payment, PaymentRequest, PaymentMethod, X402Config } from './x402/index.js';
