@@ -35,7 +35,9 @@
     "swarm:full": "tsx src/agents/slop/swarm.ts --full",
     "swarm:phase2": "tsx src/agents/slop/swarm.ts --phase2",
     "swarm:phase3": "tsx src/agents/slop/swarm.ts --phase3",
-    "swarm:scan": "tsx src/agents/slop/swarm.ts --scan"
+    "swarm:scan": "tsx src/agents/slop/swarm.ts --scan",
+    "x402": "tsx src/x402/server.ts",
+    "x402:dev": "tsx watch src/x402/server.ts"
   },
   "keywords": [
     "security",
