@@ -2322,55 +2322,48 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
     // /start command
     if (text === '/start') {
       await sendMessage(chatId,
-        `\u{1F44B} Hey ${username}! I'm the *AuraSecurity Bot*.\n\n` +
-        `I help you spot scams, rug pulls, and security issues.\n\n` +
-        `*Commands:*\n` +
-        `/rugcheck <github-url> - Trust score for repo\n` +
-        `/scan <github-url> - Full security scan\n` +
-        `/scamcheck <github-url> - Detect scam patterns\n` +
-        `/devcheck <@username> - Full dev audit (identity + security)\n` +
-        `/xcheck <@username> - Same as devcheck\n` +
-        `/trustagent <name> - Moltbook agent trust score\n` +
-        `/botcheck - Detect bot farm clusters\n` +
-        `/report <repo> - Generate full HTML security report\n\n` +
-        `*Example:*\n` +
-        `/scan https://github.com/ethereum/go-ethereum\n` +
-        `/scamcheck https://github.com/owner/repo\n` +
-        `/devcheck @VitalikButerin\n\n` +
+        `\u{1F6E1} *AuraSecurity Bot* - Protect Your Bags\n\n` +
+        `Instant rug pull detection and scam analysis for any GitHub repo.\n\n` +
+        `\u{1F525} *MAIN COMMANDS:*\n` +
+        `\u{1F534} /rugcheck <url> - Is this project legit?\n` +
+        `\u{1F534} /scamcheck <url> - Detect rug pull patterns\n\n` +
+        `\u{1F527} *More Tools:*\n` +
+        `/scan <url> - Deep security scan\n` +
+        `/devcheck <@user> - Verify developer identity\n` +
+        `/xcheck <@user> - X profile analysis\n\n` +
+        `\u{1F4DD} *Quick Start:*\n` +
+        `\`/rugcheck https://github.com/owner/repo\`\n` +
+        `\`/scamcheck https://github.com/owner/repo\`\n\n` +
+        `\u{1F91D} *Add me to your group* to protect your community!\n\n` +
         `_Powered by [AuraSecurity](https://aurasecurity.io)_`
       );
     }
     // /help command
     else if (text === '/help') {
       await sendMessage(chatId,
-        `\u{1F50D} *AuraSecurity Bot Help*\n\n` +
-        `*Commands:*\n` +
-        `/rugcheck <url> - Trust score for repo\n` +
-        `/scan <url> - Full security scan (secrets, vulns)\n` +
-        `/scamcheck <url> - Detect rug pulls & scam patterns\n` +
-        `/devcheck <@user> - Full dev audit (identity + security)\n` +
-        `/xcheck <@user> - Same as devcheck\n` +
-        `/trustagent <name> - Moltbook agent trust score\n` +
-        `/botcheck - Detect bot farm clusters\n` +
-        `/report <repo> - Generate full HTML security report\n\n` +
-        `*What I check:*\n\n` +
-        `\u{1F6E1} *Security Scan (/scan):*\n` +
-        `\u2022 Exposed secrets & API keys\n` +
-        `\u2022 Vulnerable dependencies\n` +
-        `\u2022 Code security issues (SAST)\n\n` +
-        `\u{1F4F1} *Dev Check (/devcheck):*\n` +
-        `\u2022 X profile & follower quality\n` +
-        `\u2022 GitHub verification & security scan\n` +
-        `\u2022 Combined trust score\n\n` +
-        `\u{1F4BB} *Trust Score (/rugcheck):*\n` +
-        `\u2022 Project age & stars\n` +
-        `\u2022 Team size & activity\n` +
-        `\u2022 Fork status & license\n\n` +
-        `\u{1F9E0} *More Details Button:*\n` +
-        `\u2022 AI-generated code detection\n` +
-        `\u2022 Entry point analysis\n` +
-        `\u2022 Build system detection\n` +
-        `\u2022 Test coverage check\n\n` +
+        `\u{1F6E1} *AuraSecurity Bot Help*\n\n` +
+        `\u{1F525} *MAIN COMMANDS - Use These First:*\n\n` +
+        `\u{1F534} */rugcheck* <github-url>\n` +
+        `Quick trust score - is this project legit?\n` +
+        `\u2022 Project age & activity\n` +
+        `\u2022 Team size & history\n` +
+        `\u2022 Red flag detection\n\n` +
+        `\u{1F534} */scamcheck* <github-url>\n` +
+        `Scam pattern detection - will this rug?\n` +
+        `\u2022 20+ scam signatures\n` +
+        `\u2022 Wallet drainer patterns\n` +
+        `\u2022 Honeypot code detection\n\n` +
+        `\u{1F527} *ADVANCED TOOLS:*\n\n` +
+        `/scan <url> - Deep security scan (secrets, vulns)\n` +
+        `/devcheck <@user> - Verify dev identity + GitHub\n` +
+        `/xcheck <@user> - X profile bot detection\n` +
+        `/trustagent <name> - Moltbook agent reputation\n\n` +
+        `\u{1F4DD} *Examples:*\n` +
+        `\`/rugcheck https://github.com/owner/repo\`\n` +
+        `\`/scamcheck https://github.com/owner/repo\`\n` +
+        `\`/devcheck @VitalikButerin\`\n\n` +
+        `\u{1F91D} *In Groups:* Add @aurasecuritychecker\\_bot and use:\n` +
+        `/rugcheck@aurasecuritychecker_bot <url>\n\n` +
         `_Not financial advice. Always DYOR!_`
       );
     }
