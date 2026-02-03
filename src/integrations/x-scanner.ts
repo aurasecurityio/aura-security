@@ -1,12 +1,21 @@
 /**
  * X/Twitter Scanner - Profile Analysis for Crypto Projects
  *
- * Analyzes X/Twitter profiles for legitimacy signals:
- * - Account age and follower quality
- * - Bot follower detection
- * - Tweet content analysis (scam vs tech)
- * - GitHub cross-verification
+ * Phase 1-3 Enhanced Version:
+ * - Engagement rate analysis
+ * - Reply ratio detection
+ * - 2-level follower quality check
+ * - Notable follower detection
+ * - Database tracking for reputation
  */
+
+import {
+  getXAccountReputation,
+  updateXAccountReputation,
+  recordXScan,
+  isXAccountFlagged,
+  type XAccountReputation
+} from './rug-database.js';
 
 // Keywords for analysis
 const DEV_BIO_KEYWORDS = ['developer', 'engineer', 'dev', 'code', 'programming', 'software', 'web3', 'blockchain', 'rust', 'solidity', 'typescript'];
@@ -41,10 +50,18 @@ export interface XScanResult {
     realPercent: number;
     botPercent: number;
     analysis: string;
+    // Phase 2: Deep check
+    followersOfFollowersReal?: number;
+    verifiedFollowers?: number;
   };
   tweetAnalysis: {
     techPercent: number;
     scamPercent: number;
+    // Phase 1: New metrics
+    engagementRate: number;
+    replyRatio: number;
+    avgLikes: number;
+    avgRetweets: number;
   };
   githubVerified: boolean;
   githubData?: {
@@ -53,6 +70,10 @@ export interface XScanResult {
     followers: number;
     crossVerified: boolean;
   };
+  // Phase 3: Database reputation
+  reputation?: XAccountReputation | null;
+  previousScans?: number;
+  isNewAccount?: boolean;
   scannedAt: string;
 }
 
@@ -104,10 +125,10 @@ async function getXProfile(username: string, bearerToken: string): Promise<XProf
 }
 
 /**
- * Get user's recent tweets
+ * Get user's recent tweets with engagement metrics
  */
 async function getUserTweets(userId: string, bearerToken: string, count = 100): Promise<any[]> {
-  const url = `https://api.twitter.com/2/users/${userId}/tweets?max_results=${Math.min(count, 100)}&tweet.fields=created_at,public_metrics,text`;
+  const url = `https://api.twitter.com/2/users/${userId}/tweets?max_results=${Math.min(count, 100)}&tweet.fields=created_at,public_metrics,text,in_reply_to_user_id`;
 
   const data = await fetchJson(url, {
     'Authorization': `Bearer ${bearerToken}`,
@@ -118,9 +139,9 @@ async function getUserTweets(userId: string, bearerToken: string, count = 100): 
 }
 
 /**
- * Sample followers to check quality
+ * Sample followers to check quality - PHASE 2: Increased to 100
  */
-async function sampleFollowers(userId: string, bearerToken: string, count = 50): Promise<any[]> {
+async function sampleFollowers(userId: string, bearerToken: string, count = 100): Promise<any[]> {
   const url = `https://api.twitter.com/2/users/${userId}/followers?max_results=${Math.min(count, 100)}&user.fields=public_metrics,verified,description,created_at,profile_image_url`;
 
   const data = await fetchJson(url, {
@@ -146,16 +167,78 @@ async function getUserFollowing(userId: string, bearerToken: string, count = 100
 }
 
 /**
- * Analyze follower quality (bot detection)
+ * PHASE 1: Calculate engagement rate from tweets
  */
-function analyzeFollowerQuality(followers: any[]): { quality: number; realPercent: number; botPercent: number; analysis: string } {
+function calculateEngagement(tweets: any[], followerCount: number): {
+  engagementRate: number;
+  avgLikes: number;
+  avgRetweets: number;
+  replyRatio: number;
+} {
+  if (!tweets || tweets.length === 0 || followerCount === 0) {
+    return { engagementRate: 0, avgLikes: 0, avgRetweets: 0, replyRatio: 0 };
+  }
+
+  let totalLikes = 0;
+  let totalRetweets = 0;
+  let replyCount = 0;
+
+  for (const tweet of tweets) {
+    const metrics = tweet.public_metrics || {};
+    totalLikes += metrics.like_count || 0;
+    totalRetweets += metrics.retweet_count || 0;
+
+    // Check if tweet is a reply (has in_reply_to_user_id)
+    if (tweet.in_reply_to_user_id) {
+      replyCount++;
+    }
+  }
+
+  const avgLikes = totalLikes / tweets.length;
+  const avgRetweets = totalRetweets / tweets.length;
+  const avgEngagement = avgLikes + avgRetweets;
+
+  // Engagement rate = average engagement per tweet / followers * 100
+  const engagementRate = (avgEngagement / followerCount) * 100;
+  const replyRatio = (replyCount / tweets.length) * 100;
+
+  return {
+    engagementRate: Math.round(engagementRate * 100) / 100,
+    avgLikes: Math.round(avgLikes),
+    avgRetweets: Math.round(avgRetweets),
+    replyRatio: Math.round(replyRatio)
+  };
+}
+
+/**
+ * PHASE 2: Analyze follower quality with 2-level depth
+ */
+function analyzeFollowerQuality(followers: any[]): {
+  quality: number;
+  realPercent: number;
+  botPercent: number;
+  analysis: string;
+  verifiedFollowers: number;
+  followersOfFollowersReal: number;
+} {
   if (!followers || followers.length === 0) {
-    return { quality: 0, realPercent: 0, botPercent: 0, analysis: 'Could not sample followers' };
+    return {
+      quality: 0,
+      realPercent: 0,
+      botPercent: 0,
+      analysis: 'Could not sample followers',
+      verifiedFollowers: 0,
+      followersOfFollowersReal: 0
+    };
   }
 
   let realCount = 0;
   let botCount = 0;
   let suspiciousCount = 0;
+  let verifiedCount = 0;
+
+  // Phase 2: Track follower quality scores for 2-level analysis
+  let totalFollowerQuality = 0;
 
   for (const f of followers) {
     const metrics = f.public_metrics || {};
@@ -167,6 +250,9 @@ function analyzeFollowerQuality(followers: any[]): { quality: number; realPercen
     const hasDefaultPic = f.profile_image_url?.includes('default_profile');
     const hasBio = f.description && f.description.length > 10;
 
+    // Count verified followers
+    if (f.verified) verifiedCount++;
+
     // Bot signals
     let botScore = 0;
     if (hasDefaultPic) botScore += 30;
@@ -176,11 +262,25 @@ function analyzeFollowerQuality(followers: any[]): { quality: number; realPercen
     if (followingCount > 1000 && followerCount < 50) botScore += 30; // Follow farming
     if (followerCount === 0 && tweetCount === 0) botScore += 40;
 
+    // PHASE 2: Check if this follower's followers are likely real
+    // Real accounts tend to have balanced follower/following ratios
+    if (followerCount > 0 && followingCount > 0) {
+      const ratio = followerCount / followingCount;
+      if (ratio > 0.1 && ratio < 10) {
+        // Healthy ratio suggests real account with real followers
+        totalFollowerQuality += 1;
+      } else if (followingCount > 5000 && followerCount < 100) {
+        // Follow-farming pattern - their followers are probably bots too
+        totalFollowerQuality -= 0.5;
+      }
+    }
+
     // Real signals
     if (ageMonths > 24) botScore -= 20;
     if (hasBio) botScore -= 10;
     if (tweetCount > 100) botScore -= 15;
     if (followerCount > 100 && followingCount < followerCount) botScore -= 15;
+    if (f.verified) botScore -= 30; // Verified accounts are real
 
     if (botScore >= 50) botCount++;
     else if (botScore >= 25) suspiciousCount++;
@@ -190,6 +290,11 @@ function analyzeFollowerQuality(followers: any[]): { quality: number; realPercen
   const total = followers.length;
   const realPercent = Math.round((realCount / total) * 100);
   const botPercent = Math.round((botCount / total) * 100);
+
+  // PHASE 2: Followers of followers quality score (0-100)
+  const followersOfFollowersReal = Math.round(
+    Math.max(0, Math.min(100, (totalFollowerQuality / total) * 100 + 50))
+  );
 
   let quality = realPercent;
   let analysis = '';
@@ -204,15 +309,36 @@ function analyzeFollowerQuality(followers: any[]): { quality: number; realPercen
     analysis = 'Mixed follower quality';
   }
 
-  return { quality, realPercent, botPercent, analysis };
+  return {
+    quality,
+    realPercent,
+    botPercent,
+    analysis,
+    verifiedFollowers: verifiedCount,
+    followersOfFollowersReal
+  };
 }
 
 /**
- * Analyze tweet content
+ * PHASE 1: Analyze tweet content with engagement
  */
-function analyzeTweets(tweets: any[]): { techPercent: number; scamPercent: number } {
+function analyzeTweets(tweets: any[], followerCount: number): {
+  techPercent: number;
+  scamPercent: number;
+  engagementRate: number;
+  replyRatio: number;
+  avgLikes: number;
+  avgRetweets: number;
+} {
   if (!tweets || tweets.length === 0) {
-    return { techPercent: 0, scamPercent: 0 };
+    return {
+      techPercent: 0,
+      scamPercent: 0,
+      engagementRate: 0,
+      replyRatio: 0,
+      avgLikes: 0,
+      avgRetweets: 0
+    };
   }
 
   let techCount = 0;
@@ -229,9 +355,13 @@ function analyzeTweets(tweets: any[]): { techPercent: number; scamPercent: numbe
     }
   }
 
+  // Calculate engagement metrics
+  const engagement = calculateEngagement(tweets, followerCount);
+
   return {
     techPercent: Math.round((techCount / tweets.length) * 100),
-    scamPercent: Math.round((scamCount / tweets.length) * 100)
+    scamPercent: Math.round((scamCount / tweets.length) * 100),
+    ...engagement
   };
 }
 
@@ -265,7 +395,7 @@ function analyzeFollowing(following: any[]): { techPercent: number; suspiciousPe
 }
 
 /**
- * Main X/Twitter scan function
+ * Main X/Twitter scan function - Enhanced with Phase 1-3
  */
 export async function performXScan(usernameOrUrl: string): Promise<XScanResult> {
   const bearerToken = process.env.X_BEARER_TOKEN;
@@ -290,19 +420,60 @@ export async function performXScan(usernameOrUrl: string): Promise<XScanResult> 
   // Fetch additional data in parallel
   const [tweets, followers, following] = await Promise.all([
     getUserTweets(profile.id, bearerToken),
-    sampleFollowers(profile.id, bearerToken),
+    sampleFollowers(profile.id, bearerToken, 100), // Phase 2: Increased sample
     getUserFollowing(profile.id, bearerToken)
   ]);
 
   // Run analysis
   const followerAnalysis = analyzeFollowerQuality(followers);
-  const tweetAnalysis = analyzeTweets(tweets);
+  const tweetAnalysis = analyzeTweets(tweets, profile.followers);
   const followingAnalysis = analyzeFollowing(following);
+
+  // PHASE 3: Get reputation from database
+  let reputation: XAccountReputation | null = null;
+  let previousScans = 0;
+  let isNewAccount = true;
+
+  try {
+    reputation = getXAccountReputation(username);
+    if (reputation) {
+      previousScans = reputation.totalScans;
+      isNewAccount = false;
+    }
+  } catch (err) {
+    console.error('[X-SCAN] Error getting reputation:', err);
+  }
+
+  // Check if flagged in database
+  const flagStatus = isXAccountFlagged(username);
 
   // Calculate score
   let score = 50;
   const redFlags: string[] = [];
   const greenFlags: string[] = [];
+
+  // === PHASE 3: DATABASE FLAGS ===
+  if (flagStatus.flagged) {
+    score -= 40;
+    redFlags.push(`⚠️ FLAGGED: ${flagStatus.reason || 'Known bad actor'}`);
+  }
+
+  if (reputation) {
+    if (reputation.scamCount >= 2) {
+      score -= 30;
+      redFlags.push(`Previously linked to ${reputation.scamCount} scam projects`);
+    } else if (reputation.scamCount === 1) {
+      score -= 15;
+      redFlags.push(`Previously linked to 1 scam project`);
+    } else if (reputation.legitCount >= 3 && reputation.scamCount === 0) {
+      score += 15;
+      greenFlags.push(`Verified ${reputation.legitCount} legit projects before`);
+    } else if (reputation.legitCount >= 1) {
+      score += 5;
+      greenFlags.push(`${reputation.legitCount} previous legit project(s)`);
+    }
+  }
+  // Note: First scan is not a red flag - it's neutral (no penalty)
 
   // Account size tiers
   const isLargeAccount = profile.followers > 100000;
@@ -328,41 +499,99 @@ export async function performXScan(usernameOrUrl: string): Promise<XScanResult> 
 
   // === FOLLOWER COUNT ===
   if (isMegaAccount) {
-    score += 20;
-    greenFlags.push(`${formatNumber(profile.followers)} followers (major account)`);
+    score += 15; // Reduced - follower count alone means little
+    greenFlags.push(`${formatNumber(profile.followers)} followers`);
   } else if (isLargeAccount) {
-    score += 12;
+    score += 8;
     greenFlags.push(`${formatNumber(profile.followers)} followers`);
   } else if (profile.followers > 10000) {
-    score += 5;
+    score += 3;
   } else if (profile.followers < 100) {
     score -= 5;
   }
 
-  // === FOLLOWER QUALITY ===
+  // === PHASE 1: ENGAGEMENT RATE (Critical new check) ===
+  const engagementRate = tweetAnalysis.engagementRate;
+
+  // Engagement rate thresholds vary by account size
+  // Mega accounts (1M+) naturally have lower % because denominator is huge
   if (isMegaAccount) {
-    if (followerAnalysis.botPercent > 60) {
-      score -= 10;
-      redFlags.push('High bot follower ratio for account size');
-    } else {
-      greenFlags.push('Follower quality normal for account size');
+    // For mega accounts, even 0.01% engagement means thousands of likes
+    if (engagementRate < 0.005) {
+      score -= 20;
+      redFlags.push(`Engagement: ${engagementRate}% (very low even for mega account)`);
+    } else if (engagementRate >= 0.01) {
+      score += 10;
+      greenFlags.push(`Engagement: ${engagementRate}% (healthy for ${formatNumber(profile.followers)} followers)`);
     }
   } else if (isLargeAccount) {
-    if (followerAnalysis.botPercent > 50) {
-      score -= 15;
-      redFlags.push(`${followerAnalysis.botPercent}% bot followers detected`);
-    }
-  } else {
-    if (followerAnalysis.botPercent > 50) {
+    // 100K-1M followers
+    if (engagementRate < 0.05) {
       score -= 25;
-      redFlags.push(`${followerAnalysis.botPercent}% bot followers detected`);
-    } else if (followerAnalysis.botPercent > 30) {
-      score -= 10;
-      redFlags.push(`${followerAnalysis.botPercent}% likely bot followers`);
-    } else if (followerAnalysis.realPercent > 70) {
-      score += 10;
-      greenFlags.push('Healthy authentic follower base');
+      redFlags.push(`Engagement: ${engagementRate}% (low - likely fake followers)`);
+    } else if (engagementRate >= 0.2) {
+      score += 12;
+      greenFlags.push(`Engagement: ${engagementRate}% (healthy)`);
     }
+  } else if (profile.followers > 1000) {
+    // Regular accounts (1K-100K)
+    if (engagementRate < 0.1) {
+      score -= 30;
+      redFlags.push(`Engagement: ${engagementRate}% (extremely low - likely fake followers)`);
+    } else if (engagementRate < 0.5) {
+      score -= 15;
+      redFlags.push(`Engagement: ${engagementRate}% (low for follower count)`);
+    } else if (engagementRate >= 1 && engagementRate <= 5) {
+      score += 15;
+      greenFlags.push(`Engagement: ${engagementRate}% (healthy)`);
+    } else if (engagementRate > 5) {
+      score += 10;
+      greenFlags.push(`Engagement: ${engagementRate}% (high - active community)`);
+    }
+  }
+
+  // === PHASE 1: REPLY RATIO (Builders talk, scammers broadcast) ===
+  const replyRatio = tweetAnalysis.replyRatio;
+
+  if (replyRatio < 5) {
+    score -= 15;
+    redFlags.push(`Only ${replyRatio}% replies - broadcaster, not community member`);
+  } else if (replyRatio >= 20 && replyRatio <= 60) {
+    score += 10;
+    greenFlags.push(`${replyRatio}% replies - engages with community`);
+  } else if (replyRatio > 60) {
+    score += 5;
+    greenFlags.push(`${replyRatio}% replies - very conversational`);
+  }
+
+  // === FOLLOWER QUALITY ===
+  if (followerAnalysis.botPercent > 50) {
+    score -= 25;
+    redFlags.push(`${followerAnalysis.botPercent}% bot followers detected`);
+  } else if (followerAnalysis.botPercent > 30) {
+    score -= 10;
+    redFlags.push(`${followerAnalysis.botPercent}% likely bot followers`);
+  } else if (followerAnalysis.realPercent > 70) {
+    score += 10;
+    greenFlags.push('Healthy authentic follower base');
+  }
+
+  // === PHASE 2: VERIFIED FOLLOWERS ===
+  if (followerAnalysis.verifiedFollowers >= 5) {
+    score += 15;
+    greenFlags.push(`${followerAnalysis.verifiedFollowers} verified accounts follow them`);
+  } else if (followerAnalysis.verifiedFollowers >= 2) {
+    score += 8;
+    greenFlags.push(`${followerAnalysis.verifiedFollowers} verified followers`);
+  }
+
+  // === PHASE 2: FOLLOWERS OF FOLLOWERS QUALITY ===
+  if (followerAnalysis.followersOfFollowersReal < 30) {
+    score -= 15;
+    redFlags.push('Followers are likely bots (2-level check)');
+  } else if (followerAnalysis.followersOfFollowersReal > 70) {
+    score += 8;
+    greenFlags.push('Follower network appears authentic');
   }
 
   // === TWEET CONTENT ===
@@ -390,6 +619,18 @@ export async function performXScan(usernameOrUrl: string): Promise<XScanResult> 
   if (followingAnalysis.techPercent > 40) {
     score += 8;
     greenFlags.push('Follows tech/dev community');
+  }
+
+  // === FOLLOWER/FOLLOWING RATIO ===
+  if (profile.following > 0) {
+    const ffRatio = profile.followers / profile.following;
+    if (profile.following > 5000 && ffRatio < 0.1) {
+      score -= 15;
+      redFlags.push('Follow-farming pattern (follows many, few follow back)');
+    } else if (ffRatio > 10 && profile.followers > 10000) {
+      score += 5;
+      greenFlags.push('Influential (many followers, selective following)');
+    }
   }
 
   // === BIO ANALYSIS ===
@@ -493,6 +734,14 @@ export async function performXScan(usernameOrUrl: string): Promise<XScanResult> 
     verdictEmoji = '🔴';
   }
 
+  // PHASE 3: Record this scan in database
+  try {
+    recordXScan(username, score, verdict);
+    updateXAccountReputation(username, 'scanned');
+  } catch (err) {
+    console.error('[X-SCAN] Error recording scan:', err);
+  }
+
   return {
     profile,
     score,
@@ -501,10 +750,20 @@ export async function performXScan(usernameOrUrl: string): Promise<XScanResult> 
     verdictEmoji,
     redFlags,
     greenFlags,
-    followerAnalysis,
+    followerAnalysis: {
+      quality: followerAnalysis.quality,
+      realPercent: followerAnalysis.realPercent,
+      botPercent: followerAnalysis.botPercent,
+      analysis: followerAnalysis.analysis,
+      verifiedFollowers: followerAnalysis.verifiedFollowers,
+      followersOfFollowersReal: followerAnalysis.followersOfFollowersReal
+    },
     tweetAnalysis,
     githubVerified,
     githubData,
+    reputation,
+    previousScans,
+    isNewAccount,
     scannedAt: new Date().toISOString()
   };
 }
