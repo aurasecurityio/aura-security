@@ -22,3 +22,28 @@ export type { ScamSignature, ScamDetectionResult, SimilarityMatch } from './scam
 export { auraScan, getAuraState, getAvailableAgents, orchestrator } from './aura-scanner.js';
 export type { AuraScanConfig, AuraScanResult } from './aura-scanner.js';
 export type { NotificationConfig, NotificationPayload } from './notifications.js';
+
+// Rug Database - Track confirmed rugs, dev reputation, feedback loop
+export {
+  reportRug,
+  isKnownRug,
+  hasOwnerRuggedBefore,
+  getDevReputation,
+  updateDevReputation,
+  isDevFlagged,
+  flagDeveloper,
+  recordScan,
+  submitFeedback,
+  getAccuracyStats,
+  addScamSignature as addScamSignatureToDb,
+  isForkedFromScam,
+  ownerHasScamSignatures,
+  getDbStats,
+  getRecentRugs,
+  getFlaggedDevs
+} from './rug-database.js';
+export type { RugReport, DevReputation } from './rug-database.js';
+
+// Enhanced Scanner - Trust scan with rug database intelligence
+export { performEnhancedTrustScan, quickRugDbCheck } from './enhanced-scanner.js';
+export type { EnhancedTrustResult } from './enhanced-scanner.js';
