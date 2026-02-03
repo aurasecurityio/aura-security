@@ -114,6 +114,26 @@ export interface PostDecision {
   suppressedFlags: string[];
 }
 
+// === Agent Reputation ===
+
+export interface RepoScanRecord {
+  repoUrl: string;
+  verdict: string;
+  score: number;
+  scannedAt: number;
+}
+
+export interface AgentReputation {
+  agentName: string;
+  repoScans: RepoScanRecord[];
+  safeRepos: number;
+  riskyRepos: number;
+  scamRepos: number;
+  totalScans: number;
+  reputationScore: number;
+  lastUpdated: number;
+}
+
 // === Agent Config ===
 
 export interface MoltbookAgentConfig {
@@ -125,6 +145,7 @@ export interface MoltbookAgentConfig {
   pollIntervalMs: number;
   feedPollIntervalMs: number;
   scanCacheTtlMs: number;
+  mentionPollIntervalMs: number;
 }
 
 export const DEFAULT_CONFIG: MoltbookAgentConfig = {
@@ -134,4 +155,5 @@ export const DEFAULT_CONFIG: MoltbookAgentConfig = {
   pollIntervalMs: 30_000,       // 30 seconds
   feedPollIntervalMs: 60_000,   // 60 seconds
   scanCacheTtlMs: 6 * 60 * 60 * 1000, // 6 hours
+  mentionPollIntervalMs: 90_000, // 90 seconds
 };

@@ -12,7 +12,7 @@ export { MoltbookScanner } from './scanner.js';
 export { MoltbookAgent } from './agent.js';
 export { FeedMonitor } from './monitor.js';
 export { makePostDecision } from './confidence.js';
-export { formatScanResult, formatScanError, formatPostTitle } from './formatter.js';
+export { formatScanResult, formatScanError, formatPostTitle, formatMentionResponse, formatMentionNoUrl, formatWeeklyLeaderboard, formatShillWarning } from './formatter.js';
 
 // AI Jail
 export { AgentScorer, BotFarmDetector, JailEnforcer } from './jail/index.js';
@@ -28,6 +28,8 @@ export type {
   ScanCacheEntry,
   PostDecision,
   MoltbookAgentConfig,
+  AgentReputation,
+  RepoScanRecord,
 } from './types.js';
 export { DEFAULT_CONFIG } from './types.js';
 export type {

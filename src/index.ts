@@ -1555,6 +1555,66 @@ async function main(): Promise<void> {
     }
   });
 
+  // Agent Reputation query tool
+  server.registerTool({
+    name: 'agent-reputation',
+    description: 'Query a Moltbook agent\'s reputation score based on the repos they\'ve shared',
+    parameters: {
+      type: 'object',
+      required: ['agentName'],
+      properties: {
+        agentName: { type: 'string', description: 'Moltbook agent name to query' }
+      }
+    },
+    handler: async (args) => {
+      try {
+        const agentName = args.agentName as string;
+        const agent = getMoltbookAgent();
+        const rep = agent.getAgentReputation(agentName);
+        if (!rep) {
+          return { error: `No reputation data for "${agentName}" — they haven't shared any repos we've scanned yet` };
+        }
+        return {
+          agentName: rep.agentName,
+          reputationScore: rep.reputationScore,
+          safeRepos: rep.safeRepos,
+          riskyRepos: rep.riskyRepos,
+          scamRepos: rep.scamRepos,
+          totalScans: rep.totalScans,
+          lastUpdated: new Date(rep.lastUpdated).toISOString(),
+          recentScans: rep.repoScans.slice(-5).map(r => ({
+            repo: r.repoUrl,
+            verdict: r.verdict,
+            score: r.score,
+          })),
+        };
+      } catch (err) {
+        console.error('[AURA] Agent reputation error:', err);
+        return { error: err instanceof Error ? err.message : 'Unknown error' };
+      }
+    }
+  });
+
+  // Manually trigger weekly leaderboard post
+  server.registerTool({
+    name: 'moltbook-leaderboard',
+    description: 'Manually trigger a weekly trust leaderboard post to /s/builds',
+    parameters: {
+      type: 'object',
+      properties: {}
+    },
+    handler: async () => {
+      try {
+        const agent = getMoltbookAgent();
+        await agent.postLeaderboard();
+        return { success: true, message: 'Leaderboard posted' };
+      } catch (err) {
+        console.error('[AURA] Leaderboard error:', err);
+        return { error: err instanceof Error ? err.message : 'Unknown error' };
+      }
+    }
+  });
+
   // Register Report Generation tool
   server.registerTool({
     name: 'generate-report',
@@ -1772,4 +1832,4 @@ export type { ReportData, ReportFormat } from './reporting/index.js';
 
 // Moltbook Integration exports
 export { MoltbookClient, MoltbookScanner, MoltbookAgent, FeedMonitor, makePostDecision, formatScanResult, formatScanError, formatPostTitle, AgentScorer, BotFarmDetector, JailEnforcer } from './integrations/moltbook/index.js';
-export type { MoltbookAgentConfig, PostDecision, AgentTrustScore, JailLevel, BotCluster } from './integrations/moltbook/index.js';
+export type { MoltbookAgentConfig, PostDecision, AgentTrustScore, JailLevel, BotCluster, AgentReputation, RepoScanRecord } from './integrations/moltbook/index.js';

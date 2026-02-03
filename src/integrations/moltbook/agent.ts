@@ -22,7 +22,7 @@ import { AgentScorer } from './jail/scorer.js';
 import { BotFarmDetector } from './jail/network.js';
 import { JailEnforcer } from './jail/actions.js';
 import type { AgentTrustScore } from './jail/types.js';
-import type { MoltbookAgentConfig } from './types.js';
+import type { MoltbookAgentConfig, AgentReputation, RepoScanRecord } from './types.js';
 import { DEFAULT_CONFIG } from './types.js';
 
 // How often to run bot farm detection (expensive operation)
@@ -31,6 +31,15 @@ const BOT_DETECT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 // How often to check if daily summary should be posted
 const DAILY_SUMMARY_CHECK_MS = 60 * 60 * 1000; // 1 hour
 const DAILY_SUMMARY_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+// How often to check if weekly leaderboard should be posted
+const WEEKLY_CHECK_MS = 6 * 60 * 60 * 1000; // 6 hours
+const WEEKLY_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+// Reputation thresholds
+const MAX_REPO_SCANS_PER_AGENT = 100;
+const SHILL_SCAM_THRESHOLD = 3;
+const SHILL_SCORE_THRESHOLD = 30;
 
 interface DailyStats {
   totalScans: number;
@@ -52,6 +61,10 @@ export class MoltbookAgent {
   private running = false;
   private botDetectTimer: ReturnType<typeof setInterval> | null = null;
   private dailySummaryTimer: ReturnType<typeof setInterval> | null = null;
+  private weeklyLeaderboardTimer: ReturnType<typeof setInterval> | null = null;
+  private lastLeaderboardPostAt: number = Date.now();
+  private agentReputations: Map<string, AgentReputation> = new Map();
+  private shillWarningQueue: Set<string> = new Set();
   private dailyStats: DailyStats = {
     totalScans: 0,
     verdicts: new Map(),
@@ -88,6 +101,7 @@ export class MoltbookAgent {
     this.monitor = new FeedMonitor(this.client, this.config, {
       onAlert: (alert) => this.handleAlert(alert),
       onScanRequest: (repoUrl, context, postId) => this.handleProactiveScan(repoUrl, context, postId),
+      onMentionScanRequest: (repoUrl, postId, commentId, mentioner) => this.handleMentionScan(repoUrl, postId, commentId, mentioner),
     });
   }
 
@@ -118,10 +132,13 @@ export class MoltbookAgent {
     this.dailyStats.lastPostedAt = Date.now();
     this.dailySummaryTimer = setInterval(() => this.checkDailySummary(), DAILY_SUMMARY_CHECK_MS);
 
+    // Step 7: Start weekly leaderboard timer
+    this.weeklyLeaderboardTimer = setInterval(() => this.checkWeeklyLeaderboard(), WEEKLY_CHECK_MS);
+
     this.running = true;
     if (registered) {
       console.log('[AGENT] AuraSecurity Moltbook agent is running');
-      console.log('[AGENT] Services: scanner, monitor, jail, daily-summary');
+      console.log('[AGENT] Services: scanner, monitor, jail, daily-summary, reputation, mentions');
     } else {
       console.log('[AGENT] AuraSecurity server is running (Moltbook reconnecting in background)');
     }
@@ -141,6 +158,10 @@ export class MoltbookAgent {
     if (this.dailySummaryTimer) {
       clearInterval(this.dailySummaryTimer);
       this.dailySummaryTimer = null;
+    }
+    if (this.weeklyLeaderboardTimer) {
+      clearInterval(this.weeklyLeaderboardTimer);
+      this.weeklyLeaderboardTimer = null;
     }
     this.running = false;
     console.log('[AGENT] AuraSecurity Moltbook agent stopped');
@@ -208,6 +229,16 @@ export class MoltbookAgent {
       // Record daily stats regardless of whether we post
       this.recordDailyScan(repoUrl, verdict, decision.postType === 'warning');
 
+      // Record reputation for the agent who shared this repo
+      const score = scam?.score ?? trust?.trustScore ?? null;
+      if (score !== null) {
+        // Get the author from the context string (format: "Found in /s/X by AgentName")
+        const authorMatch = context.match(/by\s+(.+)$/);
+        if (authorMatch) {
+          this.recordScanForReputation(authorMatch[1], repoUrl, verdict, score);
+        }
+      }
+
       const content = formatScanResult(repoUrl, scam, trust, decision) +
         `\n\n*Proactively scanned — ${context}*`;
 
@@ -215,8 +246,26 @@ export class MoltbookAgent {
       try {
         await this.client.createComment(postId, content);
         console.log(`[AGENT] Commented scan result on post ${postId} for ${repoUrl}`);
+        this.monitor.recordCommentedPost(postId);
       } catch (commentErr: any) {
         console.error(`[AGENT] Failed to comment on post ${postId}:`, commentErr.message);
+      }
+
+      // Check if the post author is queued for a shill warning
+      const authorMatch2 = context.match(/by\s+(.+)$/);
+      if (authorMatch2 && this.shillWarningQueue.has(authorMatch2[1])) {
+        const rep = this.agentReputations.get(authorMatch2[1]);
+        if (rep) {
+          try {
+            const { formatShillWarning } = await import('./formatter.js');
+            const warning = formatShillWarning(authorMatch2[1], rep);
+            await this.client.createComment(postId, warning);
+            this.shillWarningQueue.delete(authorMatch2[1]);
+            console.log(`[AGENT] Posted shill warning for ${authorMatch2[1]} on post ${postId}`);
+          } catch (warnErr: any) {
+            console.error(`[AGENT] Failed to post shill warning:`, warnErr.message);
+          }
+        }
       }
 
       // 2. Also post to /s/builds if notable (warning or high confidence)
@@ -283,6 +332,170 @@ export class MoltbookAgent {
     }
   }
 
+  // === Mention Scanning ===
+
+  private async handleMentionScan(repoUrl: string | null, postId: string, commentId: string | null, mentioner: string): Promise<void> {
+    console.log(`[AGENT] Mention scan requested by ${mentioner}${repoUrl ? ` for ${repoUrl}` : ' (no URL)'} [post: ${postId}]`);
+
+    try {
+      if (!repoUrl) {
+        // No GitHub URL — ask them to provide one
+        const { formatMentionNoUrl } = await import('./formatter.js');
+        const reply = formatMentionNoUrl(mentioner);
+        await this.client.createComment(postId, reply, commentId || undefined);
+        console.log(`[AGENT] Replied to mention by ${mentioner} (no URL) on post ${postId}`);
+        return;
+      }
+
+      // Run the scan
+      const { trust, scam } = await this.performScan(repoUrl);
+      if (!trust && !scam) {
+        console.log(`[AGENT] Mention scan: both scanners failed for ${repoUrl}`);
+        return;
+      }
+
+      const { makePostDecision } = await import('./confidence.js');
+      const { formatMentionResponse } = await import('./formatter.js');
+      const decision = makePostDecision(scam, trust);
+      const verdict = scam?.verdict ?? trust?.verdict ?? 'SCANNED';
+      const score = scam?.score ?? trust?.trustScore ?? null;
+
+      // Record daily stats + reputation
+      this.recordDailyScan(repoUrl, verdict, decision.postType === 'warning');
+      if (score !== null) {
+        this.recordScanForReputation(mentioner, repoUrl, verdict, score);
+      }
+
+      const content = formatMentionResponse(repoUrl, scam, trust, decision, mentioner);
+      await this.client.createComment(postId, content, commentId || undefined);
+      this.monitor.recordCommentedPost(postId);
+      console.log(`[AGENT] Replied to mention by ${mentioner} with scan of ${repoUrl}`);
+    } catch (err: any) {
+      console.error(`[AGENT] Mention scan error:`, err.message);
+    }
+  }
+
+  private async performScan(repoUrl: string): Promise<{ trust: any; scam: any }> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 240_000);
+
+    const scanHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (this.config.scannerApiKey) {
+      scanHeaders['Authorization'] = `Bearer ${this.config.scannerApiKey}`;
+    }
+
+    const [trustRes, scamRes] = await Promise.allSettled([
+      fetch(`${this.config.scannerApiUrl}/tools`, {
+        method: 'POST',
+        headers: scanHeaders,
+        body: JSON.stringify({ tool: 'trust-scan', arguments: { gitUrl: repoUrl } }),
+        signal: controller.signal,
+      }).then(r => r.ok ? r.json() : null).then((d: any) => d?.result || d),
+      fetch(`${this.config.scannerApiUrl}/tools`, {
+        method: 'POST',
+        headers: scanHeaders,
+        body: JSON.stringify({ tool: 'scam-scan', arguments: { gitUrl: repoUrl } }),
+        signal: controller.signal,
+      }).then(r => r.ok ? r.json() : null).then((d: any) => d?.result || d),
+    ]);
+
+    clearTimeout(timeout);
+
+    return {
+      trust: trustRes.status === 'fulfilled' ? trustRes.value : null,
+      scam: scamRes.status === 'fulfilled' ? scamRes.value : null,
+    };
+  }
+
+  // === Agent Reputation ===
+
+  private recordScanForReputation(agentName: string, repoUrl: string, verdict: string, score: number): void {
+    let rep = this.agentReputations.get(agentName);
+    if (!rep) {
+      rep = {
+        agentName,
+        repoScans: [],
+        safeRepos: 0,
+        riskyRepos: 0,
+        scamRepos: 0,
+        totalScans: 0,
+        reputationScore: 50,
+        lastUpdated: Date.now(),
+      };
+      this.agentReputations.set(agentName, rep);
+    }
+
+    // Avoid counting the same repo twice for one agent
+    if (rep.repoScans.some(r => r.repoUrl === repoUrl)) return;
+
+    const record: RepoScanRecord = { repoUrl, verdict, score, scannedAt: Date.now() };
+    rep.repoScans.push(record);
+    rep.totalScans++;
+
+    // Categorize
+    if (score >= 75) {
+      rep.safeRepos++;
+    } else if (score < 35) {
+      rep.scamRepos++;
+    } else if (score < 55) {
+      rep.riskyRepos++;
+    }
+
+    // Cap scans per agent
+    if (rep.repoScans.length > MAX_REPO_SCANS_PER_AGENT) {
+      rep.repoScans = rep.repoScans.slice(-MAX_REPO_SCANS_PER_AGENT);
+    }
+
+    // Recompute reputation score
+    rep.reputationScore = Math.max(0, Math.min(100,
+      50 + Math.min(30, rep.safeRepos * 3) - rep.riskyRepos * 5 - rep.scamRepos * 15
+    ));
+    rep.lastUpdated = Date.now();
+
+    console.log(`[AGENT] Reputation updated for ${agentName}: ${rep.reputationScore}/100 (safe=${rep.safeRepos}, risky=${rep.riskyRepos}, scam=${rep.scamRepos})`);
+
+    // Check for shill warning threshold
+    if (rep.scamRepos >= SHILL_SCAM_THRESHOLD && rep.reputationScore < SHILL_SCORE_THRESHOLD) {
+      this.shillWarningQueue.add(agentName);
+      console.log(`[AGENT] ${agentName} queued for shill warning (score: ${rep.reputationScore}, scams: ${rep.scamRepos})`);
+    }
+  }
+
+  getAgentReputation(agentName: string): AgentReputation | null {
+    return this.agentReputations.get(agentName) || null;
+  }
+
+  getAllReputations(): AgentReputation[] {
+    return [...this.agentReputations.values()];
+  }
+
+  // === Weekly Leaderboard ===
+
+  private async checkWeeklyLeaderboard(): Promise<void> {
+    const elapsed = Date.now() - this.lastLeaderboardPostAt;
+    if (elapsed < WEEKLY_INTERVAL_MS) return;
+    if (this.agentReputations.size < 5) return;
+    await this.postLeaderboard();
+  }
+
+  async postLeaderboard(): Promise<void> {
+    try {
+      const { formatWeeklyLeaderboard } = await import('./formatter.js');
+      const reputations = this.getAllReputations();
+      const monitorStats = this.monitor.getStats();
+      const totalScans = reputations.reduce((sum, r) => sum + r.totalScans, 0);
+
+      const title = `[Trust Rankings] Week of ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+      const content = formatWeeklyLeaderboard(reputations, monitorStats.trackedAgents, totalScans);
+
+      await this.client.createTextPost(this.config.submoltName, title, content);
+      this.lastLeaderboardPostAt = Date.now();
+      console.log(`[AGENT] Posted weekly leaderboard to /s/${this.config.submoltName} (${reputations.length} agents ranked)`);
+    } catch (err: any) {
+      console.error(`[AGENT] Failed to post leaderboard:`, err.message);
+    }
+  }
+
   /**
    * Score an agent's trust level and apply jail enforcement if needed.
    * Callable externally via the API tools.
@@ -316,8 +529,17 @@ export class MoltbookAgent {
         creationTimeSimilarity: cluster.signals.find(s => s.type === 'creation_time')?.strength ?? 0,
       } : undefined;
 
+      // Build content data from reputation if available
+      const reputation = this.agentReputations.get(agentName);
+      const contentData = reputation ? {
+        flaggedRepos: reputation.riskyRepos + reputation.scamRepos,
+        endorsedScams: reputation.scamRepos,
+        falsePositiveRate: 0,
+        spamPatternScore: 0,
+      } : undefined;
+
       // Score the agent
-      const score = this.scorer.score(profile, activity || null, networkData);
+      const score = this.scorer.score(profile, activity || null, networkData, contentData);
       console.log(`[AGENT] Scored ${agentName}: ${score.overallScore}/100 (${score.jailLevel})`);
 
       // Apply enforcement
@@ -465,15 +687,9 @@ export class MoltbookAgent {
 
   // === Public Getters ===
 
-  getStatus(): {
-    running: boolean;
-    config: MoltbookAgentConfig;
-    scanner: ReturnType<MoltbookScanner['getStats']>;
-    monitor: ReturnType<FeedMonitor['getStats']>;
-    jail: ReturnType<JailEnforcer['getStats']>;
-    botDetector: ReturnType<BotFarmDetector['getStats']>;
-    dailyStats: { totalScans: number; warningsPosted: number; verdicts: Record<string, number>; hoursSinceLastSummary: number };
-  } {
+  getStatus() {
+    const reps = this.getAllReputations();
+    const topAgent = reps.sort((a, b) => b.reputationScore - a.reputationScore)[0];
     return {
       running: this.running,
       config: { ...this.config, apiKey: this.config.apiKey ? '***' : undefined },
@@ -486,6 +702,13 @@ export class MoltbookAgent {
         warningsPosted: this.dailyStats.warningsPosted,
         verdicts: Object.fromEntries(this.dailyStats.verdicts),
         hoursSinceLastSummary: Math.round((Date.now() - this.dailyStats.lastPostedAt) / (60 * 60 * 1000)),
+      },
+      reputation: {
+        trackedAgents: this.agentReputations.size,
+        topAgent: topAgent?.agentName ?? null,
+        topScore: topAgent?.reputationScore ?? 0,
+        shillWarningQueue: this.shillWarningQueue.size,
+        daysSinceLeaderboard: Math.round((Date.now() - this.lastLeaderboardPostAt) / (24 * 60 * 60 * 1000)),
       },
     };
   }

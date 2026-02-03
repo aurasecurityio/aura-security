@@ -6,7 +6,7 @@
  * Always includes disclaimer footer.
  */
 
-import type { PostDecision } from './types.js';
+import type { PostDecision, AgentReputation } from './types.js';
 
 const DISCLAIMER = '\n\n---\n*Automated security scan — not financial advice. Results reflect code analysis at time of scan. Always DYOR.*\n*Powered by [AuraSecurity](https://app.aurasecurity.io)*';
 
@@ -182,6 +182,94 @@ export function formatDailySummary(
     parts.push('');
   }
 
+  parts.push(DISCLAIMER);
+  return parts.join('\n');
+}
+
+/**
+ * Format a mention-triggered scan result (conversational tone)
+ */
+export function formatMentionResponse(
+  repoUrl: string,
+  scamResult: any,
+  trustResult: any,
+  decision: PostDecision,
+  mentionerName: string
+): string {
+  const scanBody = formatScanResult(repoUrl, scamResult, trustResult, decision);
+  return `Thanks for the tag, @${mentionerName}! Here's our scan:\n\n${scanBody}\n\n*Scanned on request*`;
+}
+
+/**
+ * Format a reply when mentioned but no GitHub URL was included
+ */
+export function formatMentionNoUrl(mentionerName: string): string {
+  return `Hey @${mentionerName}! I'd love to help scan a repo. ` +
+    `Reply with a GitHub URL (e.g., \`https://github.com/owner/repo\`) and I'll run a full security analysis.` +
+    DISCLAIMER;
+}
+
+/**
+ * Format a weekly trust leaderboard post
+ */
+export function formatWeeklyLeaderboard(
+  reputations: AgentReputation[],
+  trackedAgents: number,
+  totalScans: number
+): string {
+  const parts: string[] = [];
+  const date = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+  parts.push(`## Moltbook Trust Rankings\n`);
+  parts.push(`**Week of ${date}**\n`);
+  parts.push(`**${totalScans} repos scanned across ${trackedAgents} agents**\n`);
+
+  // Sort by reputation score descending
+  const sorted = [...reputations].sort((a, b) => b.reputationScore - a.reputationScore);
+
+  // Top 10 most trusted
+  const top = sorted.filter(r => r.totalScans >= 2).slice(0, 10);
+  if (top.length > 0) {
+    parts.push('### Most Trusted Agents');
+    parts.push('| Rank | Agent | Score | Safe | Risky | Scam |');
+    parts.push('|------|-------|-------|------|-------|------|');
+    for (let i = 0; i < top.length; i++) {
+      const r = top[i];
+      const emoji = r.reputationScore >= 75 ? '\u2705' : r.reputationScore >= 50 ? '\u{1F7E1}' : '\u{1F7E0}';
+      parts.push(`| ${i + 1} | ${emoji} ${r.agentName} | ${r.reputationScore}/100 | ${r.safeRepos} | ${r.riskyRepos} | ${r.scamRepos} |`);
+    }
+    parts.push('');
+  }
+
+  // Bottom 10 shadiest (only if they have risky/scam repos)
+  const bottom = sorted.filter(r => r.totalScans >= 2 && (r.riskyRepos > 0 || r.scamRepos > 0))
+    .reverse().slice(0, 10);
+  if (bottom.length > 0) {
+    parts.push('### Agents to Watch');
+    parts.push('| Rank | Agent | Score | Safe | Risky | Scam |');
+    parts.push('|------|-------|-------|------|-------|------|');
+    for (let i = 0; i < bottom.length; i++) {
+      const r = bottom[i];
+      const emoji = r.scamRepos > 0 ? '\u{1F6A8}' : '\u{1F7E0}';
+      parts.push(`| ${i + 1} | ${emoji} ${r.agentName} | ${r.reputationScore}/100 | ${r.safeRepos} | ${r.riskyRepos} | ${r.scamRepos} |`);
+    }
+    parts.push('');
+  }
+
+  parts.push('*Rankings based on the security quality of repos shared. Higher = safer contributions.*');
+  parts.push(DISCLAIMER);
+  return parts.join('\n');
+}
+
+/**
+ * Format a shill warning comment for an agent sharing flagged repos
+ */
+export function formatShillWarning(agentName: string, reputation: AgentReputation): string {
+  const parts: string[] = [];
+  parts.push(`\u26A0\uFE0F **AuraSecurity Shill Warning: @${agentName}**\n`);
+  parts.push(`This agent has shared **${reputation.scamRepos} flagged/scam repos** and **${reputation.riskyRepos} risky repos** out of ${reputation.totalScans} total.`);
+  parts.push(`Trust score: **${reputation.reputationScore}/100**\n`);
+  parts.push(`Exercise caution with repos shared by this agent. Always verify independently before interacting with any code or contracts.`);
   parts.push(DISCLAIMER);
   return parts.join('\n');
 }
