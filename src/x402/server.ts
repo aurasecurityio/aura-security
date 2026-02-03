@@ -349,9 +349,10 @@ export function startX402Server(): void {
   });
 }
 
-// Allow running standalone - check for x402 in path or when run as main module
-const isMainModule = process.argv[1]?.includes('x402') ||
-                     import.meta.url.includes('x402/server');
-if (isMainModule) {
+// Allow running standalone - ONLY when invoked directly via `node dist/x402/server.js`
+// Do NOT auto-start when imported as a module (import.meta.url check was incorrect)
+const isDirectlyInvoked = process.argv[1]?.endsWith('x402/server.js') ||
+                          process.argv[1]?.endsWith('x402\\server.js');
+if (isDirectlyInvoked) {
   startX402Server();
 }
