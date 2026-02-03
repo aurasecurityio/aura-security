@@ -349,7 +349,9 @@ export function startX402Server(): void {
   });
 }
 
-// Allow running standalone
-if (process.argv[1]?.includes('x402/server')) {
+// Allow running standalone - check for x402 in path or when run as main module
+const isMainModule = process.argv[1]?.includes('x402') ||
+                     import.meta.url.includes('x402/server');
+if (isMainModule) {
   startX402Server();
 }
