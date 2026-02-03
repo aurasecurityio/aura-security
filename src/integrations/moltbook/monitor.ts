@@ -11,7 +11,7 @@
  */
 
 import { MoltbookClient } from './client.js';
-import type { MoltbookPost, MoltbookAgentConfig } from './types.js';
+import type { MoltbookPost, MoltbookComment, MoltbookAgentConfig } from './types.js';
 import { getAuthorName, getSubmoltName } from './types.js';
 
 const GITHUB_URL_REGEX = /https?:\/\/github\.com\/([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)/gi;
@@ -62,18 +62,25 @@ export class FeedMonitor {
   private scannedRepos: Set<string> = new Set();
   private onScanRequest?: (repoUrl: string, context: string, postId: string) => void;
 
+  // Mention detection
+  private respondedMentions: Set<string> = new Set();
+  private postsWeCommentedOn: string[] = [];
+  private onMentionScanRequest?: (repoUrl: string | null, postId: string, commentId: string | null, mentionerName: string) => void;
+
   constructor(
     client: MoltbookClient,
     config: MoltbookAgentConfig,
     callbacks?: {
       onAlert?: (alert: MonitorAlert) => void;
       onScanRequest?: (repoUrl: string, context: string, postId: string) => void;
+      onMentionScanRequest?: (repoUrl: string | null, postId: string, commentId: string | null, mentionerName: string) => void;
     }
   ) {
     this.client = client;
     this.config = config;
     this.onAlert = callbacks?.onAlert;
     this.onScanRequest = callbacks?.onScanRequest;
+    this.onMentionScanRequest = callbacks?.onMentionScanRequest;
   }
 
   start(): void {
@@ -104,6 +111,9 @@ export class FeedMonitor {
       // Check for coordination patterns
       this.detectCoordination();
 
+      // Check comments on posts we've interacted with for mentions
+      await this.pollComments();
+
       // Prune old data
       this.pruneOldData();
     } catch (err: any) {
@@ -118,6 +128,9 @@ export class FeedMonitor {
 
     // Track agent activity regardless of GitHub URLs
     this.trackAgent(post);
+
+    // Check for @AuraSecurity mentions in the post
+    this.checkForMentions(post);
 
     if (urls.length === 0) return;
 
@@ -139,6 +152,75 @@ export class FeedMonitor {
           details: `New repo ${normalized} found in /s/${submoltName} by ${authorName}`,
           timestamp: Date.now(),
         });
+      }
+    }
+  }
+
+  private checkForMentions(post: MoltbookPost): void {
+    if (!this.onMentionScanRequest) return;
+
+    const authorName = getAuthorName(post);
+    // Skip our own posts
+    if (authorName.toLowerCase() === this.config.agentName.toLowerCase()) return;
+
+    const text = [post.title, post.content || ''].join(' ');
+    if (!text.toLowerCase().includes('aurasecurity')) return;
+
+    const dedupeKey = `${post.id}:post`;
+    if (this.respondedMentions.has(dedupeKey)) return;
+    this.respondedMentions.add(dedupeKey);
+
+    // Extract GitHub URLs from the mention post
+    const urls = this.extractGitHubUrls(post);
+    const repoUrl = urls.length > 0 ? this.normalizeRepoUrl(urls[0]) : null;
+
+    console.log(`[MONITOR] Mention detected in post ${post.id} by ${authorName}${repoUrl ? ` (repo: ${repoUrl})` : ' (no repo URL)'}`);
+    this.onMentionScanRequest(repoUrl, post.id, null, authorName);
+  }
+
+  private async pollComments(): Promise<void> {
+    if (!this.onMentionScanRequest) return;
+    // Only check the 10 most recent posts we've commented on
+    const postsToCheck = this.postsWeCommentedOn.slice(-10);
+
+    for (const postId of postsToCheck) {
+      try {
+        const comments = await this.client.getComments(postId, 'new');
+        for (const comment of comments) {
+          const commentAuthor = typeof comment.author === 'string' ? comment.author : comment.author.name;
+          // Skip our own comments
+          if (commentAuthor.toLowerCase() === this.config.agentName.toLowerCase()) continue;
+
+          const dedupeKey = `${postId}:${comment.id}`;
+          if (this.respondedMentions.has(dedupeKey)) continue;
+
+          if (!comment.content.toLowerCase().includes('aurasecurity')) continue;
+
+          this.respondedMentions.add(dedupeKey);
+
+          // Extract GitHub URLs from the comment
+          const urlMatches = comment.content.matchAll(GITHUB_URL_REGEX);
+          const urls = new Set<string>();
+          for (const match of urlMatches) {
+            urls.add(`https://github.com/${match[1]}`);
+          }
+          const repoUrl = urls.size > 0 ? this.normalizeRepoUrl([...urls][0]) : null;
+
+          console.log(`[MONITOR] Mention detected in comment ${comment.id} by ${commentAuthor}${repoUrl ? ` (repo: ${repoUrl})` : ' (no repo URL)'}`);
+          this.onMentionScanRequest(repoUrl, postId, comment.id, commentAuthor);
+        }
+      } catch (err: any) {
+        // Silently skip — comment fetch may fail for deleted posts
+      }
+    }
+  }
+
+  recordCommentedPost(postId: string): void {
+    if (!this.postsWeCommentedOn.includes(postId)) {
+      this.postsWeCommentedOn.push(postId);
+      // Cap at 50
+      if (this.postsWeCommentedOn.length > 50) {
+        this.postsWeCommentedOn = this.postsWeCommentedOn.slice(-30);
       }
     }
   }
@@ -278,6 +360,12 @@ export class FeedMonitor {
     if (this.processedPosts.size > 5000) {
       const arr = [...this.processedPosts];
       this.processedPosts = new Set(arr.slice(-3000));
+    }
+
+    // Cap respondedMentions (keep last 2000)
+    if (this.respondedMentions.size > 2000) {
+      const arr = [...this.respondedMentions];
+      this.respondedMentions = new Set(arr.slice(-1500));
     }
   }
 
