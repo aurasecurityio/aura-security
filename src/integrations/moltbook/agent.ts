@@ -410,6 +410,13 @@ export class MoltbookAgent {
   // === Agent Reputation ===
 
   private recordScanForReputation(agentName: string, repoUrl: string, verdict: string, score: number): void {
+    // Don't penalize agents for scan errors (repo 404, timeout, etc.)
+    const errorVerdicts = ['ERROR', 'UNKNOWN', 'SCAN_FAILED'];
+    if (errorVerdicts.includes(verdict.toUpperCase()) || (score === 0 && verdict.toUpperCase() !== 'SCAM')) {
+      console.log(`[AGENT] Skipping reputation update for ${agentName} — scan error (verdict: ${verdict}, score: ${score})`);
+      return;
+    }
+
     let rep = this.agentReputations.get(agentName);
     if (!rep) {
       rep = {
