@@ -45,6 +45,18 @@ import { performTrustScan } from './integrations/trust-scanner.js';
 import { performXScan } from './integrations/x-scanner.js';
 import { performAIVerification } from './integrations/ai-verifier.js';
 import { detectScamPatterns, quickScamScan } from './integrations/scam-detector.js';
+import {
+  reportRug,
+  getDevReputation,
+  isDevFlagged,
+  flagDeveloper,
+  submitFeedback,
+  getDbStats as getRugDbStats,
+  getRecentRugs,
+  getFlaggedDevs,
+  getAccuracyStats
+} from './integrations/rug-database.js';
+import { performEnhancedTrustScan } from './integrations/enhanced-scanner.js';
 import { MoltbookAgent as MoltbookAgentRunner } from './integrations/moltbook/agent.js';
 import { generateReport, type ReportData, type ReportFormat } from './reporting/index.js';
 
@@ -1711,6 +1723,240 @@ async function main(): Promise<void> {
     }
   });
 
+  // === Rug Database Tools ===
+
+  // Report a confirmed rug
+  server.registerTool({
+    name: 'report-rug',
+    description: 'Report a confirmed rug pull to the database (helps improve future scans)',
+    parameters: {
+      type: 'object',
+      required: ['repoUrl'],
+      properties: {
+        repoUrl: { type: 'string', description: 'GitHub repository URL that rugged' },
+        rugType: { type: 'string', description: 'Type of rug (e.g., "liquidity pull", "mint exploit", "honeypot")' },
+        evidence: { type: 'string', description: 'Evidence or notes about the rug' },
+        reportedBy: { type: 'string', description: 'Who is reporting (optional)' }
+      }
+    },
+    handler: async (args) => {
+      try {
+        const repoUrl = args.repoUrl as string;
+        const githubMatch = repoUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+        if (!githubMatch) {
+          return { error: 'Invalid GitHub URL' };
+        }
+
+        const success = reportRug({
+          repoUrl,
+          owner: githubMatch[1],
+          repoName: githubMatch[2].replace(/\.git$/, ''),
+          rugType: args.rugType as string,
+          evidence: args.evidence as string,
+          reportedBy: args.reportedBy as string
+        });
+
+        if (success) {
+          console.log(`[AURA] Rug reported: ${repoUrl}`);
+          return {
+            success: true,
+            message: `Rug reported: ${repoUrl}`,
+            note: 'This repo and its owner are now flagged. Future scans will show warnings.'
+          };
+        } else {
+          return { error: 'Failed to report rug' };
+        }
+      } catch (err) {
+        console.error('[AURA] Report rug error:', err);
+        return { error: err instanceof Error ? err.message : 'Unknown error' };
+      }
+    }
+  });
+
+  // Get rug database stats
+  server.registerTool({
+    name: 'rug-db-stats',
+    description: 'Get statistics from the rug database (confirmed rugs, flagged devs, accuracy)',
+    parameters: {
+      type: 'object',
+      properties: {}
+    },
+    handler: async () => {
+      try {
+        const dbStats = getRugDbStats();
+        const accuracy = getAccuracyStats();
+        const recentRugs = getRecentRugs(5);
+        const flaggedDevs = getFlaggedDevs();
+
+        return {
+          database: dbStats,
+          accuracy: {
+            ...accuracy,
+            note: accuracy.totalWithFeedback > 0
+              ? `${accuracy.accuracy}% accurate on ${accuracy.totalWithFeedback} scans with feedback`
+              : 'No feedback data yet - submit feedback to help us learn!'
+          },
+          recentRugs,
+          flaggedDevs: flaggedDevs.slice(0, 10)
+        };
+      } catch (err) {
+        console.error('[AURA] Rug DB stats error:', err);
+        return { error: err instanceof Error ? err.message : 'Unknown error' };
+      }
+    }
+  });
+
+  // Submit feedback on a scan
+  server.registerTool({
+    name: 'submit-feedback',
+    description: 'Submit feedback on a scan result (helps improve accuracy)',
+    parameters: {
+      type: 'object',
+      required: ['repoUrl', 'outcome'],
+      properties: {
+        repoUrl: { type: 'string', description: 'GitHub repository URL' },
+        outcome: { type: 'string', enum: ['rugged', 'safe', 'unknown'], description: 'What actually happened' },
+        source: { type: 'string', description: 'Who is providing feedback (optional)' }
+      }
+    },
+    handler: async (args) => {
+      try {
+        const repoUrl = args.repoUrl as string;
+        const outcome = args.outcome as 'rugged' | 'safe' | 'unknown';
+        const source = args.source as string;
+
+        const success = submitFeedback(repoUrl, outcome, source);
+
+        if (success) {
+          const message = outcome === 'rugged'
+            ? 'Feedback recorded. Repo added to rug database and owner flagged.'
+            : 'Feedback recorded. This helps improve our accuracy!';
+          return { success: true, message };
+        } else {
+          return { error: 'Failed to submit feedback' };
+        }
+      } catch (err) {
+        console.error('[AURA] Submit feedback error:', err);
+        return { error: err instanceof Error ? err.message : 'Unknown error' };
+      }
+    }
+  });
+
+  // Get developer reputation
+  server.registerTool({
+    name: 'dev-reputation',
+    description: 'Get a GitHub developer\'s reputation from the rug database',
+    parameters: {
+      type: 'object',
+      required: ['username'],
+      properties: {
+        username: { type: 'string', description: 'GitHub username' }
+      }
+    },
+    handler: async (args) => {
+      try {
+        const username = args.username as string;
+        const reputation = getDevReputation(username);
+        const flagged = isDevFlagged(username);
+
+        if (!reputation && !flagged.flagged) {
+          return {
+            username,
+            status: 'unknown',
+            message: 'No data on this developer yet. They haven\'t been scanned or reported.'
+          };
+        }
+
+        return {
+          username,
+          reputation: reputation || { reputationScore: 50, totalRepos: 0, ruggedRepos: 0, safeRepos: 0 },
+          flagged: flagged.flagged,
+          flagReason: flagged.reason,
+          rugCount: flagged.rugCount,
+          warning: flagged.flagged ? `⚠️ This developer has ${flagged.rugCount} confirmed rug(s)!` : null
+        };
+      } catch (err) {
+        console.error('[AURA] Dev reputation error:', err);
+        return { error: err instanceof Error ? err.message : 'Unknown error' };
+      }
+    }
+  });
+
+  // Flag a developer
+  server.registerTool({
+    name: 'flag-dev',
+    description: 'Manually flag a developer as a known bad actor',
+    parameters: {
+      type: 'object',
+      required: ['username', 'reason'],
+      properties: {
+        username: { type: 'string', description: 'GitHub username to flag' },
+        reason: { type: 'string', description: 'Reason for flagging' }
+      }
+    },
+    handler: async (args) => {
+      try {
+        const username = args.username as string;
+        const reason = args.reason as string;
+
+        const success = flagDeveloper(username, reason);
+
+        if (success) {
+          return {
+            success: true,
+            message: `Developer ${username} flagged: ${reason}`,
+            note: 'All future scans of repos by this developer will show warnings.'
+          };
+        } else {
+          return { error: 'Failed to flag developer' };
+        }
+      } catch (err) {
+        console.error('[AURA] Flag dev error:', err);
+        return { error: err instanceof Error ? err.message : 'Unknown error' };
+      }
+    }
+  });
+
+  // Enhanced trust scan (with rug database intelligence)
+  server.registerTool({
+    name: 'enhanced-trust-scan',
+    description: 'Trust scan with rug database intelligence (checks known rugs, dev reputation, fork origins)',
+    parameters: {
+      type: 'object',
+      required: ['gitUrl'],
+      properties: {
+        gitUrl: { type: 'string', description: 'GitHub repository URL to check' }
+      }
+    },
+    handler: async (args) => {
+      try {
+        const gitUrl = args.gitUrl as string;
+        console.log(`[AURA] Enhanced trust scan for: ${gitUrl}`);
+
+        const result = await performEnhancedTrustScan(gitUrl);
+
+        console.log(`[AURA] Enhanced scan complete: ${result.adjustedScore}/100 (${result.adjustedVerdict})`);
+        if (result.knownRug) {
+          console.log(`[AURA] ⚠️ KNOWN RUG detected!`);
+        }
+        if (result.ownerHistory.hasRuggedBefore) {
+          console.log(`[AURA] ⚠️ Owner has ${result.ownerHistory.rugCount} previous rug(s)`);
+        }
+
+        return result;
+      } catch (err) {
+        console.error('[AURA] Enhanced trust scan error:', err);
+        return {
+          error: err instanceof Error ? err.message : 'Unknown error',
+          trustScore: 0,
+          grade: 'F',
+          verdict: 'ERROR',
+          summary: 'Failed to scan repository. Please check the URL and try again.'
+        };
+      }
+    }
+  });
+
   // Start HTTP server
   await server.start();
   console.log(`[AURA] Auditor listening on http://127.0.0.1:${PORT}`);
@@ -1837,3 +2083,28 @@ export type { MoltbookAgentConfig, PostDecision, AgentTrustScore, JailLevel, Bot
 // x402 Payment API exports
 export { startX402Server, PRICING, getPrice, createPayment, getPayment, getPaymentStats, verifySolanaPayment } from './x402/index.js';
 export type { Payment, PaymentRequest, PaymentMethod, X402Config } from './x402/index.js';
+
+// Rug Database exports (track confirmed rugs, dev reputation, feedback loop)
+export {
+  reportRug,
+  isKnownRug,
+  hasOwnerRuggedBefore,
+  getDevReputation,
+  updateDevReputation,
+  isDevFlagged,
+  flagDeveloper,
+  recordScan,
+  submitFeedback,
+  getAccuracyStats,
+  addScamSignatureToDb,
+  isForkedFromScam,
+  ownerHasScamSignatures,
+  getDbStats,
+  getRecentRugs,
+  getFlaggedDevs
+} from './integrations/index.js';
+export type { RugReport, DevReputation } from './integrations/index.js';
+
+// Enhanced Scanner exports (trust scan + rug database intelligence)
+export { performEnhancedTrustScan, quickRugDbCheck } from './integrations/index.js';
+export type { EnhancedTrustResult } from './integrations/index.js';
