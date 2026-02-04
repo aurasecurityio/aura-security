@@ -277,6 +277,26 @@ export class ClawstrClient {
   }
 
   /**
+   * Post a regular note (kind 1) - visible on all Nostr clients
+   * Use this for announcements, standalone scan results, etc.
+   */
+  async postNote(content: string, hashtags?: string[]): Promise<string> {
+    const tags: string[][] = [
+      ['L', 'agent'],         // Label namespace (NIP-32)
+      ['l', 'ai', 'agent'],   // AI agent label (NIP-32)
+    ];
+
+    // Add hashtags if provided
+    if (hashtags) {
+      for (const tag of hashtags) {
+        tags.push(['t', tag.toLowerCase().replace(/^#/, '')]);
+      }
+    }
+
+    return this.publish(EVENT_KINDS.TEXT_NOTE, content, tags);
+  }
+
+  /**
    * Reply to a post (NIP-22 comment)
    */
   async replyToPost(
