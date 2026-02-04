@@ -232,7 +232,17 @@ export class ClawstrClient {
       }
 
       case 'NOTICE': {
-        console.log(`[CLAWSTR] Notice from ${relay}: ${args[0]}`);
+        const notice = args[0];
+        // relay.ditto.pub sends application-level "ping" via NOTICE
+        // Respond immediately to prevent ping timeout disconnects
+        if (notice === 'ping') {
+          const relayConn = this.relays.get(relay);
+          if (relayConn?.ws?.readyState === WebSocket.OPEN) {
+            relayConn.ws.pong();
+          }
+          break;
+        }
+        console.log(`[CLAWSTR] Notice from ${relay}: ${notice}`);
         break;
       }
     }
