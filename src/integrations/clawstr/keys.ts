@@ -2,14 +2,17 @@
  * Clawstr Key Management
  *
  * Handles Nostr keypair generation, loading, and signing.
- * Uses Node.js built-in crypto for secp256k1 operations.
+ * Uses @noble/curves for BIP-340 Schnorr signatures (required by Nostr).
  */
 
-import * as crypto from 'crypto';
+import { schnorr } from '@noble/curves/secp256k1.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { randomBytes } from 'crypto';
 
 export interface NostrKeyPair {
   privateKey: string;  // Hex format (64 chars)
-  publicKey: string;   // Hex format (64 chars)
+  publicKey: string;   // Hex format (64 chars) - x-only
   nsec: string;        // Bech32 encoded private key (simplified)
   npub: string;        // Bech32 encoded public key (simplified)
 }
@@ -18,18 +21,13 @@ export interface NostrKeyPair {
  * Generate a new random Nostr keypair
  */
 export function generateKeyPair(): NostrKeyPair {
-  // Generate a new keypair using secp256k1
-  const keyPair = crypto.generateKeyPairSync('ec', {
-    namedCurve: 'secp256k1',
-  });
+  // Generate 32 random bytes for private key
+  const privateKeyBytes = randomBytes(32);
+  const privateKey = bytesToHex(privateKeyBytes);
 
-  // Export private key as raw bytes
-  const privateKeyDer = keyPair.privateKey.export({ type: 'pkcs8', format: 'der' });
-  // The raw 32-byte private key starts at offset 36 in PKCS8 DER format
-  const privateKey = privateKeyDer.subarray(36, 68).toString('hex');
-
-  // Get public key (x-only, 32 bytes for schnorr)
-  const publicKey = getPublicKey(privateKey);
+  // Derive public key (x-only, 32 bytes for schnorr)
+  const publicKeyBytes = schnorr.getPublicKey(privateKeyBytes);
+  const publicKey = bytesToHex(publicKeyBytes);
 
   return {
     privateKey,
@@ -77,63 +75,26 @@ export function loadKeyPair(privateKeyInput: string): NostrKeyPair {
  */
 export function getPublicKey(privateKey: string): string {
   const privateKeyHex = privateKey.toLowerCase().replace(/^0x/, '');
-  const privateKeyBuffer = Buffer.from(privateKeyHex, 'hex');
-
-  // Create key object from raw private key
-  const keyObject = crypto.createPrivateKey({
-    key: Buffer.concat([
-      // PKCS8 header for secp256k1
-      Buffer.from('303e020100301006072a8648ce3d020106052b8104000a042730250201010420', 'hex'),
-      privateKeyBuffer,
-    ]),
-    format: 'der',
-    type: 'pkcs8',
-  });
-
-  // Get public key in uncompressed format
-  const publicKeyDer = crypto.createPublicKey(keyObject).export({
-    type: 'spki',
-    format: 'der',
-  });
-
-  // Extract x-coordinate (32 bytes) from uncompressed public key
-  // SPKI format: header (26 bytes) + 04 (1 byte) + x (32 bytes) + y (32 bytes)
-  const xCoord = publicKeyDer.subarray(27, 59);
-  return xCoord.toString('hex');
+  const privateKeyBytes = hexToBytes(privateKeyHex);
+  const publicKeyBytes = schnorr.getPublicKey(privateKeyBytes);
+  return bytesToHex(publicKeyBytes);
 }
 
 /**
- * Sign a Nostr event using schnorr signature
+ * Sign a Nostr event using BIP-340 Schnorr signature
  */
 export function signEvent(
   eventHash: string,
   privateKey: string
 ): string {
-  const privateKeyBuffer = Buffer.from(privateKey, 'hex');
-  const hashBuffer = Buffer.from(eventHash, 'hex');
-
-  // Create key object
-  const keyObject = crypto.createPrivateKey({
-    key: Buffer.concat([
-      Buffer.from('303e020100301006072a8648ce3d020106052b8104000a042730250201010420', 'hex'),
-      privateKeyBuffer,
-    ]),
-    format: 'der',
-    type: 'pkcs8',
-  });
-
-  // Sign using ECDSA (schnorr not yet widely supported in Node crypto)
-  // Note: For production Nostr, use a proper schnorr library
-  const signature = crypto.sign(null, hashBuffer, {
-    key: keyObject,
-    dsaEncoding: 'ieee-p1363', // Returns r || s format (64 bytes)
-  });
-
-  return signature.toString('hex');
+  const privateKeyBytes = hexToBytes(privateKey);
+  const hashBytes = hexToBytes(eventHash);
+  const signature = schnorr.sign(hashBytes, privateKeyBytes);
+  return bytesToHex(signature);
 }
 
 /**
- * Calculate event ID (hash)
+ * Calculate event ID (sha256 hash of serialized event)
  */
 export function getEventHash(event: {
   pubkey: string;
@@ -151,12 +112,12 @@ export function getEventHash(event: {
     event.content,
   ]);
 
-  const hash = crypto.createHash('sha256').update(serialized).digest();
-  return hash.toString('hex');
+  const hashBytes = sha256(new TextEncoder().encode(serialized));
+  return bytesToHex(hashBytes);
 }
 
 /**
- * Verify event signature
+ * Verify event signature using BIP-340 Schnorr
  */
 export function verifySignature(
   eventHash: string,
@@ -164,31 +125,10 @@ export function verifySignature(
   publicKey: string
 ): boolean {
   try {
-    const hashBuffer = Buffer.from(eventHash, 'hex');
-    const sigBuffer = Buffer.from(signature, 'hex');
-
-    // Reconstruct public key in SPKI format
-    // For x-only pubkey, we need to compute y and create uncompressed format
-    // This is a simplified version - for production, use a proper library
-    const xCoord = Buffer.from(publicKey, 'hex');
-
-    // Create SPKI structure with uncompressed point (assuming even y)
-    // Note: This is simplified and may not work for all keys
-    const spkiPrefix = Buffer.from('3056301006072a8648ce3d020106052b8104000a03420004', 'hex');
-    const yCoord = Buffer.alloc(32, 0); // Placeholder - proper implementation needed
-
-    const publicKeyDer = Buffer.concat([spkiPrefix, xCoord, yCoord]);
-
-    const keyObject = crypto.createPublicKey({
-      key: publicKeyDer,
-      format: 'der',
-      type: 'spki',
-    });
-
-    return crypto.verify(null, hashBuffer, {
-      key: keyObject,
-      dsaEncoding: 'ieee-p1363',
-    }, sigBuffer);
+    const hashBytes = hexToBytes(eventHash);
+    const sigBytes = hexToBytes(signature);
+    const pubKeyBytes = hexToBytes(publicKey);
+    return schnorr.verify(sigBytes, hashBytes, pubKeyBytes);
   } catch {
     return false;
   }
