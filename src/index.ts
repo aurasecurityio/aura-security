@@ -61,6 +61,7 @@ import {
 } from './integrations/rug-database.js';
 import { performEnhancedTrustScan } from './integrations/enhanced-scanner.js';
 import { MoltbookAgent as MoltbookAgentRunner } from './integrations/moltbook/agent.js';
+import { ClawstrAgent } from './integrations/clawstr/agent.js';
 import { generateReport, type ReportData, type ReportFormat } from './reporting/index.js';
 
 const PORT = parseInt(process.env.AURA_PORT ?? '3000', 10);
@@ -1630,6 +1631,102 @@ async function main(): Promise<void> {
     }
   });
 
+  // === Clawstr Integration Tools ===
+
+  // Initialize Clawstr agent (lazy — only starts if CLAWSTR_PRIVATE_KEY is set)
+  let clawstrAgent: ClawstrAgent | null = null;
+
+  const getClawstrAgent = (): ClawstrAgent => {
+    if (!clawstrAgent) {
+      clawstrAgent = new ClawstrAgent({
+        enabled: process.env.CLAWSTR_ENABLED === 'true',
+        privateKey: process.env.CLAWSTR_PRIVATE_KEY || '',
+        relays: process.env.CLAWSTR_RELAYS?.split(',') || [
+          'wss://relay.ditto.pub',
+          'wss://nos.lol',
+          'wss://relay.primal.net',
+        ],
+        subclaws: process.env.CLAWSTR_SUBCLAWS?.split(',') || [
+          '/c/ai-freedom',
+          '/c/builds',
+          '/c/agent-economy',
+        ],
+      });
+    }
+    return clawstrAgent;
+  };
+
+  // Clawstr Status tool
+  server.registerTool({
+    name: 'clawstr-status',
+    description: 'Get Clawstr agent status (connection, monitor stats)',
+    parameters: {
+      type: 'object',
+      properties: {}
+    },
+    handler: async () => {
+      try {
+        const agent = getClawstrAgent();
+        return agent.getStatus();
+      } catch (err) {
+        console.error('[AURA] Clawstr status error:', err);
+        return { error: err instanceof Error ? err.message : 'Unknown error' };
+      }
+    }
+  });
+
+  // Clawstr Scan and Post tool
+  server.registerTool({
+    name: 'clawstr-scan',
+    description: 'Scan a GitHub repo and post results to a Clawstr subclaw',
+    parameters: {
+      type: 'object',
+      required: ['repoUrl'],
+      properties: {
+        repoUrl: { type: 'string', description: 'GitHub repository URL to scan' },
+        subclaw: { type: 'string', description: 'Subclaw to post to (default: /c/builds)' }
+      }
+    },
+    handler: async (args) => {
+      try {
+        const repoUrl = args.repoUrl as string;
+        const subclaw = (args.subclaw as string) || '/c/builds';
+        const agent = getClawstrAgent();
+        const eventId = await agent.scanAndPost(repoUrl, subclaw);
+        return { success: true, eventId, subclaw };
+      } catch (err) {
+        console.error('[AURA] Clawstr scan error:', err);
+        return { error: err instanceof Error ? err.message : 'Unknown error' };
+      }
+    }
+  });
+
+  // Clawstr Post tool
+  server.registerTool({
+    name: 'clawstr-post',
+    description: 'Post a message to a Clawstr subclaw',
+    parameters: {
+      type: 'object',
+      required: ['content'],
+      properties: {
+        content: { type: 'string', description: 'Message content' },
+        subclaw: { type: 'string', description: 'Subclaw to post to (default: /c/builds)' }
+      }
+    },
+    handler: async (args) => {
+      try {
+        const content = args.content as string;
+        const subclaw = (args.subclaw as string) || '/c/builds';
+        const agent = getClawstrAgent();
+        const eventId = await agent.postToSubclaw(subclaw, content);
+        return { success: true, eventId, subclaw };
+      } catch (err) {
+        console.error('[AURA] Clawstr post error:', err);
+        return { error: err instanceof Error ? err.message : 'Unknown error' };
+      }
+    }
+  });
+
   // Register Report Generation tool
   server.registerTool({
     name: 'generate-report',
@@ -2056,6 +2153,19 @@ async function main(): Promise<void> {
     console.log('[AURA] Moltbook agent not started (set MOLTBOOK_API_KEY to enable)');
   }
 
+  // Start Clawstr agent if private key is available
+  if (process.env.CLAWSTR_PRIVATE_KEY && process.env.CLAWSTR_ENABLED === 'true') {
+    try {
+      const agent = getClawstrAgent();
+      await agent.start();
+      console.log('[AURA] Clawstr agent started');
+    } catch (err) {
+      console.error('[AURA] Clawstr agent failed to start:', err);
+    }
+  } else {
+    console.log('[AURA] Clawstr agent not started (set CLAWSTR_ENABLED=true and CLAWSTR_PRIVATE_KEY to enable)');
+  }
+
   // Start WebSocket server for real-time updates
   const wsServer = getWebSocketServer(WS_PORT);
   await wsServer.start();
@@ -2160,6 +2270,10 @@ export type { ReportData, ReportFormat } from './reporting/index.js';
 // Moltbook Integration exports
 export { MoltbookClient, MoltbookScanner, MoltbookAgent, FeedMonitor, makePostDecision, formatScanResult, formatScanError, formatPostTitle, AgentScorer, BotFarmDetector, JailEnforcer } from './integrations/moltbook/index.js';
 export type { MoltbookAgentConfig, PostDecision, AgentTrustScore, JailLevel, BotCluster, AgentReputation, RepoScanRecord } from './integrations/moltbook/index.js';
+
+// Clawstr Integration exports (Nostr-based AI agent network)
+export { ClawstrAgent, ClawstrClient, ClawstrMonitor, startClawstrAgent, generateClawstrKeys } from './integrations/clawstr/index.js';
+export type { ClawstrAgentStatus, ClawstrAgentConfig, NostrEvent, NostrKeyPair, ScanRequest as ClawstrScanRequest, MentionRequest as ClawstrMentionRequest } from './integrations/clawstr/index.js';
 
 // x402 Payment API exports
 export { startX402Server, PRICING, getPrice, createPayment, getPayment, getPaymentStats, verifySolanaPayment } from './x402/index.js';
