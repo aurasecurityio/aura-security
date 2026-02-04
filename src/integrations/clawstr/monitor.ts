@@ -10,6 +10,7 @@
 import { ClawstrClient, type NostrFilter } from './client.js';
 import type { NostrEvent, ClawstrAgentConfig, ClawstrPost } from './types.js';
 import { extractGitHubUrls, getSubclawFromTags, isAIAgentPost, EVENT_KINDS } from './types.js';
+import { validateGitHubRepo } from '../trust-scanner.js';
 
 export interface ScanRequest {
   repoUrl: string;
@@ -202,7 +203,7 @@ export class ClawstrMonitor {
   /**
    * Handle GitHub URLs found in post
    */
-  private handleGitHubUrls(event: NostrEvent, urls: string[]): void {
+  private async handleGitHubUrls(event: NostrEvent, urls: string[]): Promise<void> {
     if (!this.onScanRequest) {
       return;
     }
@@ -220,6 +221,15 @@ export class ClawstrMonitor {
       if (this.scannedRepos.has(repoUrl)) {
         continue;
       }
+
+      // Pre-validate: check if repo actually exists before queueing scan
+      const exists = await validateGitHubRepo(repoUrl);
+      if (!exists) {
+        console.log(`[CLAWSTR-MONITOR] Skipping ${repoUrl} — repo not found or inaccessible`);
+        this.scannedRepos.add(repoUrl); // Don't retry dead repos
+        continue;
+      }
+
       this.scannedRepos.add(repoUrl);
 
       // Prune old scanned repos (keep last 1000)

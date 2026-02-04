@@ -24,6 +24,10 @@ const REQUEST_TIMEOUT = 15_000; // 15 seconds
 export class MoltbookClient {
   private apiKey: string;
   private rateLimitResetAt: number = 0;
+  private postQueue: Array<{ fn: () => Promise<any>; resolve: (v: any) => void; reject: (e: any) => void }> = [];
+  private isProcessingQueue: boolean = false;
+  private minPostIntervalMs: number = 5_000; // 5s between posts
+  private lastPostTime: number = 0;
 
   constructor(apiKey: string = '') {
     this.apiKey = apiKey;
@@ -68,11 +72,25 @@ export class MoltbookClient {
         signal: controller.signal,
       });
 
-      // Handle rate limiting
+      // Handle rate limiting - wait and retry once
       if (response.status === 429) {
         const retryAfter = parseInt(response.headers.get('retry-after') || '60');
         this.rateLimitResetAt = Date.now() + retryAfter * 1000;
-        throw new Error(`Rate limited. Retry after ${retryAfter}s`);
+        console.log(`[MOLTBOOK] Rate limited, backing off ${retryAfter}s before retry`);
+        await new Promise(r => setTimeout(r, retryAfter * 1000));
+        // Retry once after waiting
+        const retryResponse = await fetch(`${BASE_URL}${path}`, {
+          method,
+          headers,
+          body: body ? JSON.stringify(body) : undefined,
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT),
+        });
+        if (!retryResponse.ok) {
+          const text = await retryResponse.text().catch(() => '');
+          throw new Error(`Moltbook API ${retryResponse.status} after retry: ${text.slice(0, 200)}`);
+        }
+        this.lastPostTime = Date.now();
+        return await retryResponse.json() as T;
       }
 
       if (!response.ok) {
@@ -116,7 +134,17 @@ export class MoltbookClient {
 
   // === Posts ===
 
+  private async throttlePost(): Promise<void> {
+    const elapsed = Date.now() - this.lastPostTime;
+    if (elapsed < this.minPostIntervalMs) {
+      const wait = this.minPostIntervalMs - elapsed;
+      await new Promise(r => setTimeout(r, wait));
+    }
+    this.lastPostTime = Date.now();
+  }
+
   async createTextPost(submolt: string, title: string, content: string): Promise<MoltbookPost> {
+    await this.throttlePost();
     const res = await this.request<{ post: MoltbookPost }>('POST', '/posts', {
       submolt,
       title,
@@ -146,6 +174,7 @@ export class MoltbookClient {
   // === Comments ===
 
   async createComment(postId: string, content: string, parentId?: string): Promise<MoltbookComment> {
+    await this.throttlePost();
     const body: Record<string, string> = { content };
     if (parentId) body.parent_id = parentId;
 

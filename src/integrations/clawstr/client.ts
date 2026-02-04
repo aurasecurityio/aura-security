@@ -30,6 +30,8 @@ interface RelayConnection {
   ws: WebSocket | null;
   status: 'connecting' | 'connected' | 'disconnected' | 'error';
   reconnectTimer?: ReturnType<typeof setTimeout>;
+  pingTimer?: ReturnType<typeof setInterval>;
+  reconnectAttempts: number;
   subscriptions: Map<string, NostrFilter[]>;
 }
 
@@ -72,11 +74,13 @@ export class ClawstrClient {
 
   private async connectToRelay(url: string): Promise<void> {
     return new Promise((resolve) => {
+      const existing = this.relays.get(url);
       const relay: RelayConnection = {
         url,
         ws: null,
         status: 'connecting',
-        subscriptions: new Map(),
+        reconnectAttempts: existing?.reconnectAttempts ?? 0,
+        subscriptions: existing?.subscriptions ?? new Map(),
       };
 
       this.relays.set(url, relay);
@@ -87,7 +91,16 @@ export class ClawstrClient {
 
         ws.on('open', () => {
           relay.status = 'connected';
+          relay.reconnectAttempts = 0;
           console.log(`[CLAWSTR] Connected to ${url}`);
+
+          // Send WebSocket pings every 30s to keep connection alive
+          if (relay.pingTimer) clearInterval(relay.pingTimer);
+          relay.pingTimer = setInterval(() => {
+            if (relay.ws?.readyState === WebSocket.OPEN) {
+              relay.ws.ping();
+            }
+          }, 30_000);
 
           // Resubscribe to existing subscriptions
           for (const [subId, filters] of relay.subscriptions) {
@@ -95,6 +108,11 @@ export class ClawstrClient {
           }
 
           resolve();
+        });
+
+        // Respond to server pings to prevent timeout
+        ws.on('ping', () => {
+          ws.pong();
         });
 
         ws.on('message', (data) => {
@@ -108,14 +126,20 @@ export class ClawstrClient {
 
         ws.on('close', () => {
           relay.status = 'disconnected';
-          console.log(`[CLAWSTR] Disconnected from ${url}`);
+          if (relay.pingTimer) { clearInterval(relay.pingTimer); relay.pingTimer = undefined; }
+          // Only log on first disconnect, not on every reconnect cycle
+          if (relay.reconnectAttempts === 0) {
+            console.log(`[CLAWSTR] Disconnected from ${url}`);
+          }
           this.scheduleReconnect(url);
           resolve();
         });
 
         ws.on('error', (err) => {
           relay.status = 'error';
-          console.error(`[CLAWSTR] Error on ${url}:`, err.message);
+          if (relay.reconnectAttempts === 0) {
+            console.error(`[CLAWSTR] Error on ${url}:`, err.message);
+          }
           resolve();
         });
 
@@ -144,20 +168,23 @@ export class ClawstrClient {
       clearTimeout(relay.reconnectTimer);
     }
 
+    // Exponential backoff: 5s, 10s, 20s, 40s, max 120s
+    relay.reconnectAttempts++;
+    const delay = Math.min(5_000 * Math.pow(2, relay.reconnectAttempts - 1), 120_000);
+
     relay.reconnectTimer = setTimeout(() => {
-      console.log(`[CLAWSTR] Reconnecting to ${url}...`);
+      if (relay.reconnectAttempts <= 3 || relay.reconnectAttempts % 10 === 0) {
+        console.log(`[CLAWSTR] Reconnecting to ${url} (attempt ${relay.reconnectAttempts})...`);
+      }
       this.connectToRelay(url);
-    }, 5_000);
+    }, delay);
   }
 
   disconnect(): void {
     for (const [url, relay] of this.relays) {
-      if (relay.reconnectTimer) {
-        clearTimeout(relay.reconnectTimer);
-      }
-      if (relay.ws) {
-        relay.ws.close();
-      }
+      if (relay.reconnectTimer) clearTimeout(relay.reconnectTimer);
+      if (relay.pingTimer) clearInterval(relay.pingTimer);
+      if (relay.ws) relay.ws.close();
     }
     this.relays.clear();
     console.log('[CLAWSTR] Disconnected from all relays');

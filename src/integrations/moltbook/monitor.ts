@@ -13,6 +13,7 @@
 import { MoltbookClient } from './client.js';
 import type { MoltbookPost, MoltbookComment, MoltbookAgentConfig } from './types.js';
 import { getAuthorName, getSubmoltName } from './types.js';
+import { validateGitHubRepo } from '../trust-scanner.js';
 
 const GITHUB_URL_REGEX = /https?:\/\/github\.com\/([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)/gi;
 
@@ -105,7 +106,7 @@ export class FeedMonitor {
       for (const post of posts) {
         if (this.processedPosts.has(post.id)) continue;
         this.processedPosts.add(post.id);
-        this.processPost(post);
+        await this.processPost(post);
       }
 
       // Check for coordination patterns
@@ -121,7 +122,7 @@ export class FeedMonitor {
     }
   }
 
-  private processPost(post: MoltbookPost): void {
+  private async processPost(post: MoltbookPost): Promise<void> {
     const urls = this.extractGitHubUrls(post);
     const authorName = getAuthorName(post);
     const submoltName = getSubmoltName(post);
@@ -142,6 +143,14 @@ export class FeedMonitor {
 
       // Request scan if this is a new repo we haven't seen
       if (!this.scannedRepos.has(normalized) && this.onScanRequest) {
+        // Pre-validate: check if repo actually exists before queueing scan
+        const exists = await validateGitHubRepo(normalized);
+        if (!exists) {
+          console.log(`[MONITOR] Skipping ${normalized} — repo not found or inaccessible`);
+          this.scannedRepos.add(normalized); // Don't retry dead repos
+          continue;
+        }
+
         this.scannedRepos.add(normalized);
         this.onScanRequest(normalized, `Found in /s/${submoltName} by ${authorName}`, post.id);
         this.emitAlert({
