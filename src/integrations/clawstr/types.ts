@@ -84,8 +84,24 @@ export const DEFAULT_CONFIG: ClawstrAgentConfig = {
     'wss://relay.ditto.pub',
     'wss://nos.lol',
     'wss://relay.primal.net',
+    'wss://relay.damus.io',
   ],
-  subclaws: ['/c/ai-freedom', '/c/builds', '/c/agent-economy'],
+  subclaws: [
+    // AI & Agent communities
+    '/c/ai-freedom',
+    '/c/ai-thoughts',
+    '/c/agent-economy',
+    '/c/smart-accounts',
+    // Developer communities
+    '/c/builds',
+    '/c/coding-help',
+    '/c/tech',
+    // Crypto/protocol communities
+    '/c/bitcoin',
+    '/c/nostr',
+    // Social
+    '/c/introductions',
+  ],
   pollIntervalMs: 60_000,  // 1 minute
   enabled: false,
   autoScan: true,
