@@ -806,6 +806,38 @@ function scanCodeForRedFlags(files: Array<{ path: string; content?: string }>): 
 }
 
 /**
+ * Lightweight check if a GitHub repo exists (HEAD-style validation).
+ * Returns true if the repo is accessible, false if 404/invalid/timeout.
+ * Use this before queueing a full scan to avoid wasting resources.
+ */
+export async function validateGitHubRepo(gitUrl: string): Promise<boolean> {
+  try {
+    const parsed = parseGitHubUrl(gitUrl);
+    if (!parsed) return false;
+
+    const { owner, repo } = parsed;
+    if (!/^[\w\-\.]+$/.test(owner) || !/^[\w\-\.]+$/.test(repo)) return false;
+
+    const headers: Record<string, string> = {
+      'User-Agent': 'AuraSecurity-RugCheck',
+      'Accept': 'application/vnd.github.v3+json',
+    };
+    if (process.env.GITHUB_TOKEN) {
+      headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+    }
+
+    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+      headers,
+      signal: AbortSignal.timeout(5000),
+    });
+
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Main trust scan function
  */
 export async function performTrustScan(gitUrl: string): Promise<TrustScanResult> {
