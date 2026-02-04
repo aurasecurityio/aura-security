@@ -234,11 +234,12 @@ export class ClawstrClient {
       case 'NOTICE': {
         const notice = args[0];
         // relay.ditto.pub sends application-level "ping" via NOTICE
-        // Respond immediately to prevent ping timeout disconnects
+        // Respond with both a WebSocket ping and a dummy REQ to show activity
         if (notice === 'ping') {
           const relayConn = this.relays.get(relay);
           if (relayConn?.ws?.readyState === WebSocket.OPEN) {
-            relayConn.ws.pong();
+            relayConn.ws.ping();
+            relayConn.ws.send(JSON.stringify(['REQ', 'keepalive', { limit: 0 }]));
           }
           break;
         }
