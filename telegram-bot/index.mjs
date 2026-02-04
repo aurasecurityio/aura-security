@@ -907,6 +907,19 @@ async function deepXAnalysis(profile, tweets, followers, following) {
     } catch (e) {}
   }
 
+  // === GITHUB STRENGTH CHECK (for age penalty override) ===
+  // Strong GitHub presence can offset "new account" concerns
+  const hasStrongGitHub = githubData && (
+    githubVerified ||  // Cross-verified = very strong
+    githubData.public_repos >= 5 ||  // Has real repos
+    githubData.followers >= 100  // Has GitHub following
+  );
+  const hasVeryStrongGitHub = githubData && (
+    githubVerified && githubData.public_repos >= 10 ||  // Cross-verified + active
+    githubData.followers >= 500 ||  // Significant GitHub presence
+    githubData.public_repos >= 20  // Very active developer
+  );
+
   // === SECURITY SCAN (if GitHub found) ===
   let securityScan = null;
   if (githubMatch) {
@@ -969,16 +982,43 @@ async function deepXAnalysis(profile, tweets, followers, following) {
   // Clamp score
   score = Math.max(0, Math.min(100, score));
 
-  // Cap score based on account age - new accounts can't get top scores
+  // Cap score based on account age - BUT allow GitHub to override
+  // Strong GitHub presence indicates legitimate builder, not scammer
   if (ageYears < 0.5) {
-    score = Math.min(score, 65);  // Max 65 for accounts < 6 months
-    if (!redFlags.includes('⚠️ Very new account')) {
-      redFlags.push('Score capped: Account too new for high trust');
+    if (hasVeryStrongGitHub) {
+      // Very strong GitHub = ignore age cap entirely
+      greenFlags.push('GitHub reputation overrides new account concern');
+    } else if (hasStrongGitHub) {
+      // Strong GitHub = softer cap (75 instead of 65)
+      score = Math.min(score, 75);
+      greenFlags.push('GitHub presence reduces age penalty');
+    } else {
+      // No GitHub = strict cap
+      score = Math.min(score, 65);
+      if (!redFlags.includes('⚠️ Very new account')) {
+        redFlags.push('Score capped: Account too new for high trust');
+      }
     }
   } else if (ageYears < 1) {
-    score = Math.min(score, 75);  // Max 75 for accounts < 1 year
+    if (!hasStrongGitHub) {
+      score = Math.min(score, 75);  // Max 75 for accounts < 1 year without GitHub
+    }
   } else if (ageYears < 2) {
     score = Math.min(score, 85);  // Max 85 for accounts < 2 years
+  }
+
+  // === MINIMUM FLOOR ===
+  // Don't give "HIGH RISK" rating just for being new
+  // Reserve sub-35 scores for accounts flagged in database or with major red flags
+  // (scam keywords, known rug associations, etc.)
+  const hasMajorRedFlags = redFlags.some(f =>
+    f.includes('FLAGGED') ||
+    f.includes('scam') ||
+    f.includes('SECRETS EXPOSED') ||
+    f.includes('MAJORITY BOT')
+  );
+  if (!hasMajorRedFlags && score < 35) {
+    score = 35;
   }
 
   // GOAT GATES - Must pass ALL to be GOAT
@@ -2386,53 +2426,96 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
             // Could add domain age check here later
           }
 
+          // === GITHUB STRENGTH (for penalty reduction) ===
+          const hasStrongGitHub = githubInfo && (
+            githubInfo.followers >= 100 ||
+            githubInfo.public_repos >= 5 ||
+            (githubInfo.twitter_username?.toLowerCase() === username.toLowerCase())  // cross-verified
+          );
+
           // === X PROFILE CHECKS ===
 
-          // Account age
+          // Account age - REDUCED penalty if strong GitHub
           if (ageYears >= 3) { score += 15; greenFlags.push(`${Math.floor(ageYears)}y old account`); }
-          else if (ageYears < 0.5) { score -= 20; redFlags.push(`⚠️ New account (${Math.floor(ageYears * 12)} months)`); }
+          else if (ageYears < 0.5) {
+            if (hasStrongGitHub) {
+              score -= 5;  // Much softer penalty with GitHub
+              redFlags.push(`⚠️ New account (${Math.floor(ageYears * 12)} months) - GitHub offsets concern`);
+            } else {
+              score -= 20;
+              redFlags.push(`⚠️ New account (${Math.floor(ageYears * 12)} months)`);
+            }
+          }
 
-          // Velocity checks
+          // Velocity checks - softer if GitHub present
           const tweetsPerDay = profile.tweets / ageDays;
           const followersPerDay = profile.followers / ageDays;
-          if (ageYears < 0.5 && tweetsPerDay > 10) { score -= 15; redFlags.push(`🤖 ${Math.round(tweetsPerDay)} tweets/day`); }
-          if (ageYears < 0.25 && followersPerDay > 50) { score -= 20; redFlags.push(`🚨 ${Math.round(followersPerDay)} followers/day growth`); }
+          if (ageYears < 0.5 && tweetsPerDay > 10) {
+            if (hasStrongGitHub) {
+              score -= 5;  // Active tweeting is fine for devs with GitHub
+            } else {
+              score -= 15;
+              redFlags.push(`🤖 ${Math.round(tweetsPerDay)} tweets/day`);
+            }
+          }
+          if (ageYears < 0.25 && followersPerDay > 50 && !hasStrongGitHub) {
+            score -= 20;
+            redFlags.push(`🚨 ${Math.round(followersPerDay)} followers/day growth`);
+          }
 
-          // Purchased verification
-          if (profile.verified && ageYears < 0.5) { score -= 15; redFlags.push(`💰 Paid verification on new account`); }
-          else if (profile.verified) { score += 5; greenFlags.push(`Verified`); }
+          // Purchased verification - softer if GitHub present
+          if (profile.verified && ageYears < 0.5) {
+            if (hasStrongGitHub) {
+              score -= 5;  // Verification + GitHub = probably legit startup
+              redFlags.push(`💰 Paid verification (GitHub offsets concern)`);
+            } else {
+              score -= 15;
+              redFlags.push(`💰 Paid verification on new account`);
+            }
+          } else if (profile.verified) { score += 5; greenFlags.push(`Verified`); }
 
           // Follower sanity
           if (profile.followers > 100000) { score += 10; greenFlags.push(`${formatNumber(profile.followers)} followers`); }
           else if (profile.followers < 100 && profile.tweets > 500) { score -= 10; redFlags.push(`Low followers despite high activity`); }
 
           // === STACKING PENALTY: Multiple red flags = likely scam ===
+          // BUT: Strong GitHub presence means they're likely a real builder
           const isNewAccount = ageYears < 0.5;
           const hasHighVelocity = tweetsPerDay > 10 || followersPerDay > 30;
           const hasPaidVerification = profile.verified && ageYears < 0.5;
           const isFlaggedInDb = dbReputation?.flagged || (dbReputation?.reputationScore && dbReputation.reputationScore < 30);
 
-          let scamSignals = 0;
-          if (isNewAccount) scamSignals++;
-          if (hasHighVelocity) scamSignals++;
-          if (hasPaidVerification) scamSignals++;
-          if (isFlaggedInDb) scamSignals++;
+          // Only apply stacking penalty if NO strong GitHub
+          if (!hasStrongGitHub) {
+            let scamSignals = 0;
+            if (isNewAccount) scamSignals++;
+            if (hasHighVelocity) scamSignals++;
+            if (hasPaidVerification) scamSignals++;
+            if (isFlaggedInDb) scamSignals++;
 
-          // Stack penalty: 3+ signals = almost certainly a scam
-          if (scamSignals >= 3) {
-            score -= 25;
-            redFlags.push(`🚨 SCAM PATTERN: ${scamSignals} red flags stacking`);
-          } else if (scamSignals >= 2 && isNewAccount) {
-            score -= 15;
-            redFlags.push(`⚠️ Multiple warning signs on new account`);
-          }
+            // Stack penalty: 3+ signals = almost certainly a scam
+            if (scamSignals >= 3) {
+              score -= 25;
+              redFlags.push(`🚨 SCAM PATTERN: ${scamSignals} red flags stacking`);
+            } else if (scamSignals >= 2 && isNewAccount) {
+              score -= 15;
+              redFlags.push(`⚠️ Multiple warning signs on new account`);
+            }
 
-          // Cap new accounts at max 50 unless they have strong green flags
-          if (isNewAccount && greenFlags.length < 2) {
-            score = Math.min(score, 50);
+            // Cap new accounts at max 50 unless they have strong green flags
+            if (isNewAccount && greenFlags.length < 2) {
+              score = Math.min(score, 50);
+            }
           }
 
           score = Math.max(0, Math.min(100, score));
+
+          // === MINIMUM FLOOR ===
+          // Don't give "LIKELY SCAM" just for being new - reserve that for actually flagged accounts
+          const hasMajorRedFlag = isFlaggedInDb || redFlags.some(f => f.includes('FLAGGED'));
+          if (!hasMajorRedFlag && score < 35) {
+            score = 35;
+          }
 
           // Format light result with degen-friendly verdicts
           let emoji, verdict;
@@ -3070,9 +3153,125 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         await sendMessage(chatId, `\u274C Report generation failed: ${err.message}`);
       }
     }
-    // Auto-detect URLs/usernames
+    // Auto-detect GitHub URLs - run scamcheck automatically
     else if (text.includes('github.com')) {
-      await sendMessage(chatId, `\u{1F4A1} Tip: Use /rugcheck with that URL:\n\n/rugcheck ${text}`);
+      // Extract GitHub URL from text
+      const githubMatch = text.match(/https?:\/\/github\.com\/[^\s]+/i);
+      const url = githubMatch ? githubMatch[0] : text;
+
+      console.log(`[AUTO-SCAN] Detected GitHub URL: ${url}`);
+      await sendMessage(chatId, `\u{1F50D} *Auto-scanning detected repo...*\n_Analyzing code safety, project trust, secrets..._`);
+
+      try {
+        const result = await withRetry(async () => {
+          const response = await fetch(`${AURA_API_URL}/tools`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(AURA_API_KEY ? { 'Authorization': `Bearer ${AURA_API_KEY}` } : {}) },
+            body: JSON.stringify({ tool: 'scam-scan', arguments: { gitUrl: url } })
+          });
+          if (!response.ok) throw new Error(`API error: ${response.status}`);
+          return response.json();
+        });
+
+        const scam = result.result || result;
+
+        // Handle rate limit / unavailable state
+        if (scam.trustUnavailable && scam.score === null) {
+          const repoDisplay = scam.owner ? `${scam.owner}/${scam.repoName}` : (scam.repoName || 'Unknown');
+          const scanText = `\u23F3 *Rate Limited \u2014 ${repoDisplay}*\n\n${scam.analysis || 'GitHub API rate limit reached. Try again in a few minutes.'}`;
+          await sendMessage(chatId, scanText);
+          return { statusCode: 200, body: 'OK' };
+        }
+
+        // Use unified fields if available
+        const hasUnified = scam.score !== undefined && scam.verdict;
+
+        let scanText;
+        if (hasUnified) {
+          // === UNIFIED CARD ===
+          const repoDisplay = scam.owner ? `${scam.owner}/${scam.repoName}` : (scam.repoName || 'Unknown');
+          const tagsText = (scam.tags || []).map(t => `\`${t}\``).join(' ');
+
+          // Code safety
+          const codeStatus = scam.codeSafety?.status || 'UNKNOWN';
+          const codeEmoji = codeStatus === 'CLEAN' ? '\u2705' : codeStatus === 'WARNING' ? '\u{1F7E1}' : '\u{1F6A8}';
+
+          // Trust
+          const trustStatus = scam.projectTrust?.status || 'UNKNOWN';
+          const trustEmoji = trustStatus === 'SAFU' ? '\u2705' : trustStatus === 'DYOR' ? '\u{1F7E1}' : '\u{1F7E0}';
+
+          // Secrets
+          const secretsEmoji = scam.secretsScan?.status === 'CLEAN' ? '\u2705' : '\u{1F6A8}';
+          const secretsText = scam.secretsScan?.status === 'CLEAN' ? 'Clean' : `${scam.secretsScan?.count || 0} leaked`;
+
+          scanText = `${scam.verdictEmoji || '\u{1F50D}'} *${scam.verdict} \u2014 ${repoDisplay}*\n`;
+          scanText += `*Score: ${scam.score}/100*\n`;
+          scanText += `${tagsText}\n\n`;
+
+          scanText += `${codeEmoji} *Code:* ${scam.codeSafety?.summary || 'N/A'}\n`;
+          scanText += `${trustEmoji} *Trust:* ${trustStatus} (${scam.projectTrust?.trustScore || 0}/100)\n`;
+          scanText += `${secretsEmoji} *Secrets:* ${secretsText}\n\n`;
+
+          // Red flags
+          const redFlags = (scam.redFlags || []).slice(0, 5);
+          if (redFlags.length > 0) {
+            scanText += `\u26A0\uFE0F *Red Flags:*\n`;
+            redFlags.forEach(f => { scanText += `\u2022 ${f}\n`; });
+            scanText += '\n';
+          }
+
+          // Green flags
+          const greenFlags = (scam.greenFlags || []).slice(0, 5);
+          if (greenFlags.length > 0) {
+            scanText += `\u2705 *Green Flags:*\n`;
+            greenFlags.forEach(f => { scanText += `\u2022 ${f}\n`; });
+            scanText += '\n';
+          }
+
+          // Analysis
+          if (scam.analysis) {
+            scanText += `\u{1F4AC} *Analysis:*\n${scam.analysis}\n`;
+          }
+        } else {
+          // === LEGACY FALLBACK ===
+          let emoji = '\u2705';
+          if (scam.isLikelyScam || scam.riskLevel === 'critical') {
+            emoji = '\u{1F6A8}';
+          } else if (scam.riskLevel === 'high') {
+            emoji = '\u26A0\uFE0F';
+          } else if (scam.riskLevel === 'medium') {
+            emoji = '\u{1F7E1}';
+          }
+
+          scanText = `${emoji} *Scam Check: ${scam.repoName || 'Unknown'}*\n\n`;
+          scanText += `*Scam Score:* ${scam.scamScore || 0}/100\n`;
+          scanText += `*Risk Level:* ${(scam.riskLevel || 'unknown').toUpperCase()}\n`;
+          scanText += `*Likely Scam:* ${scam.isLikelyScam ? '\u{1F6A8} YES' : '\u2705 NO'}\n\n`;
+
+          if (scam.summary) scanText += `*Summary:* ${scam.summary}\n\n`;
+
+          const redFlags = scam.redFlags || [];
+          if (redFlags.length > 0) {
+            scanText += `*Red Flags:*\n`;
+            redFlags.slice(0, 5).forEach(flag => { scanText += `\u274C ${flag}\n`; });
+            scanText += '\n';
+          }
+
+          const matches = scam.matches || [];
+          if (matches.length > 0) {
+            scanText += `*Scam Patterns:*\n`;
+            matches.slice(0, 3).forEach(m => {
+              scanText += `\u{1F6A9} *${m.signatureName}* (${m.severity})\n   ${m.description}\n`;
+            });
+            scanText += '\n';
+          }
+        }
+
+        await sendMessage(chatId, scanText);
+      } catch (err) {
+        console.error('Auto-scan error:', err);
+        await sendMessage(chatId, `\u274C Auto-scan failed: ${err.message}\n\n_Try /scamcheck ${url}_`);
+      }
     }
     // X URL DETECTION: Show confirmation button instead of auto-scanning (saves API costs)
     else if (text.match(/(?:https?:\/\/)?(?:x\.com|twitter\.com)\/([a-zA-Z0-9_]+)/i)) {
