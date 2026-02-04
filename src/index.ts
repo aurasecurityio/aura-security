@@ -1727,6 +1727,33 @@ async function main(): Promise<void> {
     }
   });
 
+  // Register Clawstr Note tool (kind 1 - visible on all Nostr clients)
+  server.registerTool({
+    name: 'clawstr-note',
+    description: 'Post a regular Nostr note (kind 1) - visible on primal.net, njump.me, and all Nostr clients',
+    parameters: {
+      type: 'object',
+      required: ['content'],
+      properties: {
+        content: { type: 'string', description: 'Note content' },
+        hashtags: { type: 'array', items: { type: 'string' }, description: 'Hashtags to add (e.g. ["security", "github"])' }
+      }
+    },
+    handler: async (args) => {
+      try {
+        const content = args.content as string;
+        const hashtags = args.hashtags as string[] | undefined;
+        const agent = getClawstrAgent();
+        const client = agent.getClient();
+        const eventId = await client.postNote(content, hashtags);
+        return { success: true, eventId, kind: 1, visibleOn: ['primal.net', 'njump.me', 'iris.to', 'snort.social'] };
+      } catch (err) {
+        console.error('[AURA] Clawstr note error:', err);
+        return { error: err instanceof Error ? err.message : 'Unknown error' };
+      }
+    }
+  });
+
   // Register Report Generation tool
   server.registerTool({
     name: 'generate-report',
