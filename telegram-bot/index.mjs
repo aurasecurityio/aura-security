@@ -114,6 +114,8 @@ const SHILL_KEYWORDS = ['bullish', 'moon', 'gem', 'alpha', 'nfa', 'dyor', 'lfg',
 const TECH_KEYWORDS = ['github', 'code', 'bug', 'fix', 'merge', 'pr', 'deploy', 'api', 'sdk', 'rust', 'typescript', 'python', 'solidity', 'smart contract', 'open source'];
 const DEV_BIO_KEYWORDS = ['engineer', 'developer', 'dev', 'founder', 'cto', 'building', 'builder', 'hacker', 'open source', 'maintainer'];
 const FAKE_BIO_KEYWORDS = ['dm for collab', 'promo', 'influencer', 'crypto enthusiast', 'investor', 'trader', 'calls'];
+// Crypto buzzword salad - trendy terms often used by scam projects to sound legit
+const BUZZWORD_SALAD = ['zk', 'zero knowledge', 'zkp', 'agentic', 'autonomous agent', 'ai agent', 'oracle', 'dispute resolution', 'modular', 'omnichain', 'cross-chain', 'restaking', 'liquid staking', 'intent', 'account abstraction', 'mev', 'sequencer', 'rollup', 'validium', 'data availability', 'eigen', 'babylon', 'celestia'];
 
 // Send message to Telegram (with optional inline keyboard)
 async function sendMessage(chatId, text, parseMode = 'Markdown', replyMarkup = null) {
@@ -485,13 +487,15 @@ function analyzeFollowerQuality(followers) {
 // Analyze tweets for patterns
 function analyzeTweets(tweets) {
   if (!tweets || tweets.length === 0) {
-    return { techPercent: 0, shillPercent: 0, scamPercent: 0, analysis: 'No tweets to analyze' };
+    return { techPercent: 0, shillPercent: 0, scamPercent: 0, buzzwordPercent: 0, analysis: 'No tweets to analyze' };
   }
 
   let techCount = 0;
   let shillCount = 0;
   let scamCount = 0;
+  let buzzwordCount = 0;
   let totalEngagement = 0;
+  let uniqueBuzzwords = new Set();
 
   for (const tweet of tweets) {
     const text = tweet.text.toLowerCase();
@@ -502,12 +506,20 @@ function analyzeTweets(tweets) {
     if (TECH_KEYWORDS.some(k => text.includes(k))) techCount++;
     if (SHILL_KEYWORDS.some(k => text.includes(k))) shillCount++;
     if (SCAM_KEYWORDS.some(k => text.includes(k))) scamCount++;
+
+    // Check for buzzword salad (trendy terms without substance)
+    const foundBuzzwords = BUZZWORD_SALAD.filter(k => text.includes(k));
+    if (foundBuzzwords.length > 0) {
+      buzzwordCount++;
+      foundBuzzwords.forEach(b => uniqueBuzzwords.add(b));
+    }
   }
 
   const total = tweets.length;
   const techPercent = Math.round((techCount / total) * 100);
   const shillPercent = Math.round((shillCount / total) * 100);
   const scamPercent = Math.round((scamCount / total) * 100);
+  const buzzwordPercent = Math.round((buzzwordCount / total) * 100);
   const avgEngagement = Math.round(totalEngagement / total);
 
   let analysis = '';
@@ -515,13 +527,15 @@ function analyzeTweets(tweets) {
     analysis = '🚨 SCAM KEYWORDS DETECTED';
   } else if (shillPercent > 40) {
     analysis = '⚠️ High promotional content';
+  } else if (buzzwordPercent > 30 && uniqueBuzzwords.size > 5) {
+    analysis = '⚠️ Buzzword salad detected';
   } else if (techPercent > 30) {
     analysis = '✅ Technical content creator';
   } else {
     analysis = 'Mixed content';
   }
 
-  return { techPercent, shillPercent, scamPercent, avgEngagement, analysis, totalTweets: total };
+  return { techPercent, shillPercent, scamPercent, buzzwordPercent, uniqueBuzzwords: uniqueBuzzwords.size, avgEngagement, analysis, totalTweets: total };
 }
 
 // Check following list for red flags
@@ -651,6 +665,38 @@ async function deepXAnalysis(profile, tweets, followers, following) {
     redFlags.push(`⚠️ Very new account (${Math.floor(ageYears * 12)} months)`);
   }
 
+  // === VELOCITY CHECKS (catch artificial growth) ===
+  const ageDays = Math.max(1, (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24));
+  const tweetsPerDay = profile.tweets / ageDays;
+  const followersPerDay = profile.followers / ageDays;
+
+  // Tweet velocity: >10 tweets/day sustained is bot-like behavior
+  if (tweetsPerDay > 15 && ageYears < 1) {
+    score -= 20;
+    redFlags.push(`🤖 Suspicious tweet velocity: ${Math.round(tweetsPerDay)} tweets/day`);
+  } else if (tweetsPerDay > 10 && ageYears < 0.5) {
+    score -= 15;
+    redFlags.push(`⚠️ High tweet volume for new account: ${Math.round(tweetsPerDay)}/day`);
+  }
+
+  // Follower velocity: rapid follower growth on new accounts is bought/botted
+  if (ageYears < 0.25 && followersPerDay > 50) {
+    score -= 25;
+    redFlags.push(`🚨 Artificial growth: ${Math.round(followersPerDay)} followers/day on new account`);
+  } else if (ageYears < 0.5 && followersPerDay > 30) {
+    score -= 15;
+    redFlags.push(`⚠️ Suspicious follower growth: ${Math.round(followersPerDay)}/day`);
+  }
+
+  // === PURCHASED VERIFICATION (verified + new account = red flag) ===
+  if (profile.verified && ageYears < 0.5) {
+    score -= 15;
+    redFlags.push(`💰 Purchased verification on new account`);
+  } else if (profile.verified && ageYears < 1 && profile.followers < 10000) {
+    score -= 10;
+    redFlags.push(`⚠️ Paid verification with low organic following`);
+  }
+
   // === FOLLOWER COUNT (Large following = legitimacy signal) ===
   if (isMegaAccount) {
     score += 20;
@@ -711,6 +757,16 @@ async function deepXAnalysis(profile, tweets, followers, following) {
   } else if (tweetAnalysis.techPercent > 20) {
     score += 8;
     greenFlags.push(`Technical content creator`);
+  }
+
+  // === BUZZWORD SALAD DETECTION ===
+  // New accounts using many trendy crypto terms without real substance = red flag
+  if (tweetAnalysis.buzzwordPercent > 30 && tweetAnalysis.uniqueBuzzwords > 5) {
+    score -= 20;
+    redFlags.push(`🎪 Buzzword salad: ${tweetAnalysis.uniqueBuzzwords} trendy terms (ZK, agentic, oracle, etc.)`);
+  } else if (tweetAnalysis.buzzwordPercent > 20 && tweetAnalysis.uniqueBuzzwords > 3 && ageYears < 0.5) {
+    score -= 15;
+    redFlags.push(`⚠️ New account heavy on crypto buzzwords`);
   }
 
   // === FOLLOWING ANALYSIS (less weight, more noise here) ===
@@ -1001,9 +1057,9 @@ function formatDeepXResult(analysis) {
 
   // Header
   if (tier === 'goat') {
-    msg += `🐐 *DEVCHECK: @${profile.username}* 🐐\n`;
+    msg += `🐐 *XCHECK: @${profile.username}* 🐐\n`;
   } else {
-    msg += `🔍 *DEVCHECK: @${profile.username}*\n`;
+    msg += `🔍 *XCHECK: @${profile.username}*\n`;
   }
   if (profile.name) msg += `_${profile.name}_\n`;
   msg += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
@@ -2245,6 +2301,223 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         }
       }
 
+      // Handle X Scan button - LIGHT SCAN (1 X API call + free lookups)
+      if (data.startsWith('xscan:')) {
+        const username = data.replace('xscan:', '');
+        await answerCallback(callbackId, `Quick check @${username}...`);
+
+        try {
+          // LIGHT SCAN: Only fetch profile (1 API call instead of 4)
+          const profile = await checkXProfile(username);
+
+          // Calculate basic metrics from profile only
+          const created = new Date(profile.createdAt);
+          const ageYears = (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24 * 365);
+          const ageDays = Math.max(1, (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24));
+          const ageText = ageYears >= 1 ? `${Math.floor(ageYears)}y` : `${Math.floor(ageYears * 12)}mo`;
+
+          // Quick red flags from profile alone
+          const redFlags = [];
+          const greenFlags = [];
+          let score = 50;
+          let extraInfo = [];
+
+          // === FREE LOOKUPS (no X API cost) ===
+
+          // 1. Check our database for X reputation
+          let dbReputation = null;
+          try {
+            const repResponse = await fetch(`${AURA_API_URL}/tools`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...(AURA_API_KEY ? { 'Authorization': `Bearer ${AURA_API_KEY}` } : {}) },
+              body: JSON.stringify({ tool: 'x-reputation', arguments: { username } })
+            });
+            if (repResponse.ok) {
+              const repData = await repResponse.json();
+              dbReputation = repData.result || repData;
+            }
+          } catch (e) { /* ignore */ }
+
+          if (dbReputation && dbReputation.totalScans > 0) {
+            extraInfo.push(`📊 *Database:* Scanned ${dbReputation.totalScans}x before`);
+            if (dbReputation.flagged) {
+              score -= 30;
+              redFlags.push(`🚨 FLAGGED IN DATABASE: ${dbReputation.flagReason || 'Known scammer'}`);
+            } else if (dbReputation.reputationScore < 30) {
+              score -= 15;
+              redFlags.push(`⚠️ Poor reputation in our database (${dbReputation.reputationScore}/100)`);
+            } else if (dbReputation.reputationScore > 70) {
+              score += 10;
+              greenFlags.push(`Good track record in our database`);
+            }
+          }
+
+          // 2. Check GitHub if mentioned in bio (FREE - 5000 req/hour)
+          let githubInfo = null;
+          const bio = profile.bio || '';
+          const website = profile.website || '';
+          const githubMatch = (bio + ' ' + website).match(/github\.com\/([a-zA-Z0-9_-]+)/i);
+
+          if (githubMatch) {
+            try {
+              const ghResponse = await fetch(`https://api.github.com/users/${githubMatch[1]}`, {
+                headers: { 'User-Agent': 'AuraSecurityBot/1.0', 'Accept': 'application/vnd.github.v3+json' }
+              });
+              if (ghResponse.ok) {
+                githubInfo = await ghResponse.json();
+                extraInfo.push(`💻 *GitHub:* [${githubInfo.login}](https://github.com/${githubInfo.login}) — ${githubInfo.public_repos} repos, ${githubInfo.followers} followers`);
+
+                if (githubInfo.followers > 1000) { score += 15; greenFlags.push(`Strong GitHub presence (${githubInfo.followers} followers)`); }
+                else if (githubInfo.followers > 100) { score += 10; greenFlags.push(`GitHub found with ${githubInfo.followers} followers`); }
+                else if (githubInfo.public_repos > 10) { score += 5; greenFlags.push(`GitHub: ${githubInfo.public_repos} repos`); }
+
+                // Check if GitHub links back to this X account (cross-verification)
+                if (githubInfo.twitter_username?.toLowerCase() === username.toLowerCase()) {
+                  score += 15;
+                  greenFlags.push(`✅ GitHub ↔ X cross-verified`);
+                }
+              }
+            } catch (e) { /* ignore */ }
+          }
+
+          // 3. Check website if present (FREE)
+          if (website && !website.includes('github.com')) {
+            extraInfo.push(`🌐 *Website:* ${website}`);
+            // Could add domain age check here later
+          }
+
+          // === X PROFILE CHECKS ===
+
+          // Account age
+          if (ageYears >= 3) { score += 15; greenFlags.push(`${Math.floor(ageYears)}y old account`); }
+          else if (ageYears < 0.5) { score -= 20; redFlags.push(`⚠️ New account (${Math.floor(ageYears * 12)} months)`); }
+
+          // Velocity checks
+          const tweetsPerDay = profile.tweets / ageDays;
+          const followersPerDay = profile.followers / ageDays;
+          if (ageYears < 0.5 && tweetsPerDay > 10) { score -= 15; redFlags.push(`🤖 ${Math.round(tweetsPerDay)} tweets/day`); }
+          if (ageYears < 0.25 && followersPerDay > 50) { score -= 20; redFlags.push(`🚨 ${Math.round(followersPerDay)} followers/day growth`); }
+
+          // Purchased verification
+          if (profile.verified && ageYears < 0.5) { score -= 15; redFlags.push(`💰 Paid verification on new account`); }
+          else if (profile.verified) { score += 5; greenFlags.push(`Verified`); }
+
+          // Follower sanity
+          if (profile.followers > 100000) { score += 10; greenFlags.push(`${formatNumber(profile.followers)} followers`); }
+          else if (profile.followers < 100 && profile.tweets > 500) { score -= 10; redFlags.push(`Low followers despite high activity`); }
+
+          // === STACKING PENALTY: Multiple red flags = likely scam ===
+          const isNewAccount = ageYears < 0.5;
+          const hasHighVelocity = tweetsPerDay > 10 || followersPerDay > 30;
+          const hasPaidVerification = profile.verified && ageYears < 0.5;
+          const isFlaggedInDb = dbReputation?.flagged || (dbReputation?.reputationScore && dbReputation.reputationScore < 30);
+
+          let scamSignals = 0;
+          if (isNewAccount) scamSignals++;
+          if (hasHighVelocity) scamSignals++;
+          if (hasPaidVerification) scamSignals++;
+          if (isFlaggedInDb) scamSignals++;
+
+          // Stack penalty: 3+ signals = almost certainly a scam
+          if (scamSignals >= 3) {
+            score -= 25;
+            redFlags.push(`🚨 SCAM PATTERN: ${scamSignals} red flags stacking`);
+          } else if (scamSignals >= 2 && isNewAccount) {
+            score -= 15;
+            redFlags.push(`⚠️ Multiple warning signs on new account`);
+          }
+
+          // Cap new accounts at max 50 unless they have strong green flags
+          if (isNewAccount && greenFlags.length < 2) {
+            score = Math.min(score, 50);
+          }
+
+          score = Math.max(0, Math.min(100, score));
+
+          // Format light result with degen-friendly verdicts
+          let emoji, verdict;
+          if (score >= 75) { emoji = '🟢'; verdict = 'LOOKS LEGIT'; }
+          else if (score >= 60) { emoji = '🟡'; verdict = 'PROCEED WITH CAUTION'; }
+          else if (score >= 40) { emoji = '🟠'; verdict = 'SKETCHY - DYOR'; }
+          else if (score >= 20) { emoji = '🔴'; verdict = 'HIGH RISK'; }
+          else { emoji = '🚨'; verdict = 'LIKELY SCAM'; }
+
+          let msg = `${emoji} *QUICK CHECK: @${profile.username}*\n`;
+          msg += `*${profile.name || profile.username}*\n\n`;
+          msg += `📊 *Score: ${score}/100* — ${verdict}\n\n`;
+          msg += `👤 ${ageText} old • ${formatNumber(profile.followers)} followers • ${formatNumber(profile.tweets)} tweets\n`;
+          if (profile.bio) {
+            const shortBio = profile.bio.length > 100 ? profile.bio.substring(0, 100) + '...' : profile.bio;
+            msg += `📝 _${shortBio.replace(/[*_`]/g, '')}_\n`;
+          }
+          msg += `\n`;
+
+          // Show extra info from free lookups (GitHub, database, website)
+          if (extraInfo.length > 0) {
+            extraInfo.forEach(info => { msg += `${info}\n`; });
+            msg += `\n`;
+          }
+
+          if (redFlags.length > 0) {
+            msg += `🚨 *Red Flags:*\n`;
+            redFlags.forEach(f => { msg += `• ${f}\n`; });
+            msg += `\n`;
+          }
+          if (greenFlags.length > 0) {
+            msg += `✅ *Good Signs:*\n`;
+            greenFlags.forEach(f => { msg += `• ${f}\n`; });
+          }
+
+          msg += `\n_Click Deep Scan for tweet analysis_`;
+
+          // Button for deep scan if they want more
+          const buttons = [
+            [{ text: '🔬 Deep Scan (full analysis)', callback_data: `xdeep:${username}` }]
+          ];
+
+          await sendMessage(chatId, msg, 'Markdown', { inline_keyboard: buttons });
+        } catch (err) {
+          console.error('X scan callback error:', err);
+          await sendMessage(chatId, `\u274C Error: ${err.message}`);
+        }
+        return { statusCode: 200, body: 'OK' };
+      }
+
+      // Handle DEEP X Scan button (2 API calls - profile + tweets only)
+      if (data.startsWith('xdeep:')) {
+        const username = data.replace('xdeep:', '');
+        await answerCallback(callbackId, `Deep scanning @${username}...`);
+
+        try {
+          const profile = await checkXProfile(username);
+          const userId = profile.id || await getUserId(username);
+
+          // Only fetch tweets - skip expensive follower/following sampling
+          const tweets = await getUserTweets(userId, 50);
+
+          // Pass empty arrays for followers/following - analysis handles gracefully
+          const analysis = await deepXAnalysis(profile, tweets, [], []);
+          const result = formatDeepXResult(analysis);
+
+          const buttons = [
+            [
+              { text: '\u{1F4CA} Social Stats', callback_data: `xsoc:${username}` },
+              { text: '\u{1F512} Security', callback_data: `xsec:${username}` }
+            ],
+            [
+              { text: '\u2139\uFE0F Help', callback_data: 'xhelp' },
+              { text: '\u{1F916} AI Analysis', callback_data: `ai_x:${username}` }
+            ]
+          ];
+
+          await sendMessage(chatId, result.text, 'Markdown', { inline_keyboard: buttons });
+        } catch (err) {
+          console.error('Deep X scan error:', err);
+          await sendMessage(chatId, `\u274C Error: ${err.message}`);
+        }
+        return { statusCode: 200, body: 'OK' };
+      }
+
       // Handle Social Stats button
       if (data.startsWith('xsoc:')) {
         const username = data.replace('xsoc:', '');
@@ -2444,7 +2717,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
 
       // Extract username from URL or handle
       const xUsername = extractXUsername(xInput);
-      await sendMessage(chatId, `🔍 *Running deep analysis on @${xUsername}...*\n\n_Checking: profile, followers, tweets, connections..._`);
+      await sendMessage(chatId, `🔍 *Running X analysis on @${xUsername}...*\n\n_Checking: profile, tweets, GitHub..._`);
 
       try {
         // Get basic profile first
@@ -2453,15 +2726,11 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         // Get user ID for further API calls
         const userId = profile.id || await getUserId(xUsername);
 
-        // Run deep analysis - fetch tweets, followers, following in parallel
-        const [tweets, followers, following] = await Promise.all([
-          getUserTweets(userId, 100),
-          sampleFollowers(userId, 50),
-          getUserFollowing(userId, 100)
-        ]);
+        // Reduced API calls - only fetch tweets (skip expensive follower/following)
+        const tweets = await getUserTweets(userId, 50);
 
-        // Run deep analysis
-        const analysis = await deepXAnalysis(profile, tweets, followers, following);
+        // Run analysis with empty followers/following (saves 2 API calls)
+        const analysis = await deepXAnalysis(profile, tweets, [], []);
 
         // Format compact result
         const result = formatDeepXResult(analysis);
@@ -2501,21 +2770,18 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         return { statusCode: 200, body: 'OK' };
       }
 
-      // Extract username and run deep analysis (same as /devcheck)
+      // Extract username and run analysis (same as /xcheck)
       const xUsername = extractXUsername(xInput);
-      await sendMessage(chatId, `🔍 *Running full dev audit on @${xUsername}...*\n\n_Checking: profile, followers, tweets, GitHub, security..._`);
+      await sendMessage(chatId, `🔍 *Running X analysis on @${xUsername}...*\n\n_Checking: profile, tweets, GitHub..._`);
 
       try {
         const profile = await checkXProfile(xUsername);
         const userId = profile.id || await getUserId(xUsername);
 
-        const [tweets, followers, following] = await Promise.all([
-          getUserTweets(userId, 100),
-          sampleFollowers(userId, 50),
-          getUserFollowing(userId, 100)
-        ]);
+        // Reduced API calls - only fetch tweets
+        const tweets = await getUserTweets(userId, 50);
 
-        const analysis = await deepXAnalysis(profile, tweets, followers, following);
+        const analysis = await deepXAnalysis(profile, tweets, [], []);
         const result = formatDeepXResult(analysis);
 
         // Same buttons as /devcheck
@@ -2808,9 +3074,33 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
     else if (text.includes('github.com')) {
       await sendMessage(chatId, `\u{1F4A1} Tip: Use /rugcheck with that URL:\n\n/rugcheck ${text}`);
     }
-    else if (text.startsWith('@') || text.match(/^[a-zA-Z_][a-zA-Z0-9_]{0,14}$/)) {
+    // X URL DETECTION: Show confirmation button instead of auto-scanning (saves API costs)
+    else if (text.match(/(?:https?:\/\/)?(?:x\.com|twitter\.com)\/([a-zA-Z0-9_]+)/i)) {
+      const xMatch = text.match(/(?:https?:\/\/)?(?:x\.com|twitter\.com)\/([a-zA-Z0-9_]+)/i);
+      const xUsername = xMatch[1];
+
+      // Skip reserved paths like /home, /explore, /search, /settings, /i/, /intent
+      const reservedPaths = ['home', 'explore', 'search', 'settings', 'notifications', 'messages', 'i', 'intent', 'hashtag', 'compose'];
+      if (reservedPaths.includes(xUsername.toLowerCase())) {
+        return { statusCode: 200, body: 'OK' };
+      }
+
+      console.log(`[X-DETECT] Detected X URL for @${xUsername}, showing scan button`);
+
+      // Show confirmation button instead of auto-scanning
+      const buttons = [
+        [{ text: `\u{1F50D} Scan @${xUsername}`, callback_data: `xscan:${xUsername}` }]
+      ];
+
+      await sendMessage(chatId, `\u{1F4A1} *X profile detected:* @${xUsername}\n_Click below to run security analysis_`, 'Markdown', { inline_keyboard: buttons });
+    }
+    // For standalone @username (message is ONLY the handle), show scan button
+    else if (text.match(/^@[a-zA-Z0-9_]{1,15}$/)) {
       const handle = text.replace('@', '');
-      await sendMessage(chatId, `\u{1F4A1} Want to check this account?\n\n/devcheck @${handle}`);
+      const buttons = [
+        [{ text: `🔍 Scan @${handle}`, callback_data: `xscan:${handle}` }]
+      ];
+      await sendMessage(chatId, `💡 *X profile detected:* @${handle}\n_Click below to check_`, 'Markdown', { inline_keyboard: buttons });
     }
 
     return { statusCode: 200, body: 'OK' };
