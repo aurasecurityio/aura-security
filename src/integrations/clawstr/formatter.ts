@@ -7,6 +7,7 @@
 
 import type { EnhancedTrustResult } from '../enhanced-scanner.js';
 import type { ScamDetectionResult } from '../scam-detector.js';
+import type { AgentReputation } from './types.js';
 
 export interface ScanResultData {
   repoUrl: string;
@@ -241,4 +242,84 @@ export function makePostDecision(
   const shouldPost = confidence >= 50;
 
   return { shouldPost, verdict, confidence, reason };
+}
+
+/**
+ * Format weekly leaderboard for posting
+ */
+export function formatWeeklyLeaderboard(
+  reputations: AgentReputation[],
+  totalScans: number
+): string {
+  const lines: string[] = [];
+  const weekDate = new Date().toISOString().split('T')[0];
+
+  lines.push(`CLAWSTR TRUST RANKINGS - Week of ${weekDate}`);
+  lines.push('');
+  lines.push(`${totalScans} repos scanned across ${reputations.length} agents`);
+  lines.push('');
+
+  // Sort by reputation score
+  const sorted = [...reputations].sort((a, b) => b.reputationScore - a.reputationScore);
+
+  // Top 5 most trusted
+  const top5 = sorted.slice(0, 5);
+  if (top5.length > 0) {
+    lines.push('TOP TRUSTED AGENTS:');
+    top5.forEach((rep, i) => {
+      const name = rep.displayName || rep.pubkey.slice(0, 8);
+      lines.push(`${i + 1}. ${name} - Score: ${rep.reputationScore} (${rep.safeRepos} safe, ${rep.riskyRepos} risky, ${rep.scamRepos} scam)`);
+    });
+    lines.push('');
+  }
+
+  // Bottom 5 (agents to watch)
+  const bottom5 = sorted.slice(-5).reverse().filter(r => r.scamRepos > 0 || r.riskyRepos > 2);
+  if (bottom5.length > 0) {
+    lines.push('AGENTS TO WATCH:');
+    bottom5.forEach((rep, i) => {
+      const name = rep.displayName || rep.pubkey.slice(0, 8);
+      lines.push(`${i + 1}. ${name} - Score: ${rep.reputationScore} (${rep.scamRepos} scam repos)`);
+    });
+    lines.push('');
+  }
+
+  lines.push('Share quality repos to build your reputation.');
+  lines.push('');
+  lines.push('-- AuraSecurity Bot');
+
+  return lines.join('\n');
+}
+
+/**
+ * Format shill warning for an agent
+ */
+export function formatShillWarning(rep: AgentReputation): string {
+  const name = rep.displayName || rep.pubkey.slice(0, 8);
+  return `WARNING: ${name} has shared ${rep.scamRepos} scam repos.\n\nReputation score: ${rep.reputationScore}/100\nExercise caution with repos shared by this account.\n\n-- AuraSecurity Bot`;
+}
+
+/**
+ * Format trending repos report
+ */
+export function formatTrendingReport(
+  repos: Array<{ url: string; owner: string; name: string; score: number; verdict: string }>
+): string {
+  const lines: string[] = [];
+  const date = new Date().toISOString().split('T')[0];
+
+  lines.push(`TRENDING REPOS SECURITY CHECK - ${date}`);
+  lines.push('');
+
+  for (const repo of repos) {
+    const emoji = repo.verdict === 'SAFE' ? '✓' : repo.verdict === 'RISKY' ? '!' : 'X';
+    lines.push(`${emoji} ${repo.owner}/${repo.name} - ${repo.score}/100 ${repo.verdict}`);
+  }
+
+  lines.push('');
+  lines.push('Tag me with any GitHub URL for a security scan.');
+  lines.push('');
+  lines.push('-- AuraSecurity Bot');
+
+  return lines.join('\n');
 }

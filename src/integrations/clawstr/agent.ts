@@ -15,11 +15,13 @@ import {
   formatScanError,
   formatMentionResponse,
   formatMentionNoUrl,
+  formatWeeklyLeaderboard,
+  formatShillWarning,
   makePostDecision,
   type ScanResultData,
 } from './formatter.js';
-import type { ClawstrAgentConfig } from './types.js';
-import { DEFAULT_CONFIG } from './types.js';
+import type { ClawstrAgentConfig, AgentReputation, RepoScanRecord } from './types.js';
+import { DEFAULT_CONFIG, calculateReputationScore } from './types.js';
 
 // Import shared scanners (same as Moltbook) - using functions, not classes
 import { performEnhancedTrustScan, type EnhancedTrustResult } from '../enhanced-scanner.js';
@@ -42,6 +44,12 @@ export interface ClawstrAgentStatus {
     repliesCreated: number;
     errorsCount: number;
   };
+  reputation: {
+    trackedAgents: number;
+    totalRepoScans: number;
+    shillWarningQueue: number;
+    lastLeaderboardPost: string | null;
+  };
 }
 
 export class ClawstrAgent {
@@ -59,6 +67,12 @@ export class ClawstrAgent {
 
   // Track posts we've commented on (for threading)
   private commentedPosts: Map<string, string> = new Map(); // repoUrl -> postId
+
+  // Agent reputation tracking
+  private agentReputations: Map<string, AgentReputation> = new Map();
+  private shillWarningQueue: Set<string> = new Set(); // pubkeys pending warning
+  private lastLeaderboardPost: number = 0;
+  private leaderboardTimer?: ReturnType<typeof setInterval>;
 
   constructor(config?: Partial<ClawstrAgentConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -103,6 +117,11 @@ export class ClawstrAgent {
       // Start monitoring
       this.monitor.start();
 
+      // Start weekly leaderboard timer (check every 6 hours)
+      this.leaderboardTimer = setInterval(() => {
+        this.checkWeeklyLeaderboard();
+      }, 6 * 60 * 60 * 1000);
+
       console.log('[CLAWSTR-AGENT] Started successfully');
       console.log(`[CLAWSTR-AGENT] Monitoring subclaws: ${this.config.subclaws.join(', ')}`);
     } catch (error: any) {
@@ -117,6 +136,10 @@ export class ClawstrAgent {
     console.log('[CLAWSTR-AGENT] Stopping...');
     this.monitor.stop();
     this.client.disconnect();
+    if (this.leaderboardTimer) {
+      clearInterval(this.leaderboardTimer);
+      this.leaderboardTimer = undefined;
+    }
     console.log('[CLAWSTR-AGENT] Stopped');
   }
 
@@ -174,6 +197,19 @@ export class ClawstrAgent {
         const entries = Array.from(this.commentedPosts.entries());
         entries.slice(0, 250).forEach(([url]) => this.commentedPosts.delete(url));
       }
+
+      // Record for reputation tracking
+      const score = trustResult?.trustScore ?? 50;
+      this.recordScanForReputation(
+        request.authorPubkey,
+        request.repoUrl,
+        decision.verdict,
+        score,
+        request.authorName
+      );
+
+      // Check for shill warning
+      await this.checkShillWarning(request.authorPubkey, request.postId);
 
       this.stats.totalScans++;
       this.stats.repliesCreated++;
@@ -242,6 +278,16 @@ export class ClawstrAgent {
       );
 
       await this.client.replyToPost(request.postId, request.authorPubkey, content);
+
+      // Record for reputation tracking
+      const score = trustResult?.trustScore ?? 50;
+      this.recordScanForReputation(
+        request.authorPubkey,
+        request.repoUrl,
+        decision.verdict,
+        score,
+        request.authorName
+      );
 
       this.stats.totalScans++;
       this.stats.repliesCreated++;
@@ -329,6 +375,9 @@ export class ClawstrAgent {
    * Get agent status
    */
   getStatus(): ClawstrAgentStatus {
+    const reputations = Array.from(this.agentReputations.values());
+    const totalRepoScans = reputations.reduce((sum, r) => sum + r.totalScans, 0);
+
     return {
       enabled: this.config.enabled,
       connected: this.client.isConnected(),
@@ -336,6 +385,12 @@ export class ClawstrAgent {
       connectedRelays: this.client.getConnectedRelays(),
       monitorStatus: this.monitor.getStatus(),
       stats: { ...this.stats },
+      reputation: {
+        trackedAgents: this.agentReputations.size,
+        totalRepoScans,
+        shillWarningQueue: this.shillWarningQueue.size,
+        lastLeaderboardPost: this.lastLeaderboardPost ? new Date(this.lastLeaderboardPost).toISOString() : null,
+      },
     };
   }
 
@@ -344,5 +399,163 @@ export class ClawstrAgent {
    */
   getClient(): ClawstrClient {
     return this.client;
+  }
+
+  // === Agent Reputation System ===
+
+  /**
+   * Record a scan result for reputation tracking
+   */
+  private recordScanForReputation(
+    pubkey: string,
+    repoUrl: string,
+    verdict: string,
+    score: number,
+    displayName?: string
+  ): void {
+    let rep = this.agentReputations.get(pubkey);
+
+    if (!rep) {
+      rep = {
+        pubkey,
+        displayName,
+        repoScans: [],
+        safeRepos: 0,
+        riskyRepos: 0,
+        scamRepos: 0,
+        totalScans: 0,
+        reputationScore: 50,
+        lastUpdated: Date.now(),
+      };
+      this.agentReputations.set(pubkey, rep);
+    }
+
+    // Update display name if provided
+    if (displayName) {
+      rep.displayName = displayName;
+    }
+
+    // Add scan record
+    const record: RepoScanRecord = {
+      repoUrl,
+      verdict,
+      score,
+      scannedAt: Date.now(),
+    };
+
+    rep.repoScans.push(record);
+
+    // Cap at 100 records
+    if (rep.repoScans.length > 100) {
+      rep.repoScans = rep.repoScans.slice(-100);
+    }
+
+    // Update counts
+    if (verdict === 'SAFE' || score >= 70) {
+      rep.safeRepos++;
+    } else if (verdict === 'SCAM' || score < 35) {
+      rep.scamRepos++;
+    } else {
+      rep.riskyRepos++;
+    }
+
+    rep.totalScans++;
+    rep.lastUpdated = Date.now();
+
+    // Recalculate reputation score
+    rep.reputationScore = calculateReputationScore(rep);
+
+    // Check for shill warning threshold
+    if (rep.scamRepos >= 3 && rep.reputationScore < 30) {
+      this.shillWarningQueue.add(pubkey);
+      console.log(`[CLAWSTR-AGENT] Added ${pubkey.slice(0, 8)} to shill warning queue`);
+    }
+
+    console.log(`[CLAWSTR-AGENT] Reputation updated for ${pubkey.slice(0, 8)}: score=${rep.reputationScore}, safe=${rep.safeRepos}, risky=${rep.riskyRepos}, scam=${rep.scamRepos}`);
+  }
+
+  /**
+   * Check if weekly leaderboard should be posted
+   */
+  private async checkWeeklyLeaderboard(): Promise<void> {
+    const now = Date.now();
+    const oneWeek = 7 * 24 * 60 * 60 * 1000;
+
+    // Check if a week has passed since last post
+    if (now - this.lastLeaderboardPost < oneWeek) {
+      return;
+    }
+
+    // Need at least 5 agents with scans to post
+    if (this.agentReputations.size < 5) {
+      console.log('[CLAWSTR-AGENT] Not enough agents for leaderboard yet');
+      return;
+    }
+
+    await this.postLeaderboard();
+  }
+
+  /**
+   * Post the weekly leaderboard
+   */
+  async postLeaderboard(): Promise<string | null> {
+    try {
+      const reputations = Array.from(this.agentReputations.values());
+      const totalScans = reputations.reduce((sum, r) => sum + r.totalScans, 0);
+
+      const content = formatWeeklyLeaderboard(reputations, totalScans);
+
+      // Post to /c/builds
+      const eventId = await this.client.postToSubclaw('/c/builds', content);
+
+      this.lastLeaderboardPost = Date.now();
+      this.stats.postsCreated++;
+
+      console.log(`[CLAWSTR-AGENT] Posted weekly leaderboard: ${eventId.slice(0, 8)}`);
+
+      return eventId;
+    } catch (error: any) {
+      console.error('[CLAWSTR-AGENT] Failed to post leaderboard:', error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Get agent reputation by pubkey
+   */
+  getAgentReputation(pubkey: string): AgentReputation | null {
+    return this.agentReputations.get(pubkey) || null;
+  }
+
+  /**
+   * Get all reputations (for external access)
+   */
+  getAllReputations(): AgentReputation[] {
+    return Array.from(this.agentReputations.values());
+  }
+
+  /**
+   * Post shill warning if agent is in queue
+   */
+  private async checkShillWarning(pubkey: string, postId: string): Promise<void> {
+    if (!this.shillWarningQueue.has(pubkey)) {
+      return;
+    }
+
+    const rep = this.agentReputations.get(pubkey);
+    if (!rep) return;
+
+    try {
+      const warning = formatShillWarning(rep);
+      await this.client.replyToPost(postId, pubkey, warning);
+
+      // Remove from queue (only warn once)
+      this.shillWarningQueue.delete(pubkey);
+      this.stats.repliesCreated++;
+
+      console.log(`[CLAWSTR-AGENT] Posted shill warning for ${pubkey.slice(0, 8)}`);
+    } catch (error: any) {
+      console.error('[CLAWSTR-AGENT] Failed to post shill warning:', error.message);
+    }
   }
 }

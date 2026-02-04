@@ -1754,6 +1754,81 @@ async function main(): Promise<void> {
     }
   });
 
+  // Clawstr Leaderboard tool
+  server.registerTool({
+    name: 'clawstr-leaderboard',
+    description: 'Post the weekly agent reputation leaderboard to Clawstr',
+    parameters: {
+      type: 'object',
+      properties: {}
+    },
+    handler: async () => {
+      try {
+        const agent = getClawstrAgent();
+        const eventId = await agent.postLeaderboard();
+        if (eventId) {
+          return { success: true, eventId, message: 'Leaderboard posted to /c/builds' };
+        }
+        return { success: false, message: 'Failed to post leaderboard' };
+      } catch (err) {
+        console.error('[AURA] Clawstr leaderboard error:', err);
+        return { error: err instanceof Error ? err.message : 'Unknown error' };
+      }
+    }
+  });
+
+  // Clawstr Agent Reputation tool
+  server.registerTool({
+    name: 'clawstr-reputation',
+    description: 'Get reputation score for a Clawstr agent by pubkey',
+    parameters: {
+      type: 'object',
+      properties: {
+        pubkey: { type: 'string', description: 'Nostr pubkey (hex format)' }
+      }
+    },
+    handler: async (args) => {
+      try {
+        const agent = getClawstrAgent();
+        const pubkey = args.pubkey as string | undefined;
+
+        if (pubkey) {
+          const rep = agent.getAgentReputation(pubkey);
+          if (rep) {
+            return {
+              pubkey: rep.pubkey,
+              displayName: rep.displayName,
+              reputationScore: rep.reputationScore,
+              safeRepos: rep.safeRepos,
+              riskyRepos: rep.riskyRepos,
+              scamRepos: rep.scamRepos,
+              totalScans: rep.totalScans,
+              lastUpdated: new Date(rep.lastUpdated).toISOString()
+            };
+          }
+          return { error: 'Agent not found' };
+        }
+
+        // Return all reputations if no pubkey specified
+        const all = agent.getAllReputations();
+        return {
+          totalAgents: all.length,
+          agents: all.map(r => ({
+            pubkey: r.pubkey.slice(0, 16) + '...',
+            displayName: r.displayName,
+            score: r.reputationScore,
+            safe: r.safeRepos,
+            risky: r.riskyRepos,
+            scam: r.scamRepos
+          }))
+        };
+      } catch (err) {
+        console.error('[AURA] Clawstr reputation error:', err);
+        return { error: err instanceof Error ? err.message : 'Unknown error' };
+      }
+    }
+  });
+
   // Register Report Generation tool
   server.registerTool({
     name: 'generate-report',

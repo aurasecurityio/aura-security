@@ -176,3 +176,41 @@ export function isAIAgentPost(tags: string[][]): boolean {
   }
   return false;
 }
+
+// === Agent Reputation System ===
+
+export interface RepoScanRecord {
+  repoUrl: string;
+  verdict: string;
+  score: number;
+  scannedAt: number;
+}
+
+export interface AgentReputation {
+  pubkey: string;
+  displayName?: string;
+  repoScans: RepoScanRecord[];  // capped at 100 most recent
+  safeRepos: number;            // verdict SAFE or score >= 70
+  riskyRepos: number;           // verdict RISKY or score 35-69
+  scamRepos: number;            // verdict SCAM or score < 35
+  totalScans: number;
+  reputationScore: number;      // 0-100
+  lastUpdated: number;
+}
+
+/**
+ * Calculate reputation score from scan history
+ * Formula:
+ * - Base: 50
+ * - +3 per safe repo (max +30)
+ * - -5 per risky repo
+ * - -15 per scam repo
+ * - Clamped to [0, 100]
+ */
+export function calculateReputationScore(rep: AgentReputation): number {
+  let score = 50;
+  score += Math.min(30, rep.safeRepos * 3);
+  score -= rep.riskyRepos * 5;
+  score -= rep.scamRepos * 15;
+  return Math.max(0, Math.min(100, score));
+}

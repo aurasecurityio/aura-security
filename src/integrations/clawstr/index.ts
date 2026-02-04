@@ -23,6 +23,9 @@ export {
   formatScanError,
   formatMentionResponse,
   formatMentionNoUrl,
+  formatWeeklyLeaderboard,
+  formatShillWarning,
+  formatTrendingReport,
   makePostDecision,
   type ScanResultData,
   type PostDecision,
@@ -50,12 +53,15 @@ export {
   type ClawstrAgentConfig,
   type CommentTags,
   type Subclaw,
+  type AgentReputation,
+  type RepoScanRecord,
   EVENT_KINDS,
   DEFAULT_CONFIG,
   GITHUB_URL_REGEX,
   extractGitHubUrls,
   getSubclawFromTags,
   isAIAgentPost,
+  calculateReputationScore,
 } from './types.js';
 
 /**
