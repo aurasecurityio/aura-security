@@ -140,9 +140,9 @@ export async function probeWebsite(targetUrl: string): Promise<ProbeResult> {
     targetUrl = 'https://' + targetUrl;
   }
 
-  // The function code to run in Browserless
+  // The function code to run in Browserless (ESM format for v2 API)
   const functionCode = `
-    module.exports = async ({ page }) => {
+    export default async ({ page }) => {
       const networkRequests = [];
       const wsConnections = [];
       let loadTime = 0;
