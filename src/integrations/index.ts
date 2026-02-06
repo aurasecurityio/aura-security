@@ -80,3 +80,7 @@ export type {
   ScanRequest as ClawstrScanRequest,
   MentionRequest as ClawstrMentionRequest,
 } from './clawstr/index.js';
+
+// Website Probe - Detect static vs active sites (rug detection)
+export { probeWebsite, formatProbeResult } from './website-probe.js';
+export type { ProbeResult, NetworkRequest } from './website-probe.js';

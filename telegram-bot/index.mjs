@@ -2711,6 +2711,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         `\u2022 Honeypot code detection\n\n` +
         `\u{1F527} *ADVANCED TOOLS:*\n\n` +
         `/scan <url> - Deep security scan (secrets, vulns)\n` +
+        `/probe <url> - Website activity probe (rug detection)\n` +
         `/devcheck <@user> - Verify dev identity + GitHub\n` +
         `/xcheck <@user> - X profile bot detection\n` +
         `/trustagent <name> - Moltbook agent reputation\n\n` +
@@ -3151,6 +3152,78 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
       } catch (err) {
         console.error('Report generation error:', err);
         await sendMessage(chatId, `\u274C Report generation failed: ${err.message}`);
+      }
+    }
+    // /probe command - Detect if website has real backend activity
+    else if (text.startsWith('/probe')) {
+      const targetUrl = text.replace(/^\/probe(@[a-zA-Z0-9_]+)?/i, '').trim();
+      if (!targetUrl) {
+        await sendMessage(chatId, `❌ Please provide a website URL.\n\n*Example:*\n/probe https://example.com\n\n_Probes a website to detect if it has real backend activity or is just a static landing page._`);
+        return { statusCode: 200, body: 'OK' };
+      }
+
+      await sendMessage(chatId, `🔍 *Probing website...*\n\`${targetUrl}\`\n\n_Intercepting network traffic, detecting API calls, WebSockets..._`);
+
+      try {
+        const result = await withRetry(async () => {
+          const response = await fetch(`${AURA_API_URL}/tools`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(AURA_API_KEY ? { 'Authorization': `Bearer ${AURA_API_KEY}` } : {}) },
+            body: JSON.stringify({ tool: 'probe', arguments: { url: targetUrl } })
+          });
+          if (!response.ok) throw new Error(`API error: ${response.status}`);
+          return response.json();
+        });
+
+        const probe = result.result || result;
+
+        if (!probe.success) {
+          await sendMessage(chatId, `❌ *Probe Failed*\n\n${probe.error || 'Unknown error'}`);
+          return { statusCode: 200, body: 'OK' };
+        }
+
+        // Format verdict
+        const verdictEmoji = probe.verdict === 'ACTIVE' ? '✅' :
+                            probe.verdict === 'STATIC' ? '⚠️' :
+                            probe.verdict === 'SUSPICIOUS' ? '🟡' : '❌';
+
+        const riskEmoji = probe.riskLevel === 'LOW' ? '🟢' :
+                          probe.riskLevel === 'MEDIUM' ? '🟡' : '🔴';
+
+        let msg = `${verdictEmoji} *PROBE RESULT*\n\n`;
+        msg += `*URL:* \`${probe.url}\`\n\n`;
+
+        // Network Analysis
+        msg += `📊 *Network Analysis*\n`;
+        msg += `├ Total Requests: ${probe.totalRequests}\n`;
+        msg += `├ API Calls: ${probe.apiCalls?.length || 0} ${probe.hasApiActivity ? '✓' : '✗'}\n`;
+        msg += `├ WebSocket: ${probe.webSocketConnections?.length > 0 ? probe.webSocketConnections.length + ' ✓' : 'None ✗'}\n`;
+        msg += `└ External APIs: ${probe.externalApis?.length > 0 ? probe.externalApis.join(', ') : 'None'}\n\n`;
+
+        // Tech Stack
+        if ((probe.frameworks?.length > 0) || probe.hosting !== 'Unknown') {
+          msg += `🔧 *Tech Stack*\n`;
+          if (probe.frameworks?.length > 0) {
+            msg += `├ Frameworks: ${probe.frameworks.join(', ')}\n`;
+          }
+          msg += `└ Hosting: ${probe.hosting}\n\n`;
+        }
+
+        // Timing
+        msg += `⏱ Load: ${(probe.loadTime / 1000).toFixed(1)}s | Probe: ${(probe.probeTime / 1000).toFixed(1)}s\n\n`;
+
+        // Verdict
+        msg += `${riskEmoji} *VERDICT: ${probe.verdict}*\n`;
+        msg += `${probe.verdictReason}\n`;
+
+        if (probe.verdict === 'STATIC') {
+          msg += `\n⚠️ *Warning:* No backend activity detected. This may be a static landing page with no real product.`;
+        }
+
+        await sendMessage(chatId, msg);
+      } catch (err) {
+        console.error('Probe error:', err);
+        await sendMessage(chatId, `❌ Probe failed: ${err.message}`);
       }
     }
     // Auto-detect GitHub URLs - run scamcheck automatically

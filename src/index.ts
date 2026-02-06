@@ -60,6 +60,7 @@ import {
   getXAccountReputation
 } from './integrations/rug-database.js';
 import { performEnhancedTrustScan } from './integrations/enhanced-scanner.js';
+import { probeWebsite, formatProbeResult } from './integrations/website-probe.js';
 import { MoltbookAgent as MoltbookAgentRunner } from './integrations/moltbook/agent.js';
 import { ClawstrAgent } from './integrations/clawstr/agent.js';
 import { generateReport, type ReportData, type ReportFormat } from './reporting/index.js';
@@ -2237,6 +2238,41 @@ async function main(): Promise<void> {
     }
   });
 
+  // Website Probe - Detect static vs active sites (rug detection)
+  server.registerTool({
+    name: 'probe',
+    description: 'Probe a website to detect if it has real backend activity or is just a static landing page (rug detection)',
+    parameters: {
+      type: 'object',
+      required: ['url'],
+      properties: {
+        url: { type: 'string', description: 'Website URL to probe (e.g., https://example.com)' }
+      }
+    },
+    handler: async (args) => {
+      try {
+        const url = args.url as string;
+        console.log(`[AURA] Probing website: ${url}`);
+
+        const result = await probeWebsite(url);
+
+        console.log(`[AURA] Probe complete: ${result.verdict} (${result.apiCalls.length} API calls, ${result.webSocketConnections.length} WebSocket)`);
+
+        return {
+          ...result,
+          formatted: formatProbeResult(result)
+        };
+      } catch (err) {
+        console.error('[AURA] Probe error:', err);
+        return {
+          error: err instanceof Error ? err.message : 'Unknown error',
+          verdict: 'ERROR',
+          riskLevel: 'HIGH'
+        };
+      }
+    }
+  });
+
   // Start HTTP server
   await server.start();
   console.log(`[AURA] Auditor listening on http://127.0.0.1:${PORT}`);
@@ -2405,3 +2441,7 @@ export type { RugReport, DevReputation } from './integrations/index.js';
 // Enhanced Scanner exports (trust scan + rug database intelligence)
 export { performEnhancedTrustScan, quickRugDbCheck } from './integrations/index.js';
 export type { EnhancedTrustResult } from './integrations/index.js';
+
+// Website Probe exports (detect static vs active sites)
+export { probeWebsite, formatProbeResult } from './integrations/index.js';
+export type { ProbeResult, NetworkRequest } from './integrations/index.js';
