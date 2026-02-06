@@ -2685,6 +2685,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         `\u{1F534} /scamcheck <url> - Detect rug pull patterns\n\n` +
         `\u{1F527} *More Tools:*\n` +
         `/scan <url> - Deep security scan\n` +
+        `/probe <url> - Website activity check (rug detection)\n` +
         `/devcheck <@user> - Verify developer identity\n` +
         `/xcheck <@user> - X profile analysis\n\n` +
         `\u{1F4DD} *Quick Start:*\n` +
