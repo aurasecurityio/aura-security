@@ -392,7 +392,6 @@ interface ContentContext {
  */
 function getContentContext(content: string, matchIndex: number): ContentContext {
   const beforeMatch = content.slice(0, matchIndex);
-  const lines = beforeMatch.split('\n');
   const currentLineStart = beforeMatch.lastIndexOf('\n') + 1;
   const lineEnd = content.indexOf('\n', matchIndex);
   const currentLine = content.slice(currentLineStart, lineEnd === -1 ? undefined : lineEnd);
@@ -404,18 +403,35 @@ function getContentContext(content: string, matchIndex: number): ContentContext 
   // Check if in markdown list describing threats (documentation context)
   const docPatterns = [
     /^\s*[-*]\s+/,              // Markdown list item
-    /^\s*\d+\.\s+/,             // Numbered list
+    /^\s*\d+\.\s+/,             // Numbered list (e.g., "1. Known C2 IPs...")
     /^#+\s+/,                   // Heading
-    /known.*malicious/i,       // "Known malicious..."
-    /detects?.*for/i,          // "Detects for..."
-    /scans?\s+for/i,           // "Scans for..."
-    /checks?\s+for/i,          // "Checks for..."
-    /threats?.*include/i,      // "Threats include..."
-    /indicators?\s+of/i,       // "Indicators of..."
-    /ioc|c2|command.and.control/i, // IOC documentation
   ];
 
-  const inDocumentation = docPatterns.some(p => p.test(currentLine));
+  // Content patterns that indicate this is documentation about threats, not actual threats
+  const threatDocPatterns = [
+    /known.*malicious/i,       // "Known malicious..."
+    /detects?/i,               // "Detects..."
+    /scans?\s*(for)?/i,        // "Scans for..."
+    /checks?\s*(for)?/i,       // "Checks for..."
+    /monitors?\s*(for)?/i,     // "Monitors for..."
+    /threats?/i,               // "Threats..."
+    /indicators?\s+of/i,       // "Indicators of..."
+    /ioc|c2|command.and.control/i, // IOC documentation
+    /security.*scan/i,         // "Security scan..."
+    /backdoors?/i,             // "Backdoors..." (documenting, not implementing)
+    /exfiltration/i,           // "Exfiltration..." (documenting)
+    /credential.*theft/i,      // "Credential theft..." (documenting)
+    /targeting/i,              // "targeting..." (documenting what to look for)
+    /stealer/i,                // "stealer" (documenting malware types)
+    /markers?/i,               // "markers" (documenting detection)
+    /endpoints?.*\(/i,         // "endpoints (..." (listing examples)
+  ];
+
+  const isListItem = docPatterns.some(p => p.test(currentLine));
+  const isThreatDoc = threatDocPatterns.some(p => p.test(currentLine));
+
+  // Consider it documentation if it's a list item OR contains threat documentation language
+  const inDocumentation = isListItem || isThreatDoc;
 
   return {
     inCodeBlock,
@@ -712,21 +728,19 @@ function scanForMalware(files: Map<string, string>): MalwareMatch[] {
         if (isMarkdown) {
           const context = getContentContext(content, match.index);
 
-          // If in documentation context (not code block), reduce severity significantly
+          // If in documentation context (not code block), skip or reduce severity
           if (context.inDocumentation && !context.inCodeBlock) {
-            // Skip entirely if it looks like threat documentation
-            if (/threat|ioc|indicator|detect|scan|check|known|malicious/i.test(context.lineContext)) {
-              skip = true;
-            } else {
-              // Reduce severity for non-code matches
-              severity = severity === 'CRITICAL' ? 'LOW' :
-                        severity === 'HIGH' ? 'LOW' :
-                        'LOW';
-            }
+            // Skip entirely - documentation describing threats is not a threat
+            skip = true;
+          } else if (!context.inCodeBlock) {
+            // Not in code block and not explicitly documentation - reduce severity
+            // This catches general markdown text that might mention patterns
+            severity = severity === 'CRITICAL' ? 'MEDIUM' :
+                      severity === 'HIGH' ? 'LOW' :
+                      'LOW';
           }
-
           // If in a code block within markdown, keep original severity
-          // (this is actual code being documented)
+          // (this is actual code being documented/shown)
         }
 
         if (!skip) {
@@ -764,14 +778,14 @@ function scanForPromptInjection(files: Map<string, string>): PromptInjectionRisk
         if (isMarkdown) {
           const context = getContentContext(content, match.index);
 
-          // Skip HTML comments that are legitimate OpenClaw metadata
-          if (patternDef.pattern.source.includes('<!--') && match[0].includes('requires')) {
+          // Skip HTML comments that are legitimate OpenClaw/MCP metadata
+          if (match[0].startsWith('<!--') && /requires|config|metadata|version/i.test(match[0])) {
             skip = true;
           }
 
-          // Reduce severity for documentation context
+          // Skip documentation context entirely
           if (context.inDocumentation && !context.inCodeBlock) {
-            severity = 'LOW';
+            skip = true;
           }
         }
 
@@ -815,9 +829,7 @@ function scanForNetworkRisks(files: Map<string, string>): NetworkRisk[] {
         const context = getContentContext(content, match.index);
         // Skip URLs in documentation context (threat lists, IOC lists, etc.)
         if (context.inDocumentation && !context.inCodeBlock) {
-          if (/reference|source|link|see|more|blog|article|research/i.test(context.lineContext)) {
-            skip = true;
-          }
+          skip = true;
         }
       }
 
