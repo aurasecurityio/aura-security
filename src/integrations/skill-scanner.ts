@@ -711,6 +711,7 @@ function scanForMalware(files: Map<string, string>): MalwareMatch[] {
 
   for (const [filename, content] of files) {
     const isMarkdown = filename.endsWith('.md') || filename === 'inline';
+    console.log(`[SCANNER DEBUG] Processing file: ${filename}, isMarkdown: ${isMarkdown}`);
 
     for (const patternDef of MALWARE_PATTERNS) {
       const regex = new RegExp(patternDef.pattern.source, patternDef.pattern.flags);
@@ -727,17 +728,24 @@ function scanForMalware(files: Map<string, string>): MalwareMatch[] {
 
         if (isMarkdown) {
           const context = getContentContext(content, match.index);
+          console.log(`[SCANNER DEBUG] Match: "${match[0]}" at line ${lineNumber}`);
+          console.log(`[SCANNER DEBUG]   Context: inCodeBlock=${context.inCodeBlock}, inDocumentation=${context.inDocumentation}`);
+          console.log(`[SCANNER DEBUG]   Line: "${context.lineContext}"`);
 
           // If in documentation context (not code block), skip or reduce severity
           if (context.inDocumentation && !context.inCodeBlock) {
             // Skip entirely - documentation describing threats is not a threat
             skip = true;
+            console.log(`[SCANNER DEBUG]   -> SKIPPED (documentation context)`);
           } else if (!context.inCodeBlock) {
             // Not in code block and not explicitly documentation - reduce severity
             // This catches general markdown text that might mention patterns
             severity = severity === 'CRITICAL' ? 'MEDIUM' :
                       severity === 'HIGH' ? 'LOW' :
                       'LOW';
+            console.log(`[SCANNER DEBUG]   -> Reduced severity to ${severity}`);
+          } else {
+            console.log(`[SCANNER DEBUG]   -> KEPT (in code block)`);
           }
           // If in a code block within markdown, keep original severity
           // (this is actual code being documented/shown)
@@ -758,6 +766,7 @@ function scanForMalware(files: Map<string, string>): MalwareMatch[] {
     }
   }
 
+  console.log(`[SCANNER DEBUG] Total malware matches returned: ${matches.length}`);
   return matches;
 }
 
