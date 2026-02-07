@@ -30,6 +30,17 @@ export interface NetworkRequest {
   isWebSocket?: boolean;
 }
 
+export interface PageAnalysis {
+  scriptCount?: number;
+  hasCanvas?: boolean;
+  buttonCount?: number;
+  formCount?: number;
+  inputCount?: number;
+  linkCount?: number;
+  hasReactRoot?: boolean;
+  bodyTextLength?: number;
+}
+
 export interface ProbeResult {
   url: string;
   success: boolean;
@@ -50,8 +61,13 @@ export interface ProbeResult {
   frameworks: string[];
   hosting: string;
 
-  // Final verdict
-  verdict: 'ACTIVE' | 'STATIC' | 'SUSPICIOUS' | 'ERROR';
+  // Page structure
+  isApiEndpoint?: boolean;
+  isInteractiveApp?: boolean;
+  pageAnalysis?: PageAnalysis;
+
+  // Final verdict - INTERACTIVE = has UI but no auto-API calls (like dashboards)
+  verdict: 'ACTIVE' | 'INTERACTIVE' | 'STATIC' | 'SUSPICIOUS' | 'ERROR';
   verdictReason: string;
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
 
@@ -146,6 +162,7 @@ export async function probeWebsite(targetUrl: string): Promise<ProbeResult> {
       const networkRequests = [];
       const wsConnections = [];
       let loadTime = 0;
+      let mainDocContentType = '';
 
       // Intercept all network requests
       page.on('request', req => {
@@ -170,6 +187,10 @@ export async function probeWebsite(targetUrl: string): Promise<ProbeResult> {
           existing.status = res.status();
           existing.contentType = res.headers()['content-type'] || '';
         }
+        // Capture main document content type
+        if (res.request().resourceType() === 'document') {
+          mainDocContentType = res.headers()['content-type'] || '';
+        }
       });
 
       const startNav = Date.now();
@@ -191,11 +212,27 @@ export async function probeWebsite(targetUrl: string): Promise<ProbeResult> {
         loadTime = Date.now() - startNav;
       }
 
+      // Analyze page structure
+      const pageAnalysis = await page.evaluate(() => {
+        return {
+          scriptCount: document.querySelectorAll('script').length,
+          hasCanvas: document.querySelectorAll('canvas').length > 0,
+          buttonCount: document.querySelectorAll('button, [role="button"], input[type="submit"]').length,
+          formCount: document.querySelectorAll('form').length,
+          inputCount: document.querySelectorAll('input, textarea, select').length,
+          linkCount: document.querySelectorAll('a[href]').length,
+          hasReactRoot: !!document.getElementById('root') || !!document.getElementById('__next'),
+          bodyTextLength: document.body?.innerText?.length || 0,
+        };
+      }).catch(() => ({}));
+
       return {
         networkRequests,
         wsConnections,
         loadTime,
         pageTitle: await page.title().catch(() => ''),
+        mainDocContentType,
+        pageAnalysis,
       };
     }
   `;
@@ -214,7 +251,7 @@ export async function probeWebsite(targetUrl: string): Promise<ProbeResult> {
     }
 
     const data = await response.json();
-    const { networkRequests, wsConnections, loadTime } = data;
+    const { networkRequests, wsConnections, loadTime, mainDocContentType, pageAnalysis } = data;
 
     // Analyze the network requests
     const result = analyzeNetworkActivity(
@@ -222,7 +259,9 @@ export async function probeWebsite(targetUrl: string): Promise<ProbeResult> {
       networkRequests || [],
       wsConnections || [],
       loadTime || 0,
-      Date.now() - startTime
+      Date.now() - startTime,
+      mainDocContentType || '',
+      pageAnalysis || {}
     );
 
     return result;
@@ -258,7 +297,9 @@ function analyzeNetworkActivity(
   requests: NetworkRequest[],
   wsConnections: string[],
   loadTime: number,
-  probeTime: number
+  probeTime: number,
+  mainDocContentType: string,
+  pageAnalysis: PageAnalysis
 ): ProbeResult {
 
   // Filter and categorize requests
@@ -316,12 +357,30 @@ function analyzeNetworkActivity(
   const hasWebSocket = wsConnections.length > 0;
   const hasExternalIntegrations = externalApisFound.size > 0;
 
+  // Detect if the URL itself is an API endpoint (returns JSON)
+  const isApiEndpoint = mainDocContentType.includes('application/json');
+
+  // Detect if this is an interactive web app (has JS, buttons, forms, etc.)
+  const isInteractiveApp = (
+    (pageAnalysis.scriptCount || 0) >= 3 ||
+    (pageAnalysis.hasCanvas) ||
+    (pageAnalysis.buttonCount || 0) >= 2 ||
+    (pageAnalysis.formCount || 0) >= 1 ||
+    (pageAnalysis.hasReactRoot) ||
+    frameworksFound.size > 0
+  );
+
   // Determine final verdict
   let verdict: ProbeResult['verdict'];
   let verdictReason: string;
   let riskLevel: ProbeResult['riskLevel'];
 
-  if (apiCalls.length >= 3 || (apiCalls.length >= 1 && hasWebSocket)) {
+  if (isApiEndpoint) {
+    // URL returns JSON - it IS an API, not a frontend
+    verdict = 'ACTIVE';
+    verdictReason = 'URL is an API endpoint (returns JSON)';
+    riskLevel = 'LOW';
+  } else if (apiCalls.length >= 3 || (apiCalls.length >= 1 && hasWebSocket)) {
     verdict = 'ACTIVE';
     verdictReason = `Found ${apiCalls.length} API calls${hasWebSocket ? ' + WebSocket' : ''}${hasExternalIntegrations ? ` + ${externalApisFound.size} external APIs` : ''}`;
     riskLevel = 'LOW';
@@ -329,6 +388,17 @@ function analyzeNetworkActivity(
     verdict = 'ACTIVE';
     verdictReason = `Minimal API activity (${apiCalls.length} calls)`;
     riskLevel = 'MEDIUM';
+  } else if (isInteractiveApp) {
+    // Has interactive UI elements but no auto-API calls (dashboards, tools, etc.)
+    verdict = 'INTERACTIVE';
+    const features: string[] = [];
+    if (pageAnalysis.hasCanvas) features.push('canvas/3D');
+    if (pageAnalysis.hasReactRoot) features.push('React app');
+    if ((pageAnalysis.buttonCount || 0) >= 2) features.push(`${pageAnalysis.buttonCount} buttons`);
+    if ((pageAnalysis.formCount || 0) >= 1) features.push(`${pageAnalysis.formCount} forms`);
+    if (frameworksFound.size > 0) features.push(Array.from(frameworksFound).join(', '));
+    verdictReason = `Interactive web app (${features.join(', ')}) - API calls may require user action`;
+    riskLevel = 'LOW';
   } else if (requests.length > 50) {
     // Lots of requests but no API calls - might be static site with lots of assets
     verdict = 'SUSPICIOUS';
@@ -336,7 +406,7 @@ function analyzeNetworkActivity(
     riskLevel = 'MEDIUM';
   } else {
     verdict = 'STATIC';
-    verdictReason = 'No API activity or backend calls detected - static landing page';
+    verdictReason = 'No API activity or interactive elements detected - static landing page';
     riskLevel = 'HIGH';
   }
 
@@ -352,6 +422,9 @@ function analyzeNetworkActivity(
     hasExternalIntegrations,
     frameworks: Array.from(frameworksFound),
     hosting: hostingProvider,
+    isApiEndpoint,
+    isInteractiveApp,
+    pageAnalysis,
     verdict,
     verdictReason,
     riskLevel,
@@ -372,6 +445,7 @@ export function formatProbeResult(result: ProbeResult): string {
 
   // Header with verdict
   const verdictEmoji = result.verdict === 'ACTIVE' ? '✅' :
+                       result.verdict === 'INTERACTIVE' ? '🔵' :
                        result.verdict === 'STATIC' ? '⚠️' :
                        result.verdict === 'SUSPICIOUS' ? '🟡' : '❌';
 
