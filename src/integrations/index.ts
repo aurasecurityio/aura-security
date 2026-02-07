@@ -84,3 +84,16 @@ export type {
 // Website Probe - Detect static vs active sites (rug detection)
 export { probeWebsite, formatProbeResult } from './website-probe.js';
 export type { ProbeResult, NetworkRequest } from './website-probe.js';
+
+// AURA Skill Scanner - Scan AI agent skills for security issues
+export { scanSkill, formatSkillScanResult } from './skill-scanner.js';
+export type {
+  SkillScanResult,
+  SkillFormat,
+  SkillVerdict,
+  SkillMetadata,
+  MalwareMatch,
+  PermissionIssue,
+  PromptInjectionRisk,
+  NetworkRisk
+} from './skill-scanner.js';

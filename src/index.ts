@@ -61,6 +61,7 @@ import {
 } from './integrations/rug-database.js';
 import { performEnhancedTrustScan } from './integrations/enhanced-scanner.js';
 import { probeWebsite, formatProbeResult } from './integrations/website-probe.js';
+import { scanSkill, formatSkillScanResult } from './integrations/skill-scanner.js';
 import { MoltbookAgent as MoltbookAgentRunner } from './integrations/moltbook/agent.js';
 import { ClawstrAgent } from './integrations/clawstr/agent.js';
 import { generateReport, type ReportData, type ReportFormat } from './reporting/index.js';
@@ -2268,6 +2269,47 @@ async function main(): Promise<void> {
           error: err instanceof Error ? err.message : 'Unknown error',
           verdict: 'ERROR',
           riskLevel: 'HIGH'
+        };
+      }
+    }
+  });
+
+  // AURA Skill Scanner - Scan AI agent skills for security issues
+  server.registerTool({
+    name: 'scan-skill',
+    description: 'Scan an AI agent skill (OpenClaw, Claude MCP, LangChain) for security issues including malware, prompt injection, and dangerous permissions',
+    parameters: {
+      type: 'object',
+      required: ['skillUrl'],
+      properties: {
+        skillUrl: { type: 'string', description: 'GitHub URL or skill manifest URL' },
+        format: { type: 'string', enum: ['openclaw', 'mcp', 'langchain', 'auto'], description: 'Skill format (default: auto-detect)' },
+        includeRepoTrust: { type: 'boolean', description: 'Include GitHub repo trust score (default: true)' }
+      }
+    },
+    handler: async (args) => {
+      try {
+        const skillUrl = args.skillUrl as string;
+        const format = (args.format as 'openclaw' | 'mcp' | 'langchain' | 'auto') || 'auto';
+        const includeRepoTrust = args.includeRepoTrust !== false;
+
+        console.log(`[AURA] Scanning skill: ${skillUrl} (format: ${format})`);
+
+        const result = await scanSkill(skillUrl, { format, includeRepoTrust });
+
+        console.log(`[AURA] Skill scan complete: ${result.verdict} (Risk: ${result.riskScore}/100)`);
+
+        return {
+          ...result,
+          formatted: formatSkillScanResult(result)
+        };
+      } catch (err) {
+        console.error('[AURA] Skill scan error:', err);
+        return {
+          error: err instanceof Error ? err.message : 'Unknown error',
+          verdict: 'DANGEROUS',
+          riskScore: 100,
+          verifiedBadge: false
         };
       }
     }
