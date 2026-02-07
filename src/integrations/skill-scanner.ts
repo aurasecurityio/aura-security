@@ -500,8 +500,42 @@ async function fetchSkillContent(url: string): Promise<{
       // SKILL.md not found, try other patterns
     }
 
+    // Try to fetch MCP config (Claude MCP format)
+    if (format !== 'openclaw') {
+      for (const configFile of ['mcp.json', 'claude.json', 'config.json']) {
+        try {
+          const configUrl = rawUrl.endsWith('/')
+            ? `${rawUrl}${configFile}`
+            : `${rawUrl}/${configFile}`;
+
+          const response = await fetch(configUrl, {
+            signal: AbortSignal.timeout(10000)
+          });
+
+          if (response.ok) {
+            const content = await response.text();
+            files.set(configFile, content);
+
+            try {
+              const config = JSON.parse(content);
+              // Detect MCP format by looking for mcpServers or tools array
+              if (config.mcpServers || config.tools || config.server) {
+                format = 'mcp';
+                metadata = metadata || {
+                  name: config.name || config.mcpServers ? Object.keys(config.mcpServers)[0] : 'MCP Server',
+                  description: config.description,
+                };
+              }
+            } catch {}
+          }
+        } catch {
+          // Config not found, continue
+        }
+      }
+    }
+
     // Try to fetch package.json or index files
-    for (const filename of ['index.ts', 'index.js', 'main.ts', 'main.js', 'package.json']) {
+    for (const filename of ['index.ts', 'index.js', 'main.ts', 'main.js', 'server.ts', 'server.js', 'package.json']) {
       try {
         const fileUrl = rawUrl.endsWith('/')
           ? `${rawUrl}${filename}`
@@ -524,6 +558,13 @@ async function fetchSkillContent(url: string): Promise<{
                 author: typeof pkg.author === 'string' ? pkg.author : pkg.author?.name,
                 version: pkg.version,
               };
+              // Detect MCP format from package.json keywords or dependencies
+              const isMcp = pkg.keywords?.some((k: string) =>
+                ['mcp', 'claude-mcp', 'model-context-protocol', 'claude-tools'].includes(k.toLowerCase())
+              ) || pkg.dependencies?.['@anthropic-ai/sdk'] || pkg.dependencies?.['@modelcontextprotocol/sdk'];
+              if (isMcp && format !== 'openclaw') {
+                format = 'mcp';
+              }
             } catch {}
           }
         }
