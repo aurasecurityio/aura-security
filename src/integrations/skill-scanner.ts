@@ -354,8 +354,83 @@ const SUSPICIOUS_DOMAINS = [
   // URL shorteners (hide real destination)
   'bit.ly', 'tinyurl.com', 'goo.gl', 't.co', 'is.gd',
   // Known malicious
-  'evil.com', 'malware.com', 'hack.me',
+  'evil.com', 'hack.me',
 ];
+
+// ============================================================================
+// Whitelisted Security Research Domains (reduce false positives)
+// ============================================================================
+
+const SECURITY_RESEARCH_DOMAINS = [
+  // Security research & news
+  'opensourcemalware.com', 'thehackernews.com', 'krebsonsecurity.com',
+  'bleepingcomputer.com', 'securityweek.com', 'darkreading.com',
+  // Vendor security blogs
+  'crowdstrike.com', 'snyk.io', 'jfrog.com', 'aikido.dev', 'koi.ai',
+  'virustotal.com', 'vectra.ai', 'cisco.com', 'defectdojo.com',
+  'prompt.security', 'toxsec.com',
+  // CVE & vuln databases
+  'cve.org', 'nvd.nist.gov', 'cvedetails.com',
+  // OWASP
+  'owasp.org', 'genai.owasp.org',
+  // Documentation
+  'docs.openclaw.ai', 'github.com/openclaw',
+];
+
+// ============================================================================
+// Context Detection Helpers
+// ============================================================================
+
+interface ContentContext {
+  inCodeBlock: boolean;
+  inDocumentation: boolean;
+  lineContext: string;
+}
+
+/**
+ * Determine if a match at a given position is in a code block or documentation
+ */
+function getContentContext(content: string, matchIndex: number): ContentContext {
+  const beforeMatch = content.slice(0, matchIndex);
+  const lines = beforeMatch.split('\n');
+  const currentLineStart = beforeMatch.lastIndexOf('\n') + 1;
+  const lineEnd = content.indexOf('\n', matchIndex);
+  const currentLine = content.slice(currentLineStart, lineEnd === -1 ? undefined : lineEnd);
+
+  // Count code block markers before this position
+  const codeBlockStarts = (beforeMatch.match(/```/g) || []).length;
+  const inCodeBlock = codeBlockStarts % 2 === 1;
+
+  // Check if in markdown list describing threats (documentation context)
+  const docPatterns = [
+    /^\s*[-*]\s+/,              // Markdown list item
+    /^\s*\d+\.\s+/,             // Numbered list
+    /^#+\s+/,                   // Heading
+    /known.*malicious/i,       // "Known malicious..."
+    /detects?.*for/i,          // "Detects for..."
+    /scans?\s+for/i,           // "Scans for..."
+    /checks?\s+for/i,          // "Checks for..."
+    /threats?.*include/i,      // "Threats include..."
+    /indicators?\s+of/i,       // "Indicators of..."
+    /ioc|c2|command.and.control/i, // IOC documentation
+  ];
+
+  const inDocumentation = docPatterns.some(p => p.test(currentLine));
+
+  return {
+    inCodeBlock,
+    inDocumentation,
+    lineContext: currentLine.trim().slice(0, 100),
+  };
+}
+
+/**
+ * Check if a URL is from a whitelisted security research domain
+ */
+function isSecurityResearchUrl(url: string): boolean {
+  const lowerUrl = url.toLowerCase();
+  return SECURITY_RESEARCH_DOMAINS.some(domain => lowerUrl.includes(domain));
+}
 
 // ============================================================================
 // Main Scanner Function
@@ -619,7 +694,7 @@ function scanForMalware(files: Map<string, string>): MalwareMatch[] {
   const matches: MalwareMatch[] = [];
 
   for (const [filename, content] of files) {
-    const lines = content.split('\n');
+    const isMarkdown = filename.endsWith('.md') || filename === 'inline';
 
     for (const patternDef of MALWARE_PATTERNS) {
       const regex = new RegExp(patternDef.pattern.source, patternDef.pattern.flags);
@@ -630,15 +705,41 @@ function scanForMalware(files: Map<string, string>): MalwareMatch[] {
         const beforeMatch = content.slice(0, match.index);
         const lineNumber = beforeMatch.split('\n').length;
 
-        matches.push({
-          pattern: patternDef.pattern.source,
-          match: match[0],
-          file: filename,
-          line: lineNumber,
-          severity: patternDef.severity,
-          category: patternDef.category,
-          description: patternDef.description,
-        });
+        // Get context for markdown files
+        let severity = patternDef.severity;
+        let skip = false;
+
+        if (isMarkdown) {
+          const context = getContentContext(content, match.index);
+
+          // If in documentation context (not code block), reduce severity significantly
+          if (context.inDocumentation && !context.inCodeBlock) {
+            // Skip entirely if it looks like threat documentation
+            if (/threat|ioc|indicator|detect|scan|check|known|malicious/i.test(context.lineContext)) {
+              skip = true;
+            } else {
+              // Reduce severity for non-code matches
+              severity = severity === 'CRITICAL' ? 'LOW' :
+                        severity === 'HIGH' ? 'LOW' :
+                        'LOW';
+            }
+          }
+
+          // If in a code block within markdown, keep original severity
+          // (this is actual code being documented)
+        }
+
+        if (!skip) {
+          matches.push({
+            pattern: patternDef.pattern.source,
+            match: match[0],
+            file: filename,
+            line: lineNumber,
+            severity,
+            category: patternDef.category,
+            description: patternDef.description,
+          });
+        }
       }
     }
   }
@@ -650,18 +751,39 @@ function scanForPromptInjection(files: Map<string, string>): PromptInjectionRisk
   const risks: PromptInjectionRisk[] = [];
 
   for (const [filename, content] of files) {
+    const isMarkdown = filename.endsWith('.md') || filename === 'inline';
+
     for (const patternDef of PROMPT_INJECTION_PATTERNS) {
       const regex = new RegExp(patternDef.pattern.source, patternDef.pattern.flags);
       let match;
 
       while ((match = regex.exec(content)) !== null) {
-        risks.push({
-          pattern: patternDef.pattern.source,
-          match: match[0],
-          file: filename,
-          severity: patternDef.severity,
-          description: patternDef.description,
-        });
+        let severity = patternDef.severity;
+        let skip = false;
+
+        if (isMarkdown) {
+          const context = getContentContext(content, match.index);
+
+          // Skip HTML comments that are legitimate OpenClaw metadata
+          if (patternDef.pattern.source.includes('<!--') && match[0].includes('requires')) {
+            skip = true;
+          }
+
+          // Reduce severity for documentation context
+          if (context.inDocumentation && !context.inCodeBlock) {
+            severity = 'LOW';
+          }
+        }
+
+        if (!skip) {
+          risks.push({
+            pattern: patternDef.pattern.source,
+            match: match[0],
+            file: filename,
+            severity,
+            description: patternDef.description,
+          });
+        }
       }
     }
   }
@@ -673,13 +795,33 @@ function scanForNetworkRisks(files: Map<string, string>): NetworkRisk[] {
   const risks: NetworkRisk[] = [];
 
   // URL pattern
-  const urlPattern = /https?:\/\/[^\s"'`<>]+/gi;
+  const urlPattern = /https?:\/\/[^\s"'`<>)]+/gi;
 
   for (const [filename, content] of files) {
+    const isMarkdown = filename.endsWith('.md') || filename === 'inline';
     let match;
 
     while ((match = urlPattern.exec(content)) !== null) {
-      const url = match[0];
+      const url = match[0].replace(/[.,;:!?]+$/, ''); // Clean trailing punctuation
+
+      // Skip whitelisted security research URLs
+      if (isSecurityResearchUrl(url)) {
+        continue;
+      }
+
+      // Get context for markdown files
+      let skip = false;
+      if (isMarkdown) {
+        const context = getContentContext(content, match.index);
+        // Skip URLs in documentation context (threat lists, IOC lists, etc.)
+        if (context.inDocumentation && !context.inCodeBlock) {
+          if (/reference|source|link|see|more|blog|article|research/i.test(context.lineContext)) {
+            skip = true;
+          }
+        }
+      }
+
+      if (skip) continue;
 
       // Check against suspicious domains
       for (const domain of SUSPICIOUS_DOMAINS) {
@@ -694,14 +836,18 @@ function scanForNetworkRisks(files: Map<string, string>): NetworkRisk[] {
         }
       }
 
-      // Check for IP addresses (potential C2)
+      // Check for IP addresses (potential C2) - only in code blocks
       if (/\d+\.\d+\.\d+\.\d+/.test(url)) {
-        risks.push({
-          url,
-          file: filename,
-          severity: 'MEDIUM',
-          reason: 'Direct IP address connection',
-        });
+        const context = isMarkdown ? getContentContext(content, match.index) : { inCodeBlock: true, inDocumentation: false, lineContext: '' };
+        // Only flag IP addresses in actual code, not in documentation
+        if (context.inCodeBlock || !isMarkdown) {
+          risks.push({
+            url,
+            file: filename,
+            severity: 'MEDIUM',
+            reason: 'Direct IP address connection',
+          });
+        }
       }
     }
   }
