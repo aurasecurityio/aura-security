@@ -163,6 +163,29 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
     });
   }
 
+  // 2b. Files-to-Commits Ratio Check (detect copied/dumped repos)
+  // If you have many files but very few commits, it's likely copied code
+  if (metrics.codeFileCount > 20 && metrics.commitCount <= 3) {
+    const ratio = metrics.codeFileCount / Math.max(metrics.commitCount, 1);
+    if (ratio > 30) {
+      checks.push({
+        id: 'history-suspicious',
+        name: 'Suspicious History',
+        status: 'bad',
+        points: -25,
+        explanation: `${metrics.codeFileCount} files in only ${metrics.commitCount} commit(s) - likely copied/forked with squashed history`
+      });
+    } else if (ratio > 15) {
+      checks.push({
+        id: 'history-suspicious',
+        name: 'Suspicious History',
+        status: 'warn',
+        points: -15,
+        explanation: `High files-to-commits ratio (${metrics.codeFileCount} files, ${metrics.commitCount} commits) - unusual development pattern`
+      });
+    }
+  }
+
   // 3. Contributor Check
   if (metrics.contributorCount === 1) {
     checks.push({
