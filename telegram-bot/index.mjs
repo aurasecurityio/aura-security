@@ -3185,6 +3185,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
 
         // Format verdict
         const verdictEmoji = probe.verdict === 'ACTIVE' ? '✅' :
+                            probe.verdict === 'INTERACTIVE' ? '🔵' :
                             probe.verdict === 'STATIC' ? '⚠️' :
                             probe.verdict === 'SUSPICIOUS' ? '🟡' : '❌';
 
