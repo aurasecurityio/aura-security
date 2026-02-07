@@ -2686,6 +2686,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         `\u{1F527} *More Tools:*\n` +
         `/scan <url> - Deep security scan\n` +
         `/probe <url> - Website activity check (rug detection)\n` +
+        `/skillcheck <url> - Scan AI agent skills for malware\n` +
         `/devcheck <@user> - Verify developer identity\n` +
         `/xcheck <@user> - X profile analysis\n\n` +
         `\u{1F4DD} *Quick Start:*\n` +
@@ -2713,6 +2714,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         `\u{1F527} *ADVANCED TOOLS:*\n\n` +
         `/scan <url> - Deep security scan (secrets, vulns)\n` +
         `/probe <url> - Website activity probe (rug detection)\n` +
+        `/skillcheck <url> - Scan AI agent skills for malware\n` +
         `/devcheck <@user> - Verify dev identity + GitHub\n` +
         `/xcheck <@user> - X profile bot detection\n` +
         `/trustagent <name> - Moltbook agent reputation\n\n` +
@@ -3226,6 +3228,105 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
       } catch (err) {
         console.error('Probe error:', err);
         await sendMessage(chatId, `❌ Probe failed: ${err.message}`);
+      }
+    }
+    // /skillcheck command - Scan AI agent skills for security issues
+    else if (text.startsWith('/skillcheck')) {
+      const skillUrl = text.replace(/^\/skillcheck(@[a-zA-Z0-9_]+)?/i, '').trim();
+
+      if (!skillUrl) {
+        await sendMessage(chatId, `❌ Please provide a skill URL (GitHub repo or ClawHub link).\n\n*Example:*\n/skillcheck https://github.com/user/my-skill\n\n_Scans OpenClaw, Claude MCP, and LangChain skills for malware, prompt injection, and dangerous permissions._`);
+        return { statusCode: 200, body: 'OK' };
+      }
+
+      await sendMessage(chatId, `🔍 *Scanning AI agent skill...*\n_Checking for malware, prompt injection, permissions..._`);
+
+      try {
+        const result = await withRetry(async () => {
+          const response = await fetch(`${AURA_API_URL}/tools`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(AURA_API_KEY ? { 'Authorization': `Bearer ${AURA_API_KEY}` } : {}) },
+            body: JSON.stringify({ tool: 'scan-skill', arguments: { skillUrl, format: 'auto', includeRepoTrust: true } })
+          });
+          if (!response.ok) throw new Error(`API error: ${response.status}`);
+          return response.json();
+        });
+
+        const skill = result.result || result;
+
+        // Format verdict
+        const verdictEmoji = skill.verdict === 'SAFE' ? '✅' :
+                            skill.verdict === 'WARNING' ? '⚠️' :
+                            skill.verdict === 'DANGEROUS' ? '🔴' : '🚫';
+
+        let msg = `${verdictEmoji} *SKILL SCAN: ${skill.name || 'Unknown'}*\n\n`;
+        msg += `*Verdict:* ${skill.verdict}\n`;
+        msg += `*Risk Score:* ${skill.riskScore}/100\n`;
+        msg += `*Format:* ${skill.source || 'auto'}\n`;
+        msg += `*AURA Verified:* ${skill.verifiedBadge ? '✅ Yes' : '❌ No'}\n\n`;
+
+        // Findings summary
+        const totalFindings = (skill.malwarePatterns?.length || 0) +
+                              (skill.promptInjectionRisks?.length || 0) +
+                              (skill.permissionIssues?.length || 0) +
+                              (skill.networkRisks?.length || 0);
+
+        if (totalFindings > 0) {
+          msg += `🚨 *Findings (${totalFindings}):*\n`;
+
+          // Malware
+          if (skill.malwarePatterns?.length > 0) {
+            skill.malwarePatterns.slice(0, 3).forEach(m => {
+              msg += `• [${m.severity}] ${m.description}\n`;
+            });
+          }
+
+          // Prompt injection
+          if (skill.promptInjectionRisks?.length > 0) {
+            skill.promptInjectionRisks.slice(0, 2).forEach(p => {
+              msg += `• [${p.severity}] ${p.description}\n`;
+            });
+          }
+
+          // Permission issues
+          if (skill.permissionIssues?.length > 0) {
+            skill.permissionIssues.slice(0, 2).forEach(p => {
+              msg += `• [${p.severity}] ${p.reason}\n`;
+            });
+          }
+
+          // Network risks
+          if (skill.networkRisks?.length > 0) {
+            skill.networkRisks.slice(0, 2).forEach(n => {
+              msg += `• [${n.severity}] ${n.reason}\n`;
+            });
+          }
+
+          msg += '\n';
+        }
+
+        // Summary
+        if (skill.summary) {
+          msg += `📋 *Summary:*\n${skill.summary}\n\n`;
+        }
+
+        // Recommendations
+        if (skill.recommendations?.length > 0) {
+          msg += `💡 *Recommendations:*\n`;
+          skill.recommendations.slice(0, 3).forEach(r => {
+            msg += `• ${r}\n`;
+          });
+        }
+
+        // Badge reason if not verified
+        if (!skill.verifiedBadge && skill.badgeReason) {
+          msg += `\n_Why not verified: ${skill.badgeReason}_`;
+        }
+
+        await sendMessage(chatId, msg);
+      } catch (err) {
+        console.error('Skill scan error:', err);
+        await sendMessage(chatId, `❌ Skill scan failed: ${err.message}`);
       }
     }
     // Auto-detect GitHub URLs - run scamcheck automatically
