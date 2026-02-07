@@ -1,7 +1,7 @@
 ---
 name: AURA Security Scanner
 description: Scan AI agent skills for malware, credential theft, prompt injection, and dangerous permissions before installing them
-author: AuraSecurity
+author: aurasecurity-creator
 version: 1.0.0
 requires:
   bins: []
