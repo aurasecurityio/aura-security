@@ -19,7 +19,7 @@ if (!BOT_TOKEN) {
 const commands = [
   {
     name: 'rugcheck',
-    description: 'Quick security scan for red flags and common issues',
+    description: 'Trust score analysis - repo health, age, activity, red flags',
     options: [
       {
         name: 'repo',
@@ -30,20 +30,8 @@ const commands = [
     ]
   },
   {
-    name: 'scan',
-    description: 'Full security audit - deep analysis of code and dependencies',
-    options: [
-      {
-        name: 'repo',
-        description: 'GitHub repository URL (e.g., https://github.com/owner/repo)',
-        type: 3,
-        required: true
-      }
-    ]
-  },
-  {
-    name: 'devcheck',
-    description: 'Developer trust analysis - check account age and reputation',
+    name: 'scamcheck',
+    description: 'Detect scam patterns, rug pull code, wallet drainers, honeypots',
     options: [
       {
         name: 'repo',
@@ -66,24 +54,24 @@ const commands = [
     ]
   },
   {
-    name: 'aicheck',
-    description: 'Verify if a repo is a real AI project or just hype',
+    name: 'fullprobe',
+    description: 'Full analysis - website probe + GitHub repo trust scan combined',
     options: [
       {
-        name: 'repo',
-        description: 'GitHub repository URL (e.g., https://github.com/owner/repo)',
+        name: 'url',
+        description: 'Website URL to probe (e.g., https://example.com)',
         type: 3,
         required: true
       }
     ]
   },
   {
-    name: 'scamcheck',
-    description: 'Detect known scam patterns, rug pull templates, and honeypot code',
+    name: 'probe',
+    description: 'Website activity probe - detect API calls, WebSocket, backend activity',
     options: [
       {
-        name: 'repo',
-        description: 'GitHub repository URL (e.g., https://github.com/owner/repo)',
+        name: 'url',
+        description: 'Website URL to probe (e.g., https://example.com)',
         type: 3,
         required: true
       }
