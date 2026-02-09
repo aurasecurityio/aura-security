@@ -60,7 +60,7 @@ import {
   getXAccountReputation
 } from './integrations/rug-database.js';
 import { performEnhancedTrustScan } from './integrations/enhanced-scanner.js';
-import { probeWebsite, formatProbeResult } from './integrations/website-probe.js';
+import { probeWebsite, formatProbeResult, formatFullProbeResult } from './integrations/website-probe.js';
 import { scanSkill, formatSkillScanResult } from './integrations/skill-scanner.js';
 import { MoltbookAgent as MoltbookAgentRunner } from './integrations/moltbook/agent.js';
 import { ClawstrAgent } from './integrations/clawstr/agent.js';
@@ -2310,6 +2310,210 @@ async function main(): Promise<void> {
           verdict: 'DANGEROUS',
           riskScore: 100,
           verifiedBadge: false
+        };
+      }
+    }
+  });
+
+  // Full Probe - Combined website probe + repo trust scan
+  server.registerTool({
+    name: 'full-probe',
+    description: 'Comprehensive analysis: probe website for activity AND scan linked GitHub repo for trust. Best for crypto/DeFi projects.',
+    parameters: {
+      type: 'object',
+      required: ['url'],
+      properties: {
+        url: { type: 'string', description: 'Website URL to analyze' },
+        repoUrl: { type: 'string', description: 'Optional: GitHub repo URL (auto-detected if not provided)' }
+      }
+    },
+    handler: async (args) => {
+      try {
+        const websiteUrl = args.url as string;
+        let repoUrl = args.repoUrl as string | undefined;
+
+        console.log(`[AURA] Full probe: ${websiteUrl}`);
+
+        // Step 1: Run website probe
+        const probeResult = await probeWebsite(websiteUrl);
+
+        // Step 2: Try to find GitHub repo if not provided
+        if (!repoUrl) {
+          // Check probe network requests for GitHub URLs
+          const allUrls = [
+            ...probeResult.apiCalls.map(a => a.url),
+            websiteUrl
+          ];
+
+          for (const url of allUrls) {
+            const githubMatch = url.match(/github\.com\/([^\/]+\/[^\/\s]+)/i);
+            if (githubMatch) {
+              repoUrl = `https://github.com/${githubMatch[1]}`;
+              break;
+            }
+          }
+
+          // If still no repo, try to fetch the page and look for GitHub links
+          if (!repoUrl) {
+            try {
+              const pageResponse = await fetch(websiteUrl, {
+                signal: AbortSignal.timeout(10000),
+                headers: { 'User-Agent': 'AuraSecurity/1.0' }
+              });
+              const html = await pageResponse.text();
+
+              // Look for GitHub links in the HTML
+              const githubMatches = html.match(/https?:\/\/github\.com\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+/gi);
+              if (githubMatches && githubMatches.length > 0) {
+                // Filter out common non-project URLs
+                const projectUrls = githubMatches.filter(u =>
+                  !u.includes('/issues') &&
+                  !u.includes('/pull') &&
+                  !u.includes('/blob') &&
+                  !u.includes('/tree') &&
+                  !u.includes('/releases')
+                );
+                if (projectUrls.length > 0) {
+                  repoUrl = projectUrls[0];
+                }
+              }
+            } catch {
+              // Ignore fetch errors, repo detection is best-effort
+            }
+          }
+        }
+
+        // Step 3: Run trust scan if we have a repo
+        // Note: We only run trust scan for speed. Full scam detection requires repo cloning
+        // and is available via the separate 'scam-scan' tool.
+        let trustResult: Awaited<ReturnType<typeof performTrustScan>> | null = null;
+
+        if (repoUrl) {
+          console.log(`[AURA] Full probe: Found repo ${repoUrl}`);
+          try {
+            trustResult = await performTrustScan(repoUrl);
+          } catch (err) {
+            console.error(`[AURA] Full probe: Repo scan failed:`, err);
+          }
+        }
+
+        // Step 4: Calculate combined verdict
+        let combinedVerdict: 'SAFE' | 'CAUTION' | 'WARNING' | 'DANGER';
+        let combinedScore: number;
+        let combinedReason: string;
+
+        // Detect if this looks like a crypto/DeFi site
+        const cryptoKeywords = /web3|wallet|connect|metamask|phantom|solana|ethereum|swap|stake|farm|yield|defi|dex|token|coin|nft|mint/i;
+        const isCryptoSite = cryptoKeywords.test(websiteUrl) ||
+          (probeResult.frameworks.some(f => /web3|ethers|wagmi/i.test(f)));
+
+        // Base score from probe
+        let probeScore = probeResult.verdict === 'ACTIVE' ? 90 :
+                         probeResult.verdict === 'INTERACTIVE' ? 70 :
+                         probeResult.verdict === 'SUSPICIOUS' ? 40 : 20;
+
+        // Adjust for crypto sites with no blockchain activity
+        if (isCryptoSite && !probeResult.hasApiActivity && !probeResult.hasWebSocket) {
+          probeScore = Math.min(probeScore, 50);
+        }
+
+        // Combine with trust score if available
+        if (trustResult) {
+          combinedScore = Math.round((probeScore * 0.4) + (trustResult.trustScore * 0.6));
+
+          // Check for critical red flags from trust scan
+          const hasSuspiciousHistory = trustResult.checks?.some(c =>
+            c.id === 'history-suspicious' && c.status === 'bad'
+          );
+          const hasReadmeRedFlags = trustResult.metrics?.readmeRedFlags &&
+            trustResult.metrics.readmeRedFlags.length > 2;
+
+          if (combinedScore < 30 || hasReadmeRedFlags) {
+            combinedVerdict = 'DANGER';
+            combinedReason = hasReadmeRedFlags
+              ? 'Multiple red flags in README'
+              : 'Multiple critical red flags';
+          } else if (hasSuspiciousHistory || combinedScore < 50) {
+            combinedVerdict = 'WARNING';
+            combinedReason = hasSuspiciousHistory
+              ? 'Suspicious repo history (possible copied code)'
+              : 'Significant concerns found';
+          } else if (combinedScore < 70) {
+            combinedVerdict = 'CAUTION';
+            combinedReason = 'Some concerns - do your own research';
+          } else {
+            combinedVerdict = 'SAFE';
+            combinedReason = 'No major red flags detected';
+          }
+        } else {
+          // No repo found - base verdict on probe only
+          combinedScore = probeScore;
+          if (probeResult.verdict === 'STATIC') {
+            combinedVerdict = 'WARNING';
+            combinedReason = 'Static site with no backend - no GitHub repo found';
+          } else if (probeResult.verdict === 'SUSPICIOUS') {
+            combinedVerdict = 'CAUTION';
+            combinedReason = 'Suspicious activity patterns - no GitHub repo found';
+          } else if (isCryptoSite && !probeResult.hasApiActivity) {
+            combinedVerdict = 'CAUTION';
+            combinedReason = 'Crypto site with no blockchain activity detected';
+          } else {
+            combinedVerdict = 'CAUTION';
+            combinedReason = 'Could not verify - no GitHub repo found';
+          }
+        }
+
+        // Step 5: Format result
+        const formatted = formatFullProbeResult({
+          websiteUrl,
+          repoUrl: repoUrl || null,
+          probeResult,
+          trustResult,
+          combinedVerdict,
+          combinedScore,
+          combinedReason,
+          isCryptoSite
+        });
+
+        console.log(`[AURA] Full probe complete: ${combinedVerdict} (${combinedScore}/100)`);
+
+        return {
+          websiteUrl,
+          repoUrl: repoUrl || null,
+          repoDetected: !!repoUrl,
+          probe: {
+            verdict: probeResult.verdict,
+            totalRequests: probeResult.totalRequests,
+            apiCalls: probeResult.apiCalls.length,
+            hasWebSocket: probeResult.hasWebSocket,
+            frameworks: probeResult.frameworks,
+            loadTime: probeResult.loadTime
+          },
+          trust: trustResult ? {
+            score: trustResult.trustScore,
+            grade: trustResult.grade,
+            verdict: trustResult.verdict,
+            redFlags: trustResult.checks?.filter(c => c.status === 'bad').map(c => c.explanation) || [],
+            readmeRedFlags: trustResult.metrics?.readmeRedFlags || []
+          } : null,
+          combined: {
+            verdict: combinedVerdict,
+            score: combinedScore,
+            reason: combinedReason,
+            isCryptoSite
+          },
+          formatted
+        };
+
+      } catch (err) {
+        console.error('[AURA] Full probe error:', err);
+        return {
+          error: err instanceof Error ? err.message : 'Unknown error',
+          combined: {
+            verdict: 'DANGER',
+            score: 0,
+            reason: 'Analysis failed'
+          }
         };
       }
     }
