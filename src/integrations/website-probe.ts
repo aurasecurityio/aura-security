@@ -509,3 +509,101 @@ export function formatProbeResult(result: ProbeResult): string {
 
   return lines.join('\n');
 }
+
+/**
+ * Format full probe result (combined website + repo analysis)
+ */
+export function formatFullProbeResult(data: {
+  websiteUrl: string;
+  repoUrl: string | null;
+  probeResult: ProbeResult;
+  trustResult: any | null;
+  combinedVerdict: 'SAFE' | 'CAUTION' | 'WARNING' | 'DANGER';
+  combinedScore: number;
+  combinedReason: string;
+  isCryptoSite: boolean;
+}): string {
+  const lines: string[] = [];
+
+  // Header with combined verdict
+  const verdictEmoji = data.combinedVerdict === 'SAFE' ? '✅' :
+                       data.combinedVerdict === 'CAUTION' ? '🟡' :
+                       data.combinedVerdict === 'WARNING' ? '🟠' : '🔴';
+
+  lines.push(`${verdictEmoji} FULL PROBE: ${data.websiteUrl}`);
+  lines.push('');
+
+  // Combined Score
+  const grade = data.combinedScore >= 80 ? 'A' :
+                data.combinedScore >= 70 ? 'B' :
+                data.combinedScore >= 55 ? 'C' :
+                data.combinedScore >= 35 ? 'D' : 'F';
+
+  lines.push(`📊 Combined Score: ${data.combinedScore}/100 (${grade})`);
+  lines.push(`🎯 Verdict: ${data.combinedVerdict}`);
+  lines.push(`💬 ${data.combinedReason}`);
+  if (data.isCryptoSite) {
+    lines.push(`🪙 Detected as crypto/DeFi project`);
+  }
+  lines.push('');
+
+  // Website Analysis
+  lines.push('━━━ WEBSITE ANALYSIS ━━━');
+  const probeEmoji = data.probeResult.verdict === 'ACTIVE' ? '✅' :
+                     data.probeResult.verdict === 'INTERACTIVE' ? '🔵' :
+                     data.probeResult.verdict === 'STATIC' ? '⚠️' : '🟡';
+  lines.push(`${probeEmoji} Site Status: ${data.probeResult.verdict}`);
+  lines.push(`├── Requests: ${data.probeResult.totalRequests}`);
+  lines.push(`├── API Calls: ${data.probeResult.apiCalls.length} ${data.probeResult.hasApiActivity ? '✓' : '✗'}`);
+  lines.push(`├── WebSocket: ${data.probeResult.hasWebSocket ? 'Yes ✓' : 'No ✗'}`);
+  if (data.probeResult.frameworks.length > 0) {
+    lines.push(`└── Tech: ${data.probeResult.frameworks.join(', ')}`);
+  }
+  lines.push('');
+
+  // Repo Analysis (if found)
+  if (data.repoUrl && data.trustResult) {
+    lines.push('━━━ REPO ANALYSIS ━━━');
+    lines.push(`📁 ${data.repoUrl}`);
+
+    const trustEmoji = data.trustResult.verdict === 'LEGIT' ? '✅' :
+                       data.trustResult.verdict === 'SAFU' ? '✅' :
+                       data.trustResult.verdict === 'DYOR' ? '🟡' :
+                       data.trustResult.verdict === 'RISKY' ? '🟠' : '🔴';
+    lines.push(`${trustEmoji} Trust: ${data.trustResult.trustScore}/100 (${data.trustResult.grade})`);
+
+    // Show red flags
+    const redFlags = data.trustResult.checks?.filter((c: any) => c.status === 'bad') || [];
+    if (redFlags.length > 0) {
+      lines.push('⚠️ Red Flags:');
+      for (const flag of redFlags.slice(0, 4)) {
+        lines.push(`  • ${flag.explanation}`);
+      }
+      if (redFlags.length > 4) {
+        lines.push(`  • ...and ${redFlags.length - 4} more`);
+      }
+    }
+
+    // README red flags from trust scan
+    const readmeRedFlags = data.trustResult.metrics?.readmeRedFlags || [];
+    if (readmeRedFlags.length > 0) {
+      lines.push('📝 README Concerns:');
+      for (const flag of readmeRedFlags.slice(0, 3)) {
+        lines.push(`  • ${flag}`);
+      }
+      if (readmeRedFlags.length > 3) {
+        lines.push(`  • ...and ${readmeRedFlags.length - 3} more`);
+      }
+    }
+  } else {
+    lines.push('━━━ REPO ANALYSIS ━━━');
+    lines.push('❓ No GitHub repo found');
+    lines.push('Could not verify source code');
+  }
+
+  lines.push('');
+  lines.push('━━━━━━━━━━━━━━━━━━━━');
+  lines.push(`Load: ${(data.probeResult.loadTime / 1000).toFixed(1)}s | Probe: ${(data.probeResult.probeTime / 1000).toFixed(1)}s`);
+
+  return lines.join('\n');
+}
