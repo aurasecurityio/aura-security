@@ -115,6 +115,31 @@ function isValidGitUrl(url) {
 }
 
 /**
+ * Validate website URL for probe commands
+ */
+function isValidWebUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+
+  // Check for dangerous characters
+  if (/[;&|`$(){}[\]<>]/.test(url)) return false;
+
+  // Must be a valid URL with domain and TLD
+  const urlPattern = /^https?:\/\/[^\s]+\.[^\s]+/i;
+  return urlPattern.test(url);
+}
+
+/**
+ * Normalize URL - add https:// if missing
+ */
+function normalizeUrl(url) {
+  if (!url) return url;
+  if (!url.match(/^https?:\/\//i)) {
+    return 'https://' + url;
+  }
+  return url;
+}
+
+/**
  * Extract owner/repo from GitHub URL
  */
 function parseGitHubUrl(url) {
@@ -876,6 +901,196 @@ function formatReportResults(result, repoUrl) {
 }
 
 /**
+ * Format full probe results for Discord
+ */
+function formatFullProbeResults(result) {
+  if (result.error) {
+    return {
+      embeds: [{
+        title: '❌ Full Probe Failed',
+        description: result.error,
+        color: 0xff0000,
+        footer: { text: 'AuraSecurity | Full Probe' },
+        timestamp: new Date().toISOString()
+      }]
+    };
+  }
+
+  const combined = result.combined || {};
+  const probe = result.probe || {};
+  const trust = result.trust || null;
+
+  // Determine color based on verdict
+  let color = 0x00ff00; // Green for SAFE
+  if (combined.verdict === 'DANGER') color = 0xff0000;
+  else if (combined.verdict === 'WARNING') color = 0xff8c00;
+  else if (combined.verdict === 'CAUTION') color = 0xffff00;
+
+  const verdictEmoji = combined.verdict === 'SAFE' ? '✅' :
+                       combined.verdict === 'CAUTION' ? '🟡' :
+                       combined.verdict === 'WARNING' ? '🟠' : '🔴';
+
+  const grade = combined.score >= 80 ? 'A' :
+                combined.score >= 70 ? 'B' :
+                combined.score >= 55 ? 'C' :
+                combined.score >= 35 ? 'D' : 'F';
+
+  const fields = [
+    {
+      name: '📊 Combined Score',
+      value: `**${combined.score || 0}/100** (${grade})`,
+      inline: true
+    },
+    {
+      name: '🎯 Verdict',
+      value: `${verdictEmoji} ${combined.verdict || 'UNKNOWN'}`,
+      inline: true
+    }
+  ];
+
+  // Website analysis
+  const probeStatus = probe.verdict === 'ACTIVE' ? '✅ Active' :
+                      probe.verdict === 'INTERACTIVE' ? '🔵 Interactive' :
+                      probe.verdict === 'STATIC' ? '⚠️ Static' : '🟡 ' + (probe.verdict || 'Unknown');
+
+  fields.push({
+    name: '🌐 Website Analysis',
+    value: `${probeStatus}\nRequests: ${probe.totalRequests || 0} | API: ${probe.apiCalls || 0} | WebSocket: ${probe.hasWebSocket ? 'Yes' : 'No'}`,
+    inline: false
+  });
+
+  // Repo analysis (if found)
+  if (trust) {
+    const trustEmoji = trust.verdict === 'SAFU' || trust.verdict === 'LEGIT' ? '✅' :
+                       trust.verdict === 'DYOR' ? '🟡' :
+                       trust.verdict === 'RISKY' ? '🟠' : '🔴';
+    fields.push({
+      name: '📁 Repo Analysis',
+      value: `${trustEmoji} ${trust.verdict || 'Unknown'} (${trust.score || 0}/100)\n${result.repoUrl || 'Unknown repo'}`,
+      inline: false
+    });
+
+    // Red flags
+    if (trust.redFlags && trust.redFlags.length > 0) {
+      fields.push({
+        name: '⚠️ Red Flags',
+        value: trust.redFlags.slice(0, 4).map(f => `• ${f}`).join('\n'),
+        inline: false
+      });
+    }
+  } else {
+    fields.push({
+      name: '📁 Repo Analysis',
+      value: '❓ No GitHub repo found',
+      inline: false
+    });
+  }
+
+  // Reason
+  if (combined.reason) {
+    fields.push({
+      name: '💬 Analysis',
+      value: combined.reason,
+      inline: false
+    });
+  }
+
+  return {
+    embeds: [{
+      title: `${verdictEmoji} Full Probe: ${result.websiteUrl || 'Unknown'}`,
+      color: color,
+      fields: fields,
+      footer: { text: 'AuraSecurity | Full Probe' },
+      timestamp: new Date().toISOString()
+    }]
+  };
+}
+
+/**
+ * Format website probe results for Discord
+ */
+function formatProbeResults(result) {
+  if (result.error) {
+    return {
+      embeds: [{
+        title: '❌ Probe Failed',
+        description: result.error,
+        color: 0xff0000,
+        footer: { text: 'AuraSecurity | Website Probe' },
+        timestamp: new Date().toISOString()
+      }]
+    };
+  }
+
+  // Determine color based on verdict
+  let color = 0x00ff00;
+  if (result.verdict === 'STATIC') color = 0xff8c00;
+  else if (result.verdict === 'SUSPICIOUS') color = 0xffff00;
+  else if (result.verdict === 'ACTIVE') color = 0x00ff00;
+  else if (result.verdict === 'INTERACTIVE') color = 0x5865F2;
+
+  const verdictEmoji = result.verdict === 'ACTIVE' ? '✅' :
+                       result.verdict === 'INTERACTIVE' ? '🔵' :
+                       result.verdict === 'STATIC' ? '⚠️' : '🟡';
+
+  const fields = [
+    {
+      name: '🎯 Verdict',
+      value: `${verdictEmoji} ${result.verdict || 'UNKNOWN'}`,
+      inline: true
+    },
+    {
+      name: '📊 Requests',
+      value: `${result.totalRequests || 0}`,
+      inline: true
+    },
+    {
+      name: '🔌 API Calls',
+      value: `${result.apiCalls?.length || result.apiCalls || 0}`,
+      inline: true
+    },
+    {
+      name: '🔗 WebSocket',
+      value: result.hasWebSocket ? '✅ Yes' : '❌ No',
+      inline: true
+    },
+    {
+      name: '⚡ Has API Activity',
+      value: result.hasApiActivity ? '✅ Yes' : '❌ No',
+      inline: true
+    }
+  ];
+
+  // Frameworks detected
+  if (result.frameworks && result.frameworks.length > 0) {
+    fields.push({
+      name: '🛠️ Tech Detected',
+      value: result.frameworks.join(', '),
+      inline: false
+    });
+  }
+
+  // Load time
+  if (result.loadTime) {
+    fields.push({
+      name: '⏱️ Load Time',
+      value: `${(result.loadTime / 1000).toFixed(1)}s`,
+      inline: true
+    });
+  }
+
+  return {
+    embeds: [{
+      title: `${verdictEmoji} Website Probe: ${result.url || 'Unknown'}`,
+      color: color,
+      fields: fields,
+      footer: { text: 'AuraSecurity | Website Probe' },
+      timestamp: new Date().toISOString()
+    }]
+  };
+}
+
+/**
  * Handle slash commands
  */
 async function handleSlashCommand(interaction) {
@@ -957,17 +1172,22 @@ async function handleSlashCommand(interaction) {
             fields: [
               {
                 name: '/rugcheck <repo>',
-                value: 'Quick security scan - checks for common red flags, secrets, and vulnerabilities.',
+                value: 'Trust score analysis - repo health, age, activity, contributors, red flags.',
                 inline: false
               },
               {
-                name: '/scan <repo>',
-                value: 'Full security audit - deep analysis of code, dependencies, and security issues.',
+                name: '/scamcheck <repo>',
+                value: 'Scam pattern detection - rug pull code, wallet drainers, honeypots, pump & dump.',
                 inline: false
               },
               {
-                name: '/devcheck <repo>',
-                value: 'Developer trust analysis - checks account age, activity, and reputation.',
+                name: '/fullprobe <url>',
+                value: 'Full analysis - probes website activity AND scans linked GitHub repo.',
+                inline: false
+              },
+              {
+                name: '/probe <url>',
+                value: 'Website probe - detects API calls, WebSocket, backend activity, tech stack.',
                 inline: false
               },
               {
@@ -976,33 +1196,8 @@ async function handleSlashCommand(interaction) {
                 inline: false
               },
               {
-                name: '/aicheck <repo>',
-                value: 'AI project verifier - checks if repo has real AI code or is just hype.',
-                inline: false
-              },
-              {
-                name: '/scamcheck <repo>',
-                value: 'Scam detector - checks for known rug pull patterns, honeypots, and wallet drainers.',
-                inline: false
-              },
-              {
                 name: '/compare <repo1> <repo2>',
                 value: 'Compare two projects side-by-side - which one to ape?',
-                inline: false
-              },
-              {
-                name: '/trustagent <agent>',
-                value: 'Check a Moltbook agent\'s trust score — identity, behavior, network, and content signals.',
-                inline: false
-              },
-              {
-                name: '/botcheck',
-                value: 'Run bot farm detection — finds coordinated agent clusters on Moltbook.',
-                inline: false
-              },
-              {
-                name: '/report <repo>',
-                value: 'Generate a full HTML security report for a repository.',
                 inline: false
               },
               {
@@ -1086,34 +1281,25 @@ export const handler = async (event) => {
 
   // Handle deferred command (async invocation from self)
   if (event.type === 'deferred_command') {
-    console.log(`Processing deferred ${event.command} for:`, event.repoUrl);
+    console.log(`Processing deferred ${event.command} for:`, event.repoUrl || event.targetUrl || event.username);
     const webhookUrl = `https://discord.com/api/v10/webhooks/${event.applicationId}/${event.interactionToken}`;
 
     try {
       let result;
       let formattedResponse;
 
-      if (event.command === 'scan') {
-        // Full vulnerability scan
-        result = await callScannerApi('scan-local', {
-          gitUrl: event.repoUrl,
-          scanSecrets: true,
-          scanPackages: true,
-          fastMode: true
-        });
-        formattedResponse = formatVulnScanResults(result, event.repoUrl);
-      } else if (event.command === 'devcheck') {
-        // Developer trust check
-        result = await callScannerApi('trust-scan', { gitUrl: event.repoUrl });
-        formattedResponse = formatDevCheckResults(result, event.repoUrl);
+      if (event.command === 'fullprobe') {
+        // Full probe - website + repo analysis
+        result = await callScannerApi('full-probe', { url: event.targetUrl });
+        formattedResponse = formatFullProbeResults(result);
+      } else if (event.command === 'probe') {
+        // Website probe only
+        result = await callScannerApi('probe', { url: event.targetUrl });
+        formattedResponse = formatProbeResults(result);
       } else if (event.command === 'xcheck') {
         // X/Twitter profile check
         result = await callScannerApi('x-scan', { username: event.username });
         formattedResponse = formatXCheckResults(result);
-      } else if (event.command === 'aicheck') {
-        // AI project verification
-        result = await callScannerApi('ai-check', { gitUrl: event.repoUrl });
-        formattedResponse = formatAICheckResults(result);
       } else if (event.command === 'scamcheck') {
         // Scam pattern detection
         result = await callScannerApi('scam-scan', { gitUrl: event.repoUrl });
@@ -1225,7 +1411,7 @@ export const handler = async (event) => {
       const { name, options } = interaction.data;
 
       // Handle repo-based scan commands
-      if (name === 'rugcheck' || name === 'scan' || name === 'devcheck' || name === 'aicheck' || name === 'scamcheck' || name === 'report') {
+      if (name === 'rugcheck' || name === 'scamcheck') {
         const repoUrl = options?.find(o => o.name === 'repo')?.value;
 
         if (!repoUrl) {
@@ -1317,6 +1503,116 @@ export const handler = async (event) => {
             interactionToken: interaction.token
           })
         }));
+
+        return {
+          statusCode: 200,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 5 })
+        };
+      }
+
+      // Handle fullprobe command (website + repo analysis)
+      if (name === 'fullprobe') {
+        let targetUrl = options?.find(o => o.name === 'url')?.value;
+
+        if (!targetUrl) {
+          return {
+            statusCode: 200,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 4,
+              data: { content: ':x: Please provide a website URL.', flags: 64 }
+            })
+          };
+        }
+
+        // Normalize URL
+        targetUrl = normalizeUrl(targetUrl);
+
+        if (!isValidWebUrl(targetUrl)) {
+          return {
+            statusCode: 200,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 4,
+              data: { content: ':x: Invalid URL. Use format: https://example.com', flags: 64 }
+            })
+          };
+        }
+
+        console.log(`Deferring fullprobe for ${targetUrl}`);
+
+        try {
+          const lambdaClient = new LambdaClient({ region: 'us-east-1' });
+          await lambdaClient.send(new InvokeCommand({
+            FunctionName: 'AuraSecurityDiscordBot',
+            InvocationType: 'Event',
+            Payload: JSON.stringify({
+              type: 'deferred_command',
+              command: 'fullprobe',
+              targetUrl: targetUrl,
+              applicationId: interaction.application_id,
+              interactionToken: interaction.token
+            })
+          }));
+        } catch (invokeErr) {
+          console.error('Lambda invoke failed:', invokeErr);
+        }
+
+        return {
+          statusCode: 200,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 5 })
+        };
+      }
+
+      // Handle probe command (website only)
+      if (name === 'probe') {
+        let targetUrl = options?.find(o => o.name === 'url')?.value;
+
+        if (!targetUrl) {
+          return {
+            statusCode: 200,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 4,
+              data: { content: ':x: Please provide a website URL.', flags: 64 }
+            })
+          };
+        }
+
+        // Normalize URL
+        targetUrl = normalizeUrl(targetUrl);
+
+        if (!isValidWebUrl(targetUrl)) {
+          return {
+            statusCode: 200,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 4,
+              data: { content: ':x: Invalid URL. Use format: https://example.com', flags: 64 }
+            })
+          };
+        }
+
+        console.log(`Deferring probe for ${targetUrl}`);
+
+        try {
+          const lambdaClient = new LambdaClient({ region: 'us-east-1' });
+          await lambdaClient.send(new InvokeCommand({
+            FunctionName: 'AuraSecurityDiscordBot',
+            InvocationType: 'Event',
+            Payload: JSON.stringify({
+              type: 'deferred_command',
+              command: 'probe',
+              targetUrl: targetUrl,
+              applicationId: interaction.application_id,
+              interactionToken: interaction.token
+            })
+          }));
+        } catch (invokeErr) {
+          console.error('Lambda invoke failed:', invokeErr);
+        }
 
         return {
           statusCode: 200,
