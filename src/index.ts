@@ -2446,7 +2446,7 @@ async function main(): Promise<void> {
             combinedReason = 'No major red flags detected';
           }
         } else {
-          // No repo found - base verdict on probe only
+          // No repo found - base verdict on probe score
           combinedScore = probeScore;
           if (probeResult.verdict === 'STATIC') {
             combinedVerdict = 'WARNING';
@@ -2457,9 +2457,15 @@ async function main(): Promise<void> {
           } else if (isCryptoSite && !probeResult.hasApiActivity) {
             combinedVerdict = 'CAUTION';
             combinedReason = 'Crypto site with no blockchain activity detected';
-          } else {
+          } else if (combinedScore >= 80) {
+            combinedVerdict = 'SAFE';
+            combinedReason = 'Active site with real backend activity (no GitHub repo to verify)';
+          } else if (combinedScore >= 55) {
             combinedVerdict = 'CAUTION';
-            combinedReason = 'Could not verify - no GitHub repo found';
+            combinedReason = 'Site appears functional but no GitHub repo found to verify';
+          } else {
+            combinedVerdict = 'WARNING';
+            combinedReason = 'Limited activity detected and no GitHub repo found';
           }
         }
 
