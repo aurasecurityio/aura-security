@@ -3162,8 +3162,11 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
     // /probe command - Detect if website has real backend activity
     else if (text.startsWith('/probe')) {
       const targetUrl = text.replace(/^\/probe(@[a-zA-Z0-9_]+)?/i, '').trim();
-      if (!targetUrl) {
-        await sendMessage(chatId, `❌ Please provide a website URL.\n\n*Example:*\n/probe https://example.com\n\n_Probes a website to detect if it has real backend activity or is just a static landing page._`);
+
+      // Validate URL format
+      const urlPattern = /^https?:\/\/[^\s]+\.[^\s]+/i;
+      if (!targetUrl || !urlPattern.test(targetUrl)) {
+        await sendMessage(chatId, `❌ Please provide a valid website URL.\n\n*Example:*\n/probe https://example.com\n\n_Probes a website to detect if it has real backend activity or is just a static landing page._`);
         return { statusCode: 200, body: 'OK' };
       }
 
@@ -3235,8 +3238,11 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
     // /fullprobe command - Combined website probe + repo trust scan
     else if (text.startsWith('/fullprobe')) {
       const targetUrl = text.replace(/^\/fullprobe(@[a-zA-Z0-9_]+)?/i, '').trim();
-      if (!targetUrl) {
-        await sendMessage(chatId, `❌ Please provide a website URL.\n\n*Example:*\n/fullprobe https://example.com\n\n_Full analysis: probes website activity AND scans linked GitHub repo for trust signals._`);
+
+      // Validate URL format
+      const urlPattern = /^https?:\/\/[^\s]+\.[^\s]+/i;
+      if (!targetUrl || !urlPattern.test(targetUrl)) {
+        await sendMessage(chatId, `❌ Please provide a valid website URL.\n\n*Example:*\n/fullprobe https://example.com\n\n_Full analysis: probes website activity AND scans linked GitHub repo for trust signals._`);
         return { statusCode: 200, body: 'OK' };
       }
 
