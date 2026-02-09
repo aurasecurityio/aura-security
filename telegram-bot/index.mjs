@@ -2686,6 +2686,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         `\u{1F527} *More Tools:*\n` +
         `/scan <url> - Deep security scan\n` +
         `/probe <url> - Website activity check (rug detection)\n` +
+        `/fullprobe <url> - Website + GitHub repo combined analysis\n` +
         `/skillcheck <url> - Scan AI agent skills for malware\n` +
         `/devcheck <@user> - Verify developer identity\n` +
         `/xcheck <@user> - X profile analysis\n\n` +
@@ -2714,6 +2715,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         `\u{1F527} *ADVANCED TOOLS:*\n\n` +
         `/scan <url> - Deep security scan (secrets, vulns)\n` +
         `/probe <url> - Website activity probe (rug detection)\n` +
+        `/fullprobe <url> - Website + GitHub repo combined analysis\n` +
         `/skillcheck <url> - Scan AI agent skills for malware\n` +
         `/devcheck <@user> - Verify dev identity + GitHub\n` +
         `/xcheck <@user> - X profile bot detection\n` +
@@ -3228,6 +3230,83 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
       } catch (err) {
         console.error('Probe error:', err);
         await sendMessage(chatId, `❌ Probe failed: ${err.message}`);
+      }
+    }
+    // /fullprobe command - Combined website probe + repo trust scan
+    else if (text.startsWith('/fullprobe')) {
+      const targetUrl = text.replace(/^\/fullprobe(@[a-zA-Z0-9_]+)?/i, '').trim();
+      if (!targetUrl) {
+        await sendMessage(chatId, `❌ Please provide a website URL.\n\n*Example:*\n/fullprobe https://example.com\n\n_Full analysis: probes website activity AND scans linked GitHub repo for trust signals._`);
+        return { statusCode: 200, body: 'OK' };
+      }
+
+      await sendMessage(chatId, `🔍 *Full Probe Started...*\n\`${targetUrl}\`\n\n_Step 1: Probing website activity..._\n_Step 2: Detecting GitHub repo..._\n_Step 3: Running trust scan..._`);
+
+      try {
+        const result = await withRetry(async () => {
+          const response = await fetch(`${AURA_API_URL}/tools`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(AURA_API_KEY ? { 'Authorization': `Bearer ${AURA_API_KEY}` } : {}) },
+            body: JSON.stringify({ tool: 'full-probe', arguments: { url: targetUrl } })
+          });
+          if (!response.ok) throw new Error(`API error: ${response.status}`);
+          return response.json();
+        });
+
+        const data = result.result || result;
+
+        if (data.error) {
+          await sendMessage(chatId, `❌ *Full Probe Failed*\n\n${data.error}`);
+          return { statusCode: 200, body: 'OK' };
+        }
+
+        // Use the formatted output from backend
+        if (data.formatted) {
+          await sendMessage(chatId, data.formatted);
+        } else {
+          // Fallback formatting
+          const verdictEmoji = data.combined?.verdict === 'SAFE' ? '✅' :
+                              data.combined?.verdict === 'CAUTION' ? '🟡' :
+                              data.combined?.verdict === 'WARNING' ? '🟠' : '🔴';
+
+          let msg = `${verdictEmoji} *FULL PROBE RESULT*\n\n`;
+          msg += `*URL:* \`${data.websiteUrl}\`\n\n`;
+
+          // Website probe
+          msg += `📊 *Website Analysis*\n`;
+          msg += `├ Status: ${data.probe?.verdict || 'Unknown'}\n`;
+          msg += `├ Requests: ${data.probe?.totalRequests || 0}\n`;
+          msg += `├ API Calls: ${data.probe?.apiCalls || 0}\n`;
+          msg += `└ WebSocket: ${data.probe?.hasWebSocket ? 'Yes' : 'No'}\n\n`;
+
+          // Repo trust (if found)
+          if (data.trust) {
+            msg += `📁 *Repo Analysis*\n`;
+            msg += `├ Repo: ${data.repoUrl}\n`;
+            msg += `├ Trust: ${data.trust.score}/100 (${data.trust.grade})\n`;
+            msg += `└ Verdict: ${data.trust.verdict}\n\n`;
+
+            if (data.trust.redFlags?.length > 0) {
+              msg += `⚠️ *Red Flags:*\n`;
+              data.trust.redFlags.slice(0, 3).forEach(flag => {
+                msg += `• ${flag}\n`;
+              });
+              msg += `\n`;
+            }
+          } else {
+            msg += `📁 *Repo:* Not found\n\n`;
+          }
+
+          // Combined verdict
+          msg += `🎯 *Combined Score:* ${data.combined?.score || 0}/100\n`;
+          msg += `*Verdict:* ${data.combined?.verdict || 'UNKNOWN'}\n`;
+          msg += `${data.combined?.reason || ''}`;
+
+          await sendMessage(chatId, msg);
+        }
+      } catch (err) {
+        console.error('Full probe error:', err);
+        await sendMessage(chatId, `❌ Full probe failed: ${err.message}`);
       }
     }
     // /skillcheck command - Scan AI agent skills for security issues
