@@ -46,6 +46,11 @@ docs/pitch-deck.html
 # Internal development notes
 CLAUDE.md
 
+# Private config (detection signatures, scoring weights)
+# Only example files are committed - real configs live on server only
+config/*.json
+!config/*.example.json
+
 # Deployment secrets (keep examples only)
 deploy/terraform/terraform.tfvars
 *.pem

@@ -1,0 +1,17 @@
+{
+  "version": "1.0",
+  "_comment": "This is an example config. The real weights are loaded from trust-weights.json (not committed to repo).",
+  "baseScore": 40,
+  "repoAge": {
+    "brandNewDays": 7, "brandNewPoints": -15,
+    "veryNewDays": 30, "veryNewPoints": 2,
+    "moderateDays": 180, "moderatePoints": 5,
+    "establishedDays": 365, "establishedPoints": 8,
+    "wellEstablishedPoints": 10
+  },
+  "grades": {
+    "A": 80,
+    "B": 60,
+    "C": 35
+  }
+}

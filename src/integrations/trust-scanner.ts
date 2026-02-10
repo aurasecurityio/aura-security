@@ -3,7 +3,130 @@
  *
  * Analyzes GitHub repositories to detect potential rug pulls and scams.
  * Returns a trust score (0-100) with plain English explanations.
+ *
+ * Scoring weights and thresholds are loaded from private config (config/trust-weights.json).
+ * If config is missing, built-in defaults are used.
  */
+
+import { loadConfig, toRegExp } from '../config/loader.js';
+
+// Config types
+interface TrustWeightsConfig {
+  baseScore: number;
+  repoAge: {
+    brandNewDays: number; brandNewPoints: number;
+    veryNewDays: number; veryNewPoints: number;
+    moderateDays: number; moderatePoints: number;
+    establishedDays: number; establishedPoints: number;
+    wellEstablishedPoints: number;
+  };
+  commits: {
+    veryLowMax: number; veryLowPoints: number;
+    lowMax: number; lowPoints: number;
+    moderateMax: number; moderatePoints: number;
+    activePoints: number;
+  };
+  historySuspicious: {
+    minCodeFiles: number; minCommitsForCheck: number;
+    extremeRatio: number; extremePoints: number;
+    suspiciousRatio: number; suspiciousPoints: number;
+  };
+  contributors: {
+    soloMax: number; soloPoints: number;
+    smallMax: number; smallPoints: number;
+    goodMax: number; goodPoints: number;
+    largePoints: number;
+  };
+  stars: {
+    boughtMinStars: number; boughtRatio: number; boughtPoints: number;
+    inflatedMinStars: number; inflatedRatio: number; inflatedPoints: number;
+    naturalMinStars: number; naturalPoints: number;
+    lowPoints: number;
+  };
+  codeFiles: {
+    noneMax: number; nonePoints: number;
+    fewMax: number; fewPoints: number;
+    smallMax: number; smallPoints: number;
+    substantialPoints: number;
+  };
+  tests: { absentPoints: number; presentPoints: number };
+  activity: {
+    abandonedDays: number; abandonedPoints: number;
+    inactiveDays: number; inactivePoints: number;
+    moderateDays: number; moderatePoints: number;
+    activePoints: number;
+  };
+  fork: { isForkPoints: number; isOriginalPoints: number };
+  license: { presentPoints: number; absentPoints: number };
+  dependencies: { presentPoints: number; absentPoints: number };
+  secrets: { perSecretPoints: number; cleanPoints: number };
+  archived: { points: number };
+  forkAnalysis: {
+    copyPasteMax: number; copyPastePoints: number;
+    minimalMax: number; minimalPoints: number;
+    substantialPoints: number;
+  };
+  ownerAge: {
+    veryNewDays: number; veryNewPointsDefault: number; veryNewPointsWithCode: number;
+    newDays: number; newPoints: number;
+    establishedDays: number; establishedPoints: number;
+  };
+  ownerRepos: {
+    firstMax: number; firstPointsDefault: number; firstPointsWithCode: number;
+    limitedMax: number; limitedPoints: number;
+    activeMin: number; activePoints: number;
+  };
+  readmeFlags: { manyMin: number; manyPoints: number; somePoints: number };
+  codeFlags: { manyMin: number; manyPoints: number; somePoints: number };
+  builderBonus: {
+    strongMin: number; strongPoints: number;
+    goodMin: number; goodPoints: number;
+    someMin: number; somePoints: number;
+    thresholds: {
+      minCodeFiles: number; minCommits: number;
+      maxDaysSinceUpdate: number; minContributors: number;
+    };
+  };
+  grades: { A: number; B: number; C: number };
+  scoreCaps: {
+    secrets5plus: number; secrets3plus: number; secrets1plus: number;
+    noCode: number; bad3plus: number; bad2: number; bad1: number;
+  };
+  realCodeThresholds: { minCodeFiles: number; minCommits: number };
+  secretPatterns?: Array<{ pattern: [string, string?]; name: string }>;
+  readmeRedFlagPatterns?: Array<{ pattern: [string, string?]; flag: string; excludePattern?: [string, string?] }>;
+  codeRedFlagPatterns?: Array<{ pattern: [string, string?]; flag: string; fileExt: string }>;
+}
+
+// Default weights (used when config file is not found)
+const DEFAULT_WEIGHTS: TrustWeightsConfig = {
+  baseScore: 40,
+  repoAge: { brandNewDays: 7, brandNewPoints: -15, veryNewDays: 30, veryNewPoints: 2, moderateDays: 180, moderatePoints: 5, establishedDays: 365, establishedPoints: 8, wellEstablishedPoints: 10 },
+  commits: { veryLowMax: 5, veryLowPoints: 0, lowMax: 20, lowPoints: 3, moderateMax: 100, moderatePoints: 6, activePoints: 10 },
+  historySuspicious: { minCodeFiles: 20, minCommitsForCheck: 3, extremeRatio: 30, extremePoints: -25, suspiciousRatio: 15, suspiciousPoints: -15 },
+  contributors: { soloMax: 1, soloPoints: -5, smallMax: 3, smallPoints: 3, goodMax: 10, goodPoints: 7, largePoints: 10 },
+  stars: { boughtMinStars: 100, boughtRatio: 100, boughtPoints: -20, inflatedMinStars: 50, inflatedRatio: 50, inflatedPoints: -10, naturalMinStars: 10, naturalPoints: 5, lowPoints: 0 },
+  codeFiles: { noneMax: 0, nonePoints: -10, fewMax: 5, fewPoints: 2, smallMax: 20, smallPoints: 6, substantialPoints: 10 },
+  tests: { absentPoints: 0, presentPoints: 10 },
+  activity: { abandonedDays: 365, abandonedPoints: -10, inactiveDays: 180, inactivePoints: 0, moderateDays: 30, moderatePoints: 5, activePoints: 10 },
+  fork: { isForkPoints: -5, isOriginalPoints: 5 },
+  license: { presentPoints: 5, absentPoints: 0 },
+  dependencies: { presentPoints: 5, absentPoints: 0 },
+  secrets: { perSecretPoints: -10, cleanPoints: 5 },
+  archived: { points: -15 },
+  forkAnalysis: { copyPasteMax: 50, copyPastePoints: -25, minimalMax: 200, minimalPoints: -10, substantialPoints: 0 },
+  ownerAge: { veryNewDays: 30, veryNewPointsDefault: -15, veryNewPointsWithCode: -8, newDays: 180, newPoints: -5, establishedDays: 365, establishedPoints: 5 },
+  ownerRepos: { firstMax: 1, firstPointsDefault: -10, firstPointsWithCode: -5, limitedMax: 5, limitedPoints: -5, activeMin: 10, activePoints: 5 },
+  readmeFlags: { manyMin: 2, manyPoints: -20, somePoints: -10 },
+  codeFlags: { manyMin: 2, manyPoints: -25, somePoints: -10 },
+  builderBonus: { strongMin: 4, strongPoints: 15, goodMin: 3, goodPoints: 10, someMin: 2, somePoints: 5, thresholds: { minCodeFiles: 20, minCommits: 30, maxDaysSinceUpdate: 30, minContributors: 2 } },
+  grades: { A: 80, B: 60, C: 35 },
+  scoreCaps: { secrets5plus: 40, secrets3plus: 50, secrets1plus: 65, noCode: 40, bad3plus: 50, bad2: 60, bad1: 75 },
+  realCodeThresholds: { minCodeFiles: 20, minCommits: 20 },
+};
+
+// Load weights from config
+const W = loadConfig<TrustWeightsConfig>('trust-weights.json', DEFAULT_WEIGHTS);
 
 export interface TrustCheck {
   id: string;
@@ -60,10 +183,9 @@ export interface TrustScanResult {
  * Parse GitHub URL to extract owner and repo
  */
 function parseGitHubUrl(url: string): { owner: string; repo: string } | null {
-  // Handle various GitHub URL formats
   const patterns = [
     /github\.com\/([^\/]+)\/([^\/\?\#]+)/,
-    /^([^\/]+)\/([^\/]+)$/  // owner/repo format
+    /^([^\/]+)\/([^\/]+)$/
   ];
 
   for (const pattern of patterns) {
@@ -86,36 +208,36 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
   const checks: TrustCheck[] = [];
 
   // 1. Repo Age Check
-  if (metrics.repoAgeDays < 7) {
+  if (metrics.repoAgeDays < W.repoAge.brandNewDays) {
     checks.push({
       id: 'repo_age',
       name: 'Project Age',
       status: 'bad',
-      points: -15,
+      points: W.repoAge.brandNewPoints,
       explanation: 'Brand new project (less than a week old) - major red flag!'
     });
-  } else if (metrics.repoAgeDays < 30) {
+  } else if (metrics.repoAgeDays < W.repoAge.veryNewDays) {
     checks.push({
       id: 'repo_age',
       name: 'Project Age',
       status: 'warn',
-      points: 2,
+      points: W.repoAge.veryNewPoints,
       explanation: `Very new project (${metrics.repoAgeDays} days old) - be cautious`
     });
-  } else if (metrics.repoAgeDays < 180) {
+  } else if (metrics.repoAgeDays < W.repoAge.moderateDays) {
     checks.push({
       id: 'repo_age',
       name: 'Project Age',
       status: 'info',
-      points: 5,
+      points: W.repoAge.moderatePoints,
       explanation: `Project is ${Math.floor(metrics.repoAgeDays / 30)} months old`
     });
-  } else if (metrics.repoAgeDays < 365) {
+  } else if (metrics.repoAgeDays < W.repoAge.establishedDays) {
     checks.push({
       id: 'repo_age',
       name: 'Project Age',
       status: 'good',
-      points: 8,
+      points: W.repoAge.establishedPoints,
       explanation: `Established project (${Math.floor(metrics.repoAgeDays / 30)} months old)`
     });
   } else {
@@ -123,34 +245,34 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
       id: 'repo_age',
       name: 'Project Age',
       status: 'good',
-      points: 10,
+      points: W.repoAge.wellEstablishedPoints,
       explanation: `Well-established project (${Math.floor(metrics.repoAgeDays / 365)} years old)`
     });
   }
 
   // 2. Commit Count Check
-  if (metrics.commitCount < 5) {
+  if (metrics.commitCount < W.commits.veryLowMax) {
     checks.push({
       id: 'commits',
       name: 'Development Activity',
       status: 'bad',
-      points: 0,
+      points: W.commits.veryLowPoints,
       explanation: `Only ${metrics.commitCount} commits - looks like a placeholder or copy`
     });
-  } else if (metrics.commitCount < 20) {
+  } else if (metrics.commitCount < W.commits.lowMax) {
     checks.push({
       id: 'commits',
       name: 'Development Activity',
       status: 'warn',
-      points: 3,
+      points: W.commits.lowPoints,
       explanation: `Low commit count (${metrics.commitCount}) - limited development`
     });
-  } else if (metrics.commitCount < 100) {
+  } else if (metrics.commitCount < W.commits.moderateMax) {
     checks.push({
       id: 'commits',
       name: 'Development Activity',
       status: 'info',
-      points: 6,
+      points: W.commits.moderatePoints,
       explanation: `${metrics.commitCount} commits - moderate development activity`
     });
   } else {
@@ -158,57 +280,56 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
       id: 'commits',
       name: 'Development Activity',
       status: 'good',
-      points: 10,
+      points: W.commits.activePoints,
       explanation: `${metrics.commitCount} commits - active development`
     });
   }
 
-  // 2b. Files-to-Commits Ratio Check (detect copied/dumped repos)
-  // If you have many files but very few commits, it's likely copied code
-  if (metrics.codeFileCount > 20 && metrics.commitCount <= 3) {
+  // 2b. Files-to-Commits Ratio Check
+  if (metrics.codeFileCount > W.historySuspicious.minCodeFiles && metrics.commitCount <= W.historySuspicious.minCommitsForCheck) {
     const ratio = metrics.codeFileCount / Math.max(metrics.commitCount, 1);
-    if (ratio > 30) {
+    if (ratio > W.historySuspicious.extremeRatio) {
       checks.push({
         id: 'history-suspicious',
         name: 'Suspicious History',
         status: 'bad',
-        points: -25,
+        points: W.historySuspicious.extremePoints,
         explanation: `${metrics.codeFileCount} files in only ${metrics.commitCount} commit(s) - likely copied/forked with squashed history`
       });
-    } else if (ratio > 15) {
+    } else if (ratio > W.historySuspicious.suspiciousRatio) {
       checks.push({
         id: 'history-suspicious',
         name: 'Suspicious History',
         status: 'warn',
-        points: -15,
+        points: W.historySuspicious.suspiciousPoints,
         explanation: `High files-to-commits ratio (${metrics.codeFileCount} files, ${metrics.commitCount} commits) - unusual development pattern`
       });
     }
   }
 
   // 3. Contributor Check
-  if (metrics.contributorCount === 1) {
+  if (metrics.contributorCount === W.contributors.soloMax) {
     checks.push({
       id: 'contributors',
       name: 'Team Size',
       status: 'warn',
-      points: -5,
+      points: W.contributors.soloPoints,
       explanation: 'Only 1 contributor - single person project (higher risk)'
     });
-  } else if (metrics.contributorCount < 3) {
+  } else if (metrics.contributorCount < W.contributors.smallMax) {
     checks.push({
       id: 'contributors',
       name: 'Team Size',
       status: 'info',
-      points: 3,
+      points: W.contributors.smallPoints,
       explanation: `Small team (${metrics.contributorCount} contributors)`
     });
-  } else if (metrics.contributorCount < 10) {
+  } else if (metrics.contributorCount < W.contributors.goodMax) {
     checks.push({
       id: 'contributors',
       name: 'Team Size',
       status: 'good',
-      points: 7,
+      points: W.contributors.goodPoints,
       explanation: `Good team size (${metrics.contributorCount} contributors)`
     });
   } else {
@@ -216,35 +337,35 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
       id: 'contributors',
       name: 'Team Size',
       status: 'good',
-      points: 10,
+      points: W.contributors.largePoints,
       explanation: `Large team (${metrics.contributorCount}+ contributors)`
     });
   }
 
-  // 4. Star Pattern Check (detect fake stars)
+  // 4. Star Pattern Check
   const starForkRatio = metrics.stars / Math.max(metrics.forks, 1);
-  if (metrics.stars > 100 && starForkRatio > 100) {
+  if (metrics.stars > W.stars.boughtMinStars && starForkRatio > W.stars.boughtRatio) {
     checks.push({
       id: 'stars',
       name: 'Star Pattern',
       status: 'bad',
-      points: -20,
+      points: W.stars.boughtPoints,
       explanation: `Suspicious! ${metrics.stars} stars but only ${metrics.forks} forks - likely bought stars`
     });
-  } else if (metrics.stars > 50 && starForkRatio > 50) {
+  } else if (metrics.stars > W.stars.inflatedMinStars && starForkRatio > W.stars.inflatedRatio) {
     checks.push({
       id: 'stars',
       name: 'Star Pattern',
       status: 'warn',
-      points: -10,
+      points: W.stars.inflatedPoints,
       explanation: `Unusual star pattern (${metrics.stars} stars, ${metrics.forks} forks) - could be inflated`
     });
-  } else if (metrics.stars > 10) {
+  } else if (metrics.stars > W.stars.naturalMinStars) {
     checks.push({
       id: 'stars',
       name: 'Star Pattern',
       status: 'good',
-      points: 5,
+      points: W.stars.naturalPoints,
       explanation: `Natural engagement (${metrics.stars} stars, ${metrics.forks} forks)`
     });
   } else {
@@ -252,34 +373,34 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
       id: 'stars',
       name: 'Star Pattern',
       status: 'info',
-      points: 0,
+      points: W.stars.lowPoints,
       explanation: `Low visibility (${metrics.stars} stars) - newer or niche project`
     });
   }
 
   // 5. Code Files Check
-  if (metrics.codeFileCount === 0) {
+  if (metrics.codeFileCount === W.codeFiles.noneMax) {
     checks.push({
       id: 'code',
       name: 'Actual Code',
       status: 'bad',
-      points: -10,
+      points: W.codeFiles.nonePoints,
       explanation: 'No code files found! This is just a README - major red flag'
     });
-  } else if (metrics.codeFileCount < 5) {
+  } else if (metrics.codeFileCount < W.codeFiles.fewMax) {
     checks.push({
       id: 'code',
       name: 'Actual Code',
       status: 'warn',
-      points: 2,
+      points: W.codeFiles.fewPoints,
       explanation: `Very few code files (${metrics.codeFileCount}) - might be a placeholder`
     });
-  } else if (metrics.codeFileCount < 20) {
+  } else if (metrics.codeFileCount < W.codeFiles.smallMax) {
     checks.push({
       id: 'code',
       name: 'Actual Code',
       status: 'info',
-      points: 6,
+      points: W.codeFiles.smallPoints,
       explanation: `${metrics.codeFileCount} code files - small but real codebase`
     });
   } else {
@@ -287,7 +408,7 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
       id: 'code',
       name: 'Actual Code',
       status: 'good',
-      points: 10,
+      points: W.codeFiles.substantialPoints,
       explanation: `${metrics.codeFileCount} code files - substantial codebase`
     });
   }
@@ -298,7 +419,7 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
       id: 'tests',
       name: 'Test Coverage',
       status: 'warn',
-      points: 0,
+      points: W.tests.absentPoints,
       explanation: 'No tests found - harder to verify code quality'
     });
   } else {
@@ -306,34 +427,34 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
       id: 'tests',
       name: 'Test Coverage',
       status: 'good',
-      points: 10,
+      points: W.tests.presentPoints,
       explanation: 'Has test files - shows quality effort'
     });
   }
 
   // 7. Recent Activity Check
-  if (metrics.daysSinceLastPush > 365) {
+  if (metrics.daysSinceLastPush > W.activity.abandonedDays) {
     checks.push({
       id: 'activity',
       name: 'Recent Activity',
       status: 'bad',
-      points: -10,
+      points: W.activity.abandonedPoints,
       explanation: `No updates in ${Math.floor(metrics.daysSinceLastPush / 365)} year(s) - project may be abandoned`
     });
-  } else if (metrics.daysSinceLastPush > 180) {
+  } else if (metrics.daysSinceLastPush > W.activity.inactiveDays) {
     checks.push({
       id: 'activity',
       name: 'Recent Activity',
       status: 'warn',
-      points: 0,
+      points: W.activity.inactivePoints,
       explanation: `No updates in ${Math.floor(metrics.daysSinceLastPush / 30)} months - possibly inactive`
     });
-  } else if (metrics.daysSinceLastPush > 30) {
+  } else if (metrics.daysSinceLastPush > W.activity.moderateDays) {
     checks.push({
       id: 'activity',
       name: 'Recent Activity',
       status: 'info',
-      points: 5,
+      points: W.activity.moderatePoints,
       explanation: `Last update ${Math.floor(metrics.daysSinceLastPush / 30)} month(s) ago`
     });
   } else {
@@ -341,7 +462,7 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
       id: 'activity',
       name: 'Recent Activity',
       status: 'good',
-      points: 10,
+      points: W.activity.activePoints,
       explanation: `Recently updated (${metrics.daysSinceLastPush} days ago) - actively maintained`
     });
   }
@@ -352,7 +473,7 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
       id: 'fork',
       name: 'Original Project',
       status: 'warn',
-      points: -5,
+      points: W.fork.isForkPoints,
       explanation: 'This is a fork of another project - not original work'
     });
   } else {
@@ -360,7 +481,7 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
       id: 'fork',
       name: 'Original Project',
       status: 'good',
-      points: 5,
+      points: W.fork.isOriginalPoints,
       explanation: 'Original repository (not a fork)'
     });
   }
@@ -371,7 +492,7 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
       id: 'license',
       name: 'License',
       status: 'good',
-      points: 5,
+      points: W.license.presentPoints,
       explanation: 'Has a proper open-source license'
     });
   } else {
@@ -379,7 +500,7 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
       id: 'license',
       name: 'License',
       status: 'info',
-      points: 0,
+      points: W.license.absentPoints,
       explanation: 'No license specified'
     });
   }
@@ -390,7 +511,7 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
       id: 'dependencies',
       name: 'Dependencies',
       status: 'good',
-      points: 5,
+      points: W.dependencies.presentPoints,
       explanation: 'Has package management (real project structure)'
     });
   } else {
@@ -398,7 +519,7 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
       id: 'dependencies',
       name: 'Dependencies',
       status: 'info',
-      points: 0,
+      points: W.dependencies.absentPoints,
       explanation: 'No dependency file found'
     });
   }
@@ -409,7 +530,7 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
       id: 'secrets',
       name: 'Security',
       status: 'bad',
-      points: -10 * metrics.secretsFound,
+      points: W.secrets.perSecretPoints * metrics.secretsFound,
       explanation: `Found ${metrics.secretsFound} leaked secret(s) - major security red flag!`
     });
   } else {
@@ -417,7 +538,7 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
       id: 'secrets',
       name: 'Security',
       status: 'good',
-      points: 5,
+      points: W.secrets.cleanPoints,
       explanation: 'No leaked credentials found'
     });
   }
@@ -428,7 +549,7 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
       id: 'archived',
       name: 'Project Status',
       status: 'bad',
-      points: -15,
+      points: W.archived.points,
       explanation: 'Project is ARCHIVED - no longer maintained!'
     });
   }
@@ -446,20 +567,20 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
 
   // 14. Enhanced Fork Analysis
   if (metrics.isFork && metrics.forkChangedLines !== undefined) {
-    if (metrics.forkChangedLines < 50) {
+    if (metrics.forkChangedLines < W.forkAnalysis.copyPasteMax) {
       checks.push({
         id: 'fork_analysis',
         name: 'Fork Quality',
         status: 'bad',
-        points: -25,
+        points: W.forkAnalysis.copyPastePoints,
         explanation: `Copy-paste alert! Only ${metrics.forkChangedLines} lines changed from original`
       });
-    } else if (metrics.forkChangedLines < 200) {
+    } else if (metrics.forkChangedLines < W.forkAnalysis.minimalMax) {
       checks.push({
         id: 'fork_analysis',
         name: 'Fork Quality',
         status: 'warn',
-        points: -10,
+        points: W.forkAnalysis.minimalPoints,
         explanation: `Minimal changes (${metrics.forkChangedLines} lines) from forked repo`
       });
     } else {
@@ -467,20 +588,19 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
         id: 'fork_analysis',
         name: 'Fork Quality',
         status: 'info',
-        points: 0,
+        points: W.forkAnalysis.substantialPoints,
         explanation: `Substantial modifications (${metrics.forkChangedLines}+ lines changed)`
       });
     }
   }
 
-  // 15. Owner Account Age Check (softer if there's real code)
-  const hasRealCode = metrics.codeFileCount >= 20;
-  const hasRealActivity = metrics.commitCount >= 20;
+  // 15. Owner Account Age Check
+  const hasRealCode = metrics.codeFileCount >= W.realCodeThresholds.minCodeFiles;
+  const hasRealActivity = metrics.commitCount >= W.realCodeThresholds.minCommits;
 
   if (metrics.ownerAccountAgeDays !== undefined) {
-    if (metrics.ownerAccountAgeDays < 30) {
-      // Softer penalty if they're actually building something
-      const points = (hasRealCode && hasRealActivity) ? -8 : -15;
+    if (metrics.ownerAccountAgeDays < W.ownerAge.veryNewDays) {
+      const points = (hasRealCode && hasRealActivity) ? W.ownerAge.veryNewPointsWithCode : W.ownerAge.veryNewPointsDefault;
       checks.push({
         id: 'owner_age',
         name: 'Developer Account',
@@ -488,30 +608,29 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
         points,
         explanation: `New developer account (${metrics.ownerAccountAgeDays} days old)`
       });
-    } else if (metrics.ownerAccountAgeDays < 180) {
+    } else if (metrics.ownerAccountAgeDays < W.ownerAge.newDays) {
       checks.push({
         id: 'owner_age',
         name: 'Developer Account',
         status: 'warn',
-        points: -5,
+        points: W.ownerAge.newPoints,
         explanation: `New developer account (${Math.floor(metrics.ownerAccountAgeDays / 30)} months old)`
       });
-    } else if (metrics.ownerAccountAgeDays >= 365) {
+    } else if (metrics.ownerAccountAgeDays >= W.ownerAge.establishedDays) {
       checks.push({
         id: 'owner_age',
         name: 'Developer Account',
         status: 'good',
-        points: 5,
+        points: W.ownerAge.establishedPoints,
         explanation: `Established developer (${Math.floor(metrics.ownerAccountAgeDays / 365)}+ years on GitHub)`
       });
     }
   }
 
-  // 16. Owner Repo Count Check (softer if building real code)
+  // 16. Owner Repo Count Check
   if (metrics.ownerPublicRepos !== undefined) {
-    if (metrics.ownerPublicRepos === 1) {
-      // Softer penalty if the repo shows real effort
-      const points = (hasRealCode && hasRealActivity) ? -5 : -10;
+    if (metrics.ownerPublicRepos === W.ownerRepos.firstMax) {
+      const points = (hasRealCode && hasRealActivity) ? W.ownerRepos.firstPointsWithCode : W.ownerRepos.firstPointsDefault;
       checks.push({
         id: 'owner_repos',
         name: 'Developer History',
@@ -519,20 +638,20 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
         points,
         explanation: 'First repo - new to GitHub'
       });
-    } else if (metrics.ownerPublicRepos < 5) {
+    } else if (metrics.ownerPublicRepos < W.ownerRepos.limitedMax) {
       checks.push({
         id: 'owner_repos',
         name: 'Developer History',
         status: 'warn',
-        points: -5,
+        points: W.ownerRepos.limitedPoints,
         explanation: `Limited history (only ${metrics.ownerPublicRepos} repos)`
       });
-    } else if (metrics.ownerPublicRepos >= 10) {
+    } else if (metrics.ownerPublicRepos >= W.ownerRepos.activeMin) {
       checks.push({
         id: 'owner_repos',
         name: 'Developer History',
         status: 'good',
-        points: 5,
+        points: W.ownerRepos.activePoints,
         explanation: `Active developer (${metrics.ownerPublicRepos} public repos)`
       });
     }
@@ -544,55 +663,55 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
     checks.push({
       id: 'readme_flags',
       name: 'README Analysis',
-      status: flagCount >= 2 ? 'bad' : 'warn',
-      points: flagCount >= 2 ? -20 : -10,
+      status: flagCount >= W.readmeFlags.manyMin ? 'bad' : 'warn',
+      points: flagCount >= W.readmeFlags.manyMin ? W.readmeFlags.manyPoints : W.readmeFlags.somePoints,
       explanation: `Scam signals: ${metrics.readmeRedFlags.slice(0, 2).join(', ')}`
     });
   }
 
-  // 18. Code Red Flags (Honeypot patterns)
+  // 18. Code Red Flags
   if (metrics.codeRedFlags && metrics.codeRedFlags.length > 0) {
     const flagCount = metrics.codeRedFlags.length;
     checks.push({
       id: 'code_flags',
       name: 'Code Analysis',
-      status: flagCount >= 2 ? 'bad' : 'warn',
-      points: flagCount >= 2 ? -25 : -10,
+      status: flagCount >= W.codeFlags.manyMin ? 'bad' : 'warn',
+      points: flagCount >= W.codeFlags.manyMin ? W.codeFlags.manyPoints : W.codeFlags.somePoints,
       explanation: `Risky code: ${metrics.codeRedFlags.slice(0, 2).join(', ')}`
     });
   }
 
-  // 19. Builder Bonus - reward real development effort
+  // 19. Builder Bonus
   const builderSignals = [
-    metrics.codeFileCount >= 20,      // Substantial codebase
-    metrics.hasTests,                  // Has tests
-    metrics.commitCount >= 30,         // Active commits
-    metrics.daysSinceLastPush < 30,    // Recent activity
-    metrics.contributorCount >= 2,     // Team effort
+    metrics.codeFileCount >= W.builderBonus.thresholds.minCodeFiles,
+    metrics.hasTests,
+    metrics.commitCount >= W.builderBonus.thresholds.minCommits,
+    metrics.daysSinceLastPush < W.builderBonus.thresholds.maxDaysSinceUpdate,
+    metrics.contributorCount >= W.builderBonus.thresholds.minContributors,
   ].filter(Boolean).length;
 
-  if (builderSignals >= 4) {
+  if (builderSignals >= W.builderBonus.strongMin) {
     checks.push({
       id: 'builder_bonus',
       name: 'Builder Score',
       status: 'good',
-      points: 15,
+      points: W.builderBonus.strongPoints,
       explanation: 'Strong development signals - actively building!'
     });
-  } else if (builderSignals >= 3) {
+  } else if (builderSignals >= W.builderBonus.goodMin) {
     checks.push({
       id: 'builder_bonus',
       name: 'Builder Score',
       status: 'good',
-      points: 10,
+      points: W.builderBonus.goodPoints,
       explanation: 'Good development activity detected'
     });
-  } else if (builderSignals >= 2) {
+  } else if (builderSignals >= W.builderBonus.someMin) {
     checks.push({
       id: 'builder_bonus',
       name: 'Builder Score',
       status: 'info',
-      points: 5,
+      points: W.builderBonus.somePoints,
       explanation: 'Some development effort shown'
     });
   }
@@ -604,65 +723,54 @@ function runTrustChecks(metrics: TrustMetrics): TrustCheck[] {
  * Calculate trust score from checks
  */
 function calculateScore(checks: TrustCheck[]): { score: number; grade: 'A' | 'B' | 'C' | 'F'; verdict: 'SAFU' | 'DYOR' | 'RISKY' | 'RUG ALERT'; verdictEmoji: string } {
-  const baseScore = 40; // Lowered from 50
   const totalPoints = checks.reduce((sum, check) => sum + check.points, 0);
-  let score = Math.max(0, Math.min(100, baseScore + totalPoints));
+  let score = Math.max(0, Math.min(100, W.baseScore + totalPoints));
 
   // Count critical issues
   const badChecks = checks.filter(c => c.status === 'bad');
   const hasSecrets = checks.some(c => c.id === 'secrets' && c.status === 'bad');
   const hasNoCode = checks.some(c => c.id === 'code' && c.status === 'bad');
-  const isAbandoned = checks.some(c => c.id === 'activity' && c.status === 'bad');
 
   // Apply caps based on critical issues
   if (hasSecrets) {
     const secretsCheck = checks.find(c => c.id === 'secrets');
-    const secretCount = secretsCheck ? Math.abs(secretsCheck.points) / 10 : 1;
+    const secretCount = secretsCheck ? Math.abs(secretsCheck.points) / Math.abs(W.secrets.perSecretPoints) : 1;
     if (secretCount >= 5) {
-      // Many secrets = definitely compromised, hard cap RISKY
-      score = Math.min(score, 40);
+      score = Math.min(score, W.scoreCaps.secrets5plus);
     } else if (secretCount >= 3) {
-      // Several secrets = serious concern
-      score = Math.min(score, 50);
+      score = Math.min(score, W.scoreCaps.secrets3plus);
     } else {
-      // 1-2 secrets = concerning but could be marginal detection
-      // Cap at DYOR, let other signals weigh in
-      score = Math.min(score, 65);
+      score = Math.min(score, W.scoreCaps.secrets1plus);
     }
   }
   if (hasNoCode) {
-    // No code = max score 40 (RISKY)
-    score = Math.min(score, 40);
+    score = Math.min(score, W.scoreCaps.noCode);
   }
   if (badChecks.length >= 3) {
-    // 3+ bad checks = max score 50 (RISKY)
-    score = Math.min(score, 50);
+    score = Math.min(score, W.scoreCaps.bad3plus);
   } else if (badChecks.length >= 2) {
-    // 2 bad checks = max score 60 (DYOR)
-    score = Math.min(score, 60);
+    score = Math.min(score, W.scoreCaps.bad2);
   } else if (badChecks.length >= 1) {
-    // 1 bad check = max score 75 (DYOR)
-    score = Math.min(score, 75);
+    score = Math.min(score, W.scoreCaps.bad1);
   }
 
   let grade: 'A' | 'B' | 'C' | 'F';
   let verdict: 'SAFU' | 'DYOR' | 'RISKY' | 'RUG ALERT';
   let verdictEmoji: string;
 
-  if (score >= 80) {
+  if (score >= W.grades.A) {
     grade = 'A';
     verdict = 'SAFU';
     verdictEmoji = '🟢';
-  } else if (score >= 60) {
+  } else if (score >= W.grades.B) {
     grade = 'B';
     verdict = 'DYOR';
     verdictEmoji = '🟡';
-  } else if (score >= 35) {
+  } else if (score >= W.grades.C) {
     grade = 'C';
     verdict = 'RISKY';
     verdictEmoji = '🟠';
   } else {
-    // RUG ALERT only for really bad scores (<35)
     grade = 'F';
     verdict = 'RUG ALERT';
     verdictEmoji = '🔴';
@@ -710,18 +818,28 @@ function generateSummary(checks: TrustCheck[], score: number, verdict: string): 
 }
 
 /**
+ * Compile secret patterns from config
+ */
+function getSecretPatterns(): Array<{ pattern: RegExp; name: string }> {
+  if (W.secretPatterns && W.secretPatterns.length > 0) {
+    return W.secretPatterns.map(p => ({
+      pattern: toRegExp(p.pattern),
+      name: p.name,
+    }));
+  }
+  // Minimal fallback
+  return [
+    { pattern: /AKIA[0-9A-Z]{16}/, name: 'AWS Access Key' },
+    { pattern: /gh[pousr]_[A-Za-z0-9_]{36,}/, name: 'GitHub Token' },
+    { pattern: /-----BEGIN\s*(?:RSA|EC|DSA|OPENSSH)?\s*PRIVATE KEY-----/, name: 'Private Key' },
+  ];
+}
+
+/**
  * Scan a single file for secrets (basic patterns)
  */
 function scanForSecrets(content: string): number {
-  const secretPatterns = [
-    /AKIA[0-9A-Z]{16}/,                                    // AWS Access Key (always starts with AKIA)
-    /gh[pousr]_[A-Za-z0-9_]{36,}/,                         // GitHub tokens (prefixed)
-    /sk_live_[A-Za-z0-9]{24,}/,                             // Stripe live keys
-    /-----BEGIN\s*(?:RSA|EC|DSA|OPENSSH)?\s*PRIVATE KEY-----/, // Private keys (PEM format)
-    /password\s*[:=]\s*["'][^"']{8,}["']/i,                 // Hardcoded passwords with real values
-    /xox[bprs]-[0-9]{10,}-[A-Za-z0-9-]+/,                  // Slack tokens
-    /(?:api[_-]?key|secret[_-]?key|auth[_-]?token)\s*[:=]\s*["'][A-Za-z0-9+\/=]{20,}["']/i, // Secret assignments
-  ];
+  const secretPatterns = getSecretPatterns();
 
   // Skip data files (token lists, address registries)
   if (/["'](tokens|addresses|mints|constituents|verified)["']\s*:/i.test(content)) {
@@ -732,22 +850,19 @@ function scanForSecrets(content: string): number {
   const placeholderPattern = /your[_-]?api[_-]?key|REPLACE[_-]?ME|TODO|CHANGEME|xxxx|placeholder|example|sample|dummy|test|fake|mock/i;
 
   // Public/client-side API keys that are intentionally embedded in frontend code
-  // These are NOT secrets — they're meant to be public
   const publicKeyContext = /(?:inkeep|algolia|segment|analytics|gtag|ga4|google.*analytics|mapbox|stripe.*publishable|pk_(?:live|test)|posthog|amplitude|mixpanel|sentry.*dsn|bugsnag|datadog.*rum|hotjar|intercom.*app)/i;
 
   // Known blockchain addresses, program IDs, and public values
-  const blockchainPattern = /^(?:0x[0-9a-fA-F]{10,}|[1-9A-HJ-NP-Za-km-z]{32,44})$/; // EVM hex or Solana base58
+  const blockchainPattern = /^(?:0x[0-9a-fA-F]{10,}|[1-9A-HJ-NP-Za-km-z]{32,44})$/;
 
   let count = 0;
-  for (const pattern of secretPatterns) {
+  for (const { pattern } of secretPatterns) {
     const match = content.match(pattern);
     if (match && !placeholderPattern.test(match[0])) {
-      // For password and api_key patterns, extract the value and check if it's a blockchain address
       const valueMatch = match[0].match(/["']([^"']+)["']/);
       if (valueMatch && blockchainPattern.test(valueMatch[1])) {
-        continue; // Skip blockchain addresses matched as secrets
+        continue;
       }
-      // Skip public/client-side API keys (check surrounding context)
       if (publicKeyContext.test(content.substring(Math.max(0, content.indexOf(match[0]) - 200), content.indexOf(match[0]) + match[0].length + 200))) {
         continue;
       }
@@ -758,68 +873,79 @@ function scanForSecrets(content: string): number {
 }
 
 /**
+ * Compile README red flag patterns from config
+ */
+function getReadmeRedFlagPatterns(): Array<{ pattern: RegExp; flag: string; excludePattern?: RegExp }> {
+  if (W.readmeRedFlagPatterns && W.readmeRedFlagPatterns.length > 0) {
+    return W.readmeRedFlagPatterns.map(p => ({
+      pattern: toRegExp(p.pattern),
+      flag: p.flag,
+      excludePattern: p.excludePattern ? toRegExp(p.excludePattern) : undefined,
+    }));
+  }
+  // Minimal fallback
+  return [
+    { pattern: /100x|1000x|guaranteed.*return|moonshot|get rich/i, flag: 'Promises unrealistic returns' },
+    { pattern: /whitelist.*limited|presale.*ending|act.*fast|don.?t.*miss/i, flag: 'FOMO/urgency language' },
+  ];
+}
+
+/**
  * Scan README for scam red flags
  */
 function scanReadmeForRedFlags(content: string): string[] {
   const redFlags: string[] = [];
-  const lowerContent = content.toLowerCase();
+  const patterns = getReadmeRedFlagPatterns();
 
-  // Check for scam language
-  if (/100x|1000x|guaranteed.*return|moonshot|get rich/i.test(content)) {
-    redFlags.push('Promises unrealistic returns');
+  for (const { pattern, flag, excludePattern } of patterns) {
+    if (pattern.test(content)) {
+      if (excludePattern && excludePattern.test(content)) {
+        continue;
+      }
+      redFlags.push(flag);
+    }
   }
-  if (/🚀{3,}|💰{3,}|💎{3,}/u.test(content)) {
-    redFlags.push('Excessive hype emojis');
-  }
-  if (/whitelist.*limited|presale.*ending|act.*fast|don.?t.*miss/i.test(content)) {
-    redFlags.push('FOMO/urgency language');
-  }
-  if (/t\.me\/|telegram\.me\//i.test(content) && !/docs|documentation|wiki/i.test(content)) {
-    redFlags.push('Only Telegram links, no documentation');
-  }
+
+  // Airdrop + connect wallet check (composite check, kept inline)
+  const lowerContent = content.toLowerCase();
   if (lowerContent.includes('airdrop') && lowerContent.includes('connect wallet')) {
     redFlags.push('Airdrop + connect wallet = phishing risk');
-  }
-  if (/stealth.*launch|fair.*launch.*no.*team/i.test(content)) {
-    redFlags.push('Suspicious launch claims');
   }
 
   return redFlags;
 }
 
 /**
- * Scan Solidity code for honeypot patterns
+ * Compile code red flag patterns from config
+ */
+function getCodeRedFlagPatterns(): Array<{ pattern: RegExp; flag: string; fileExt: string }> {
+  if (W.codeRedFlagPatterns && W.codeRedFlagPatterns.length > 0) {
+    return W.codeRedFlagPatterns.map(p => ({
+      pattern: toRegExp(p.pattern),
+      flag: p.flag,
+      fileExt: p.fileExt,
+    }));
+  }
+  // Minimal fallback
+  return [
+    { pattern: /onlyOwner.*withdraw|withdraw.*onlyOwner/is, flag: 'Owner-only withdraw function', fileExt: '.sol' },
+    { pattern: /selfdestruct|delegatecall/i, flag: 'Dangerous functions (selfdestruct/delegatecall)', fileExt: '.sol' },
+  ];
+}
+
+/**
+ * Scan code for honeypot patterns
  */
 function scanCodeForRedFlags(files: Array<{ path: string; content?: string }>): string[] {
   const redFlags: string[] = [];
+  const patterns = getCodeRedFlagPatterns();
 
   for (const file of files) {
     if (!file.content) continue;
-    const content = file.content;
 
-    // Only scan Solidity files for smart contract red flags
-    if (file.path.endsWith('.sol')) {
-      // Check for honeypot patterns
-      if (/onlyOwner.*withdraw|withdraw.*onlyOwner/is.test(content)) {
-        redFlags.push('Owner-only withdraw function');
-      }
-      if (/function\s+_?mint.*onlyOwner|onlyOwner.*function\s+_?mint/is.test(content)) {
-        redFlags.push('Hidden mint function (owner can create tokens)');
-      }
-      if (/blacklist|blocklist|isBlocked|_blocked/i.test(content)) {
-        redFlags.push('Blacklist function (can block selling)');
-      }
-      if (/selfdestruct|delegatecall/i.test(content)) {
-        redFlags.push('Dangerous functions (selfdestruct/delegatecall)');
-      }
-      if (/maxTx|maxWallet|_maxTxAmount/i.test(content) && /onlyOwner/i.test(content)) {
-        redFlags.push('Owner-controlled transaction limits');
-      }
-      if (/pause|unpause|whenNotPaused/i.test(content)) {
-        redFlags.push('Pausable transfers (can freeze trading)');
-      }
-      if (/fee.*[5-9]\d|fee.*100|taxRate.*[2-9]\d/i.test(content)) {
-        redFlags.push('High fee/tax configuration');
+    for (const { pattern, flag, fileExt } of patterns) {
+      if (file.path.endsWith(fileExt) && pattern.test(file.content)) {
+        redFlags.push(flag);
       }
     }
   }
@@ -829,9 +955,7 @@ function scanCodeForRedFlags(files: Array<{ path: string; content?: string }>): 
 }
 
 /**
- * Lightweight check if a GitHub repo exists (HEAD-style validation).
- * Returns true if the repo is accessible, false if 404/invalid/timeout.
- * Use this before queueing a full scan to avoid wasting resources.
+ * Lightweight check if a GitHub repo exists
  */
 export async function validateGitHubRepo(gitUrl: string): Promise<boolean> {
   try {
@@ -885,7 +1009,6 @@ export async function performTrustScan(gitUrl: string): Promise<TrustScanResult>
     'Accept': 'application/vnd.github.v3+json',
   };
 
-  // Add GitHub token if available for higher rate limits
   if (process.env.GITHUB_TOKEN) {
     headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
   }
@@ -903,7 +1026,7 @@ export async function performTrustScan(gitUrl: string): Promise<TrustScanResult>
   }
   const repoData = await repoRes.json();
 
-  // Fetch contributor count (from Link header pagination)
+  // Fetch contributor count
   let contributorCount = 1;
   try {
     const contribRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contributors?per_page=1&anon=true`, { headers });
@@ -920,10 +1043,10 @@ export async function performTrustScan(gitUrl: string): Promise<TrustScanResult>
       }
     }
   } catch {
-    // Default to 1 if we can't fetch
+    // Default to 1
   }
 
-  // Fetch commit count (from Link header pagination)
+  // Fetch commit count
   let commitCount = 1;
   try {
     const commitsRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/commits?per_page=1`, { headers });
@@ -937,10 +1060,10 @@ export async function performTrustScan(gitUrl: string): Promise<TrustScanResult>
       }
     }
   } catch {
-    // Default to 1 if we can't fetch
+    // Default to 1
   }
 
-  // Fetch owner profile for enhanced checks
+  // Fetch owner profile
   let ownerAccountAgeDays: number | undefined;
   let ownerPublicRepos: number | undefined;
   let ownerTotalContributions: number | undefined;
@@ -957,7 +1080,7 @@ export async function performTrustScan(gitUrl: string): Promise<TrustScanResult>
     // Continue without owner data
   }
 
-  // Fetch fork comparison if this is a fork
+  // Fetch fork comparison
   let forkChangedLines: number | undefined;
   let forkParentRepo: string | undefined;
 
@@ -967,7 +1090,6 @@ export async function performTrustScan(gitUrl: string): Promise<TrustScanResult>
       const compareRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/compare/${repoData.parent.default_branch}...${repoData.default_branch}`, { headers });
       if (compareRes.ok) {
         const compareData = await compareRes.json();
-        // Sum up additions and deletions
         forkChangedLines = (compareData.files || []).reduce((sum: number, f: { additions?: number; deletions?: number }) =>
           sum + (f.additions || 0) + (f.deletions || 0), 0);
       }
@@ -976,7 +1098,7 @@ export async function performTrustScan(gitUrl: string): Promise<TrustScanResult>
     }
   }
 
-  // Fetch file tree to analyze code structure
+  // Fetch file tree
   let codeFileCount = 0;
   let hasTests = false;
   let hasReadme = false;
@@ -991,24 +1113,20 @@ export async function performTrustScan(gitUrl: string): Promise<TrustScanResult>
       const treeData = await treeRes.json();
       const files = treeData.tree?.filter((f: { type: string }) => f.type === 'blob') || [];
 
-      // Code file extensions
       const codeExtensions = ['.js', '.ts', '.jsx', '.tsx', '.py', '.go', '.rs', '.sol', '.java', '.c', '.cpp', '.rb', '.php', '.swift', '.kt'];
       codeFileCount = files.filter((f: { path: string }) =>
         codeExtensions.some(ext => f.path.endsWith(ext))
       ).length;
 
-      // Check for tests
       hasTests = files.some((f: { path: string }) =>
         f.path.includes('test') || f.path.includes('spec') || f.path.includes('__tests__')
       );
 
-      // Check for readme
       const readmeFile = files.find((f: { path: string }) =>
         f.path.toLowerCase().includes('readme')
       );
       hasReadme = !!readmeFile;
 
-      // Check for dependencies
       hasDependencies = files.some((f: { path: string }) =>
         f.path === 'package.json' ||
         f.path === 'requirements.txt' ||
@@ -1029,11 +1147,11 @@ export async function performTrustScan(gitUrl: string): Promise<TrustScanResult>
             }
           }
         } catch {
-          // Skip if can't read README
+          // Skip
         }
       }
 
-      // Scan Solidity files for honeypot patterns (limit to 3 files)
+      // Scan Solidity files for honeypot patterns
       const solidityFiles = files.filter((f: { path: string }) => f.path.endsWith('.sol')).slice(0, 3);
       const scannedFiles: Array<{ path: string; content?: string }> = [];
 
@@ -1050,25 +1168,19 @@ export async function performTrustScan(gitUrl: string): Promise<TrustScanResult>
             }
           }
         } catch {
-          // Skip files we can't read
+          // Skip
         }
       }
       codeRedFlags = scanCodeForRedFlags(scannedFiles);
 
-      // Quick secret scan on files that could plausibly contain secrets
+      // Quick secret scan
       const sensitiveFiles = files.filter((f: { path: string }) => {
         const p = f.path.toLowerCase();
-        // Only scan files that could contain secrets
-        // Only scan files that are likely to actually contain secrets
-        // Be specific — "config" in filename matches too many tool configs
         const isSensitive = p.includes('.env') ||
-          // Only match dedicated config files, not tool configs like rollup.config.ts
           /(?:^|\/)(?:config|settings|credentials|secrets)\.(json|yml|yaml|toml|ini)$/i.test(p) ||
           /(?:^|\/)application\.(yml|yaml|properties)$/i.test(p) ||
-          // CI/deploy configs that might have real tokens
           p.endsWith('.env.local') ||
           p.endsWith('.env.production');
-        // Exclude known safe files that produce false positives
         const isSafe = p === 'package.json' ||
           p === 'package-lock.json' ||
           p.includes('tsconfig') ||
@@ -1080,9 +1192,7 @@ export async function performTrustScan(gitUrl: string): Promise<TrustScanResult>
           p.includes('/test') ||
           p.includes('/example') ||
           p.includes('/fixture') ||
-          // .env.example/.env.sample/.env.template are documentation, not real secrets
           /\.env\.(example|sample|template|defaults|development|test)$/i.test(p) ||
-          // Docker/CI configs often have placeholder values
           p.includes('docker-compose') ||
           p.includes('.github/');
         return isSensitive && !isSafe;
@@ -1099,12 +1209,12 @@ export async function performTrustScan(gitUrl: string): Promise<TrustScanResult>
             }
           }
         } catch {
-          // Skip files we can't read
+          // Skip
         }
       }
     }
   } catch {
-    // If we can't fetch tree, continue with defaults
+    // Continue with defaults
   }
 
   // Calculate metrics
@@ -1133,7 +1243,6 @@ export async function performTrustScan(gitUrl: string): Promise<TrustScanResult>
     language: repoData.language,
     topics: repoData.topics || [],
     secretsFound,
-    // Enhanced metrics
     forkChangedLines,
     forkParentRepo,
     ownerAccountAgeDays,
@@ -1143,13 +1252,8 @@ export async function performTrustScan(gitUrl: string): Promise<TrustScanResult>
     codeRedFlags,
   };
 
-  // Run trust checks
   const checks = runTrustChecks(metrics);
-
-  // Calculate score
   const { score, grade, verdict, verdictEmoji } = calculateScore(checks);
-
-  // Generate summary
   const summary = generateSummary(checks, score, verdict);
 
   return {

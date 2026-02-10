@@ -1,0 +1,29 @@
+{
+  "version": "1.0",
+  "_comment": "This is an example config. The real signatures are loaded from scam-signatures.json (not committed to repo).",
+  "signatures": [
+    {
+      "id": "example-pattern",
+      "name": "Example Detection Pattern",
+      "description": "This is an example signature. Add your own detection patterns.",
+      "severity": "high",
+      "patterns": {
+        "codePatterns": [
+          ["example_pattern_here", "i"]
+        ]
+      }
+    }
+  ],
+  "suspiciousFileNames": ["example"],
+  "suspiciousCodePatterns": [
+    { "pattern": ["example_pattern", ""], "name": "Example Pattern", "severity": "high" }
+  ],
+  "knownScamRepos": [],
+  "scoring": {
+    "severityMultipliers": { "critical": 30, "high": 20, "medium": 10, "low": 5 },
+    "suspiciousPatternMultipliers": { "high": 15, "medium": 8 },
+    "suspiciousFileScore": 10,
+    "minimumScores": { "critical": 50, "high": 35, "medium": 20 },
+    "scamThreshold": 50
+  }
+}
