@@ -3,7 +3,12 @@
  *
  * Detects fake AI projects, Solana rug patterns, and wallet drainers.
  * Optimized for pump.fun and AI agent token ecosystem.
+ *
+ * Detection signatures are loaded from private config (config/scam-signatures.json).
+ * If config is missing, minimal defaults are used.
  */
+
+import { loadConfig, toRegExp } from '../config/loader.js';
 
 // Known scam repo signatures - file patterns, code snippets, structure
 export interface ScamSignature {
@@ -21,398 +26,84 @@ export interface ScamSignature {
   source?: string;
 }
 
-// Known scam signatures database - FOCUSED ON AI + SOLANA
-const SCAM_SIGNATURES: ScamSignature[] = [
-  // ============ FAKE AI PROJECT DETECTION (Core Value) ============
-  {
-    id: 'fake-ai-wrapper',
-    name: 'API Wrapper Pretending to be AI',
-    description: 'Project claims AI but just wraps OpenAI/Anthropic API with no real logic',
-    severity: 'high',
-    patterns: {
-      codePatterns: [
-        /openai\.chat\.completions\.create/i,
-        /anthropic\.messages\.create/i,
-        /new\s+OpenAI\s*\(/i,
-        /new\s+Anthropic\s*\(/i,
-        /ChatCompletion\.create/i,
-        /client\.chat\.completions/i,
-      ],
-      readmePatterns: [
-        /powered\s+by\s+(?:advanced\s+)?ai/i,
-        /revolutionary\s+ai/i,
-        /cutting[\s-]edge\s+(?:ai|ml|machine\s+learning)/i,
-        /ai[\s-]driven\s+(?:trading|analysis|predictions)/i,
-        /proprietary\s+ai/i,
-        /our\s+(?:advanced|custom|unique)\s+ai/i,
-      ]
-    }
-  },
-  {
-    id: 'fake-ai-no-ml-code',
-    name: 'No Real ML Code',
-    description: 'Claims custom ML training/models but has no actual machine learning implementation',
-    severity: 'high',
-    patterns: {
-      readmePatterns: [
-        // Only match claims of CUSTOM ML — not just using an AI API (which is legitimate)
-        /(?:train|trained)\s+(?:on|with)\s+(?:millions|billions)/i,
-        /(?:neural|deep)\s+(?:network|learning)\s+(?:model|architecture)/i,
-        /(?:our|custom|proprietary)\s+machine\s+learning\s+(?:model|algorithm)/i,
-        // Removed: /ai\s+(?:agent|bot|assistant)/i — too broad, matches every legit AI project
-      ],
-      // Note: filePatterns here are NOT checked (they were meant as "missing = red flag"
-      // but the detection engine checks for presence, not absence). Removing to avoid confusion.
-    }
-  },
-  {
-    id: 'fake-ai-buzzwords',
-    name: 'AI Buzzword Overload',
-    description: 'README stuffed with AI buzzwords but no substance',
-    severity: 'medium',
-    patterns: {
-      readmePatterns: [
-        /(?:gpt|llm|transformer|neural)\s*[\-\s]*(?:powered|based|driven)/i,
-        /autonomous\s+ai\s+agent/i,
-        /sentient|conscious|self[\-\s]aware/i,
-        /ai\s+(?:singularity|superintelligence)/i,
-        /(?:first|only|most\s+advanced)\s+ai/i,
-        /ai\s+that\s+(?:thinks|learns|evolves)/i,
-      ]
-    }
-  },
-  {
-    id: 'fake-ai-trading-bot',
-    name: 'Fake AI Trading Bot',
-    description: 'Claims AI trading but likely just random or copy trades',
-    severity: 'high',
-    patterns: {
-      readmePatterns: [
-        /ai\s+(?:trading|sniper|mev)\s+bot/i,
-        /(?:guaranteed|100%)\s+(?:profit|returns|win)/i,
-        /never\s+(?:lose|loss)/i,
-        /(?:predict|know)\s+(?:the\s+)?(?:market|price)/i,
-        /insider\s+(?:ai|algorithm|bot)/i,
-      ],
-      codePatterns: [
-        /Math\.random\(\).*(?:buy|sell|trade)/i,
-        /random.*(?:amount|size|position)/i,
-      ]
-    }
-  },
-  {
-    id: 'eliza-fork-unchanged',
-    name: 'Unchanged Eliza/ai16z Fork',
-    description: 'Direct fork of ai16z/eliza with minimal changes',
-    severity: 'medium',
-    patterns: {
-      codePatterns: [
-        /elizaLogger/i,
-        /AgentRuntime.*eliza/i,
-        /import.*from\s+['"]@ai16z\/eliza/i,
-        /elizaConfig/i,
-      ],
-      filePatterns: ['eliza.config.ts', 'eliza.character.json']
-    }
-  },
+// Config file types (JSON-serializable)
+interface ScamSignatureConfig {
+  id: string;
+  name: string;
+  description: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  patterns: {
+    filePatterns?: string[];
+    codePatterns?: [string, string?][];
+    readmePatterns?: [string, string?][];
+    structureHash?: string;
+  };
+  reportedDate?: string;
+  source?: string;
+}
 
-  // ============ SOLANA RUG PATTERNS ============
-  {
-    id: 'solana-drain-program',
-    name: 'Solana Drain Program',
-    description: 'Solana program designed to drain user funds',
-    severity: 'critical',
-    patterns: {
-      filePatterns: ['drain.rs', 'withdraw_all.rs', 'emergency_exit.rs', 'rug.rs'],
-      codePatterns: [
-        /withdraw_all_funds/i,
-        /drain_pool/i,
-        /transfer_to_admin/i,
-        /close_account.*authority/i,
-        /emergency.*drain/i,
-        /lamports.*=.*0/i,
-        /\*\*ctx\.accounts\.(?:user|victim).*lamports.*=.*0/i,
-      ]
-    }
-  },
-  {
-    id: 'solana-mint-authority',
-    name: 'Mint Authority Not Revoked',
-    description: 'Solana token where creator can mint unlimited tokens',
-    severity: 'critical',
-    patterns: {
-      codePatterns: [
-        /mint_authority.*Some/i,
-        /MintTo\s*\{/i,
-        /mint_to.*authority/i,
-        /set_authority.*Mint/i,
-        /token::mint_to/i,
-      ]
-    }
-  },
-  {
-    id: 'solana-freeze-authority',
-    name: 'Freeze Authority Retained',
-    description: 'Solana token where creator can freeze accounts',
-    severity: 'high',
-    patterns: {
-      codePatterns: [
-        /freeze_authority.*Some/i,
-        /FreezeAccount/i,
-        /set_authority.*Freeze/i,
-        /token::freeze_account/i,
-      ]
-    }
-  },
-  {
-    id: 'solana-close-authority',
-    name: 'Close Authority Abuse',
-    description: 'Program can close user token accounts and steal funds',
-    severity: 'critical',
-    patterns: {
-      codePatterns: [
-        /close\s*=\s*authority/i,
-        /CloseAccount/i,
-        /close_account.*destination/i,
-        /token::close_account/i,
-      ],
-      filePatterns: ['close_accounts.rs']
-    }
-  },
-  {
-    id: 'pump-fun-bundle',
-    name: 'Pump.fun Bundle/Snipe',
-    description: 'Code for bundling or sniping pump.fun launches',
-    severity: 'high',
-    patterns: {
-      codePatterns: [
-        /pump\.fun.*bundle/i,
-        /pumpfun.*snipe/i,
-        /bundl.*pump/i,
-        /jito.*bundle.*pump/i,
-      ],
-      filePatterns: ['bundle.ts', 'sniper.ts', 'pumpfun_snipe.js']
-    }
-  },
+interface ScamConfigFile {
+  signatures: ScamSignatureConfig[];
+  suspiciousFileNames: string[];
+  suspiciousCodePatterns: Array<{
+    pattern: [string, string?];
+    name: string;
+    severity: 'critical' | 'high' | 'medium' | 'low';
+  }>;
+  knownScamRepos?: Array<{ url: string; name: string; hash?: string }>;
+  scoring: {
+    severityMultipliers: Record<string, number>;
+    suspiciousPatternMultipliers: Record<string, number>;
+    suspiciousFileScore: number;
+    minimumScores: Record<string, number>;
+    scamThreshold: number;
+  };
+}
 
-  // ============ WALLET DRAINERS (Frontend/JS) ============
-  {
-    id: 'wallet-drainer-js',
-    name: 'JavaScript Wallet Drainer',
-    description: 'Frontend code designed to drain connected wallets',
-    severity: 'critical',
-    patterns: {
-      codePatterns: [
-        /signAllTransactions/i,
-        /drainWallet/i,
-        /transferAll.*tokens/i,
-        /phantom\.solana.*signTransaction/i,
-        /window\.solana.*signAllTransactions/i,
-        /solflare.*signAllTransactions/i,
-      ],
-      filePatterns: ['drainer.js', 'drain.ts', 'stealer.js', 'siphon.js']
-    }
+// Minimal defaults when config file is not found
+const DEFAULT_CONFIG: ScamConfigFile = {
+  signatures: [],
+  suspiciousFileNames: [],
+  suspiciousCodePatterns: [],
+  knownScamRepos: [],
+  scoring: {
+    severityMultipliers: { critical: 30, high: 20, medium: 10, low: 5 },
+    suspiciousPatternMultipliers: { high: 15, medium: 8 },
+    suspiciousFileScore: 10,
+    minimumScores: { critical: 50, high: 35, medium: 20 },
+    scamThreshold: 50,
   },
-  {
-    id: 'wallet-approval-abuse',
-    name: 'Token Approval Abuse',
-    description: 'Tricks users into approving unlimited token access',
-    severity: 'critical',
-    patterns: {
-      codePatterns: [
-        /approve.*(?:max|unlimited|infinite)/i,
-        /setApprovalForAll.*true/i,
-        /allowance.*type\(uint256\)\.max/i,
-        /approve.*0xffffffff/i,
-      ]
-    }
-  },
-  {
-    id: 'phishing-connect',
-    name: 'Phishing Wallet Connect',
-    description: 'Fake wallet connect that steals credentials',
-    severity: 'critical',
-    patterns: {
-      codePatterns: [
-        /localStorage\.getItem.*(?:key|private|seed|mnemonic|phrase)/i,
-        /(?:seed|mnemonic|private).*(?:phrase|key).*(?:input|form|submit)/i,
-        /fetch.*(?:seed|mnemonic|privateKey)/i,
-        /XMLHttpRequest.*(?:private|key|seed|wallet)/i,
-      ],
-      readmePatterns: [
-        /enter\s+(?:your\s+)?(?:seed|recovery|mnemonic)\s+phrase/i,
-        /import\s+(?:your\s+)?wallet/i,
-      ]
-    }
-  },
-  {
-    id: 'suspicious-data-exfil',
-    name: 'Suspicious Data Exfiltration',
-    description: 'Sends wallet data to external servers',
-    severity: 'critical',
-    patterns: {
-      codePatterns: [
-        /fetch\s*\(.*(?:\.ru|\.cn|\.tk|\.ml|\.xyz\/api)/i,
-        /axios\.post.*(?:wallet|key|seed|private)/i,
-        /webhook.*(?:discord|telegram).*(?:key|seed|wallet)/i,
-      ]
-    }
-  },
+};
 
-  // ============ README SCAM LANGUAGE ============
-  {
-    id: 'pump-dump-language',
-    name: 'Pump & Dump Marketing',
-    description: 'README uses classic pump and dump language',
-    severity: 'high',
-    patterns: {
-      readmePatterns: [
-        /100x\s+(?:guaranteed|potential|gem)/i,
-        /1000x/i,
-        /get\s+rich\s+quick/i,
-        /next\s+(?:100x|1000x|moon)\s+gem/i,
-        /guaranteed\s+(?:profit|returns|gains)/i,
-        /early\s+investors\s+only/i,
-        /(?:ape|buy)\s+(?:now|in|before)/i,
-      ]
-    }
-  },
-  {
-    id: 'fomo-tactics',
-    name: 'FOMO Marketing Tactics',
-    description: 'Uses fear of missing out to pressure investment',
-    severity: 'medium',
-    patterns: {
-      readmePatterns: [
-        /(?:last|final)\s+chance/i,
-        /don'?t\s+(?:miss|sleep\s+on)/i,
-        /only\s+\d+\s+spots?\s+left/i,
-        /act\s+(?:fast|now|quickly)/i,
-        /limited\s+(?:time|supply|spots)/i,
-        /(?:whitelist|presale)\s+(?:closing|ending)\s+soon/i,
-        /stealth\s+launch/i,
-        /(?:floor|price)\s+(?:is\s+)?pumping/i,
-      ]
-    }
-  },
-  {
-    id: 'trust-me-bro',
-    name: 'Trust Me Bro Signals',
-    description: 'Vague trust signals with no verification',
-    severity: 'medium',
-    patterns: {
-      readmePatterns: [
-        /trust\s+(?:me|us|the\s+team)/i,
-        /(?:team|devs?)\s+(?:is|are)\s+(?:based|legit|doxxed)/i,
-        /safu|safe\s+(?:team|project|investment)/i,
-        /(?:this\s+is|not)\s+(?:not\s+)?financial\s+advice/i,
-        /dyor.*not\s+financial\s+advice/i,
-        /liquidity\s+(?:locked|burned)/i,
-        /contract\s+(?:renounced|verified)/i,
-      ]
-    }
-  },
-  {
-    id: 'fake-partnership',
-    name: 'Fake Partnership Claims',
-    description: 'Claims partnerships that are likely fake',
-    severity: 'high',
-    patterns: {
-      readmePatterns: [
-        /partner(?:ship|ed)\s+with\s+(?:binance|coinbase|openai|anthropic|google|microsoft)/i,
-        /backed\s+by\s+(?:a16z|sequoia|paradigm)/i,
-        /official\s+(?:partner|collaboration)/i,
-        /endorsed\s+by/i,
-      ]
-    }
-  },
+// Load and compile config
+const scamConfig = loadConfig<ScamConfigFile>('scam-signatures.json', DEFAULT_CONFIG);
 
-  // ============ COPY-PASTE DETECTION ============
-  {
-    id: 'copy-paste-readme',
-    name: 'Copy-Paste README Template',
-    description: 'README is clearly copied from template or other project',
-    severity: 'medium',
-    patterns: {
-      readmePatterns: [
-        /\[Project\s+Name\]/i,
-        /\[Your\s+(?:Name|Project|Token)\]/i,
-        /TODO:?\s*(?:add|replace|update)/i,
-        /INSERT\s+(?:TOKEN|PROJECT|NAME)/i,
-        /CHANGE\s+THIS/i,
-      ]
-    }
+// Compile regex patterns from config into runtime objects
+const SCAM_SIGNATURES: ScamSignature[] = scamConfig.signatures.map(sig => ({
+  ...sig,
+  patterns: {
+    filePatterns: sig.patterns.filePatterns,
+    codePatterns: sig.patterns.codePatterns?.map(p => toRegExp(p)),
+    readmePatterns: sig.patterns.readmePatterns?.map(p => toRegExp(p)),
+    structureHash: sig.patterns.structureHash,
   },
-  {
-    id: 'placeholder-code',
-    name: 'Placeholder Code',
-    description: 'Code contains obvious placeholders indicating copy-paste',
-    severity: 'medium',
-    patterns: {
-      codePatterns: [
-        /YOUR_(?:API_KEY|TOKEN|SECRET)/i,
-        /REPLACE_(?:THIS|ME|WITH)/i,
-        /TODO:?\s*implement/i,
-        /fixme|hack|xxx/i,
-      ]
-    }
-  },
-
-  // ============ OBFUSCATION ============
-  {
-    id: 'obfuscated-code',
-    name: 'Obfuscated Code',
-    description: 'Intentionally obfuscated code hiding malicious functions',
-    severity: 'high',
-    patterns: {
-      codePatterns: [
-        /\w{50,}/,  // Very long variable names
-        /eval\s*\(/i,
-        /Function\s*\(.*\)\s*\(/,
-        /atob\s*\(.*atob/i,  // Nested base64
-        /String\.fromCharCode\(.*,.*,.*,.*,/i,  // Many char codes
-        /\\x[0-9a-f]{2}.*\\x[0-9a-f]{2}.*\\x[0-9a-f]{2}/gi,  // Multiple hex
-      ],
-      filePatterns: ['obfuscated.js', 'packed.js', 'encoded.js']
-    }
-  },
-
-  // ============ AIRDROP SCAMS ============
-  {
-    id: 'airdrop-scam',
-    name: 'Airdrop Scam',
-    description: 'Fake airdrop that requires fees or wallet approval',
-    severity: 'high',
-    patterns: {
-      codePatterns: [
-        /claim.*requires.*fee/i,
-        /pay.*to.*claim/i,
-        /connect.*wallet.*claim/i,
-        /approve.*before.*claim/i,
-      ],
-      readmePatterns: [
-        /free\s+airdrop/i,
-        /claim\s+your\s+(?:free\s+)?tokens/i,
-        /limited\s+time\s+airdrop/i,
-        /airdrop.*connect.*wallet/i,
-      ]
-    }
-  }
-];
-
-// Known scam repo URLs/hashes (community reported)
-const KNOWN_SCAM_REPOS: { url: string; name: string; hash?: string }[] = [
-  // Add known scam repos here as they're reported
-  // { url: 'github.com/scammer/rugpull', name: 'Known Rug', hash: 'abc123' }
-];
+}));
 
 // Suspicious keywords in file names (matched as whole words to avoid false positives like "hackathon")
-const SUSPICIOUS_FILE_NAMES = [
-  'drain', 'drainer', 'stealer', 'exploit',
-  'backdoor', 'hidden', 'admin_only', 'emergency_exit',
-  'rug', 'rugpull', 'scam', 'honeypot', 'sniper',
-  'phish', 'steal', 'siphon', 'extract_funds'
-];
+const SUSPICIOUS_FILE_NAMES = scamConfig.suspiciousFileNames;
+
+// Suspicious patterns in code
+const SUSPICIOUS_CODE_PATTERNS = scamConfig.suspiciousCodePatterns.map(p => ({
+  pattern: toRegExp(p.pattern),
+  name: p.name,
+  severity: p.severity as 'critical' | 'high' | 'medium' | 'low',
+}));
+
+// Known scam repo URLs/hashes (community reported)
+const KNOWN_SCAM_REPOS = scamConfig.knownScamRepos || [];
+
+// Scoring configuration
+const SCORING = scamConfig.scoring;
 
 // Helper: check if a file name contains a suspicious word as a whole word (not substring)
 function isSuspiciousFileName(fileName: string): string | null {
@@ -426,33 +117,6 @@ function isSuspiciousFileName(fileName: string): string | null {
   }
   return null;
 }
-
-// Suspicious patterns in code
-const SUSPICIOUS_CODE_PATTERNS = [
-  // Obfuscation
-  { pattern: /eval\s*\(/, name: 'Dynamic code execution (eval)', severity: 'high' as const },
-  { pattern: /Function\s*\(.*\)\s*\(/, name: 'Dynamic function creation', severity: 'high' as const },
-  { pattern: /atob\s*\(|btoa\s*\(/, name: 'Base64 encoding (possible obfuscation)', severity: 'medium' as const },
-  { pattern: /fromCharCode/, name: 'Character code obfuscation', severity: 'medium' as const },
-
-  // Data exfiltration
-  { pattern: /document\.cookie/, name: 'Cookie access', severity: 'high' as const },
-  { pattern: /localStorage\.getItem.*(?:key|private|seed|mnemonic)/i, name: 'Accessing stored keys', severity: 'critical' as const },
-
-  // Wallet interactions (Solana focused)
-  { pattern: /signAllTransactions/, name: 'Sign all transactions (dangerous)', severity: 'critical' as const },
-  { pattern: /phantom\.solana.*sign/i, name: 'Phantom wallet signing', severity: 'medium' as const },
-  { pattern: /window\.solana/, name: 'Direct Solana wallet access', severity: 'medium' as const },
-
-  // Solana program patterns
-  { pattern: /invoke_signed.*transfer/i, name: 'Solana PDA transfer', severity: 'medium' as const },
-  { pattern: /close_account.*lamports/i, name: 'Solana account drain', severity: 'high' as const },
-  { pattern: /\*\*.*lamports.*=.*0/, name: 'Zero out lamports', severity: 'critical' as const },
-
-  // Shell/System access
-  { pattern: /require\s*\(\s*['"`]child_process/, name: 'Shell execution', severity: 'high' as const },
-  { pattern: /exec\s*\(|spawn\s*\(/, name: 'Command execution', severity: 'high' as const },
-];
 
 export interface SimilarityMatch {
   signatureId: string;
@@ -637,7 +301,7 @@ export async function detectScamPatterns(
     }
   }
 
-  // Calculate scam score
+  // Calculate scam score using config-driven multipliers
   let scamScore = 0;
 
   // Signature matches (known scam patterns)
@@ -646,26 +310,25 @@ export async function detectScamPatterns(
   const mediumMatches = matches.filter(m => m.severity === 'medium').length;
   const lowMatches = matches.filter(m => m.severity === 'low').length;
 
-  scamScore += criticalMatches * 30;
-  scamScore += highMatches * 20;
-  scamScore += mediumMatches * 10;
-  scamScore += lowMatches * 5;
+  scamScore += criticalMatches * (SCORING.severityMultipliers.critical || 30);
+  scamScore += highMatches * (SCORING.severityMultipliers.high || 20);
+  scamScore += mediumMatches * (SCORING.severityMultipliers.medium || 10);
+  scamScore += lowMatches * (SCORING.severityMultipliers.low || 5);
 
   // Suspicious patterns add points
-  scamScore += suspiciousPatterns.filter(p => p.severity === 'high').length * 15;
-  scamScore += suspiciousPatterns.filter(p => p.severity === 'medium').length * 8;
+  scamScore += suspiciousPatterns.filter(p => p.severity === 'high').length * (SCORING.suspiciousPatternMultipliers.high || 15);
+  scamScore += suspiciousPatterns.filter(p => p.severity === 'medium').length * (SCORING.suspiciousPatternMultipliers.medium || 8);
 
   // Suspicious files add points
-  scamScore += suspiciousFiles.length * 10;
+  scamScore += suspiciousFiles.length * (SCORING.suspiciousFileScore || 10);
 
   // Enforce minimum scores when known scam signatures are matched
-  // A known scam pattern should never result in a "clean" score
   if (criticalMatches > 0) {
-    scamScore = Math.max(scamScore, 50);
+    scamScore = Math.max(scamScore, SCORING.minimumScores.critical || 50);
   } else if (highMatches > 0) {
-    scamScore = Math.max(scamScore, 35);
+    scamScore = Math.max(scamScore, SCORING.minimumScores.high || 35);
   } else if (mediumMatches > 0) {
-    scamScore = Math.max(scamScore, 20);
+    scamScore = Math.max(scamScore, SCORING.minimumScores.medium || 20);
   }
 
   // Cap at 100
@@ -675,7 +338,7 @@ export async function detectScamPatterns(
   const codeOriginality = Math.max(0, 100 - (matches.length * 15) - (suspiciousPatterns.length * 5));
 
   // Determine if likely scam
-  const isLikelyScam = scamScore >= 50 || matches.some(m => m.severity === 'critical' && m.confidence > 60);
+  const isLikelyScam = scamScore >= (SCORING.scamThreshold || 50) || matches.some(m => m.severity === 'critical' && m.confidence > 60);
 
   // Generate summary - signature matches always override
   // Rule: if we matched a known scam pattern, NEVER say "CLEAN"

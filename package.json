@@ -11,6 +11,9 @@
   },
   "files": [
     "dist",
+    "!dist/integrations",
+    "dist/integrations/index.js",
+    "dist/integrations/index.d.ts",
     "visualizer",
     "schemas",
     "deploy",
