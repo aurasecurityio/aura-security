@@ -105,6 +105,45 @@ const KNOWN_SCAM_REPOS = scamConfig.knownScamRepos || [];
 // Scoring configuration
 const SCORING = scamConfig.scoring;
 
+// Security tool indicators — repos that ARE security tools will legitimately
+// contain exploit/drain/hack references in their detection pattern files.
+const SECURITY_TOOL_INDICATORS = {
+  namePatterns: /security|audit|scanner|detector|vulnerability|exploit-db|cve|sast|pentest|solshield|guard|shield/i,
+  descriptionPatterns: /security (scan|audit|analyz|detect|check)|vulnerability (scan|detect|pattern)|exploit (detect|pattern|signature)|smart contract (audit|security)|rug (detect|check|scan)|scam (detect|scan)|threat (detect|intel)/i,
+  readmePatterns: /security (scanner|auditor|tool|framework)|vulnerability (detection|scanning|pattern)|known (exploit|vulnerability|attack) pattern|detect.*(rug|scam|exploit|vulnerability)|pattern.*(database|matching|detection)/i,
+  fileStructurePatterns: /\/(detectors?|patterns?|signatures?|rules?|scanners?)\//i,
+};
+
+/**
+ * Detect if a repo is itself a security tool (scanner, auditor, detector).
+ * Security tools legitimately contain exploit references, drain patterns,
+ * and hack descriptions as part of their detection signatures.
+ */
+function isSecurityToolRepo(
+  name: string,
+  description?: string,
+  readme?: string,
+  filePaths?: string[]
+): boolean {
+  // Check repo name
+  if (SECURITY_TOOL_INDICATORS.namePatterns.test(name)) return true;
+
+  // Check description
+  if (description && SECURITY_TOOL_INDICATORS.descriptionPatterns.test(description)) return true;
+
+  // Check README
+  if (readme && SECURITY_TOOL_INDICATORS.readmePatterns.test(readme)) return true;
+
+  // Check file structure — if the repo has a /patterns/, /detectors/, /signatures/ directory
+  // it's likely a security tool with detection rules
+  if (filePaths) {
+    const patternDirFiles = filePaths.filter(f => SECURITY_TOOL_INDICATORS.fileStructurePatterns.test(f));
+    if (patternDirFiles.length >= 5) return true;
+  }
+
+  return false;
+}
+
 // Helper: check if a file name contains a suspicious word as a whole word (not substring)
 function isSuspiciousFileName(fileName: string): string | null {
   const lower = fileName.toLowerCase();
@@ -221,13 +260,21 @@ export async function detectScamPatterns(
     .map(f => f.content)
     .join('\n');
 
+  // Detect if this repo is itself a security tool — if so, exploit/drain/hack
+  // references in file names and code are expected (detection signatures, not malice)
+  const isSecTool = isSecurityToolRepo(repoData.name, repoData.description, repoData.readme, filePaths);
+
   // Check for suspicious file names (whole word match to avoid false positives)
-  for (const file of filePaths) {
-    const fileName = file.split('/').pop() || '';
-    const match = isSuspiciousFileName(fileName);
-    if (match) {
-      suspiciousFiles.push(file);
-      warnings.push(`Suspicious file name: ${file}`);
+  // Skip this check for security tool repos — they legitimately have files like
+  // "exploit-detector.ts", "drain-pattern.ts", "hack-signatures.ts"
+  if (!isSecTool) {
+    for (const file of filePaths) {
+      const fileName = file.split('/').pop() || '';
+      const match = isSuspiciousFileName(fileName);
+      if (match) {
+        suspiciousFiles.push(file);
+        warnings.push(`Suspicious file name: ${file}`);
+      }
     }
   }
 
@@ -272,7 +319,14 @@ export async function detectScamPatterns(
 
     // Calculate confidence — require meaningful match threshold
     if (matchCount > 0 && totalPatterns > 0) {
-      const confidence = Math.min(100, (matchCount / totalPatterns) * 100 + (matchCount * 15));
+      let confidence = Math.min(100, (matchCount / totalPatterns) * 100 + (matchCount * 15));
+
+      // Security tools contain exploit references as detection signatures — these
+      // will match scam code patterns but are not themselves malicious.  Halve the
+      // confidence so that only overwhelming evidence flags a security tool.
+      if (isSecTool) {
+        confidence = confidence * 0.5;
+      }
 
       // For high/critical severity, require at least 2 matches OR 40%+ confidence
       // A single weak README pattern match shouldn't brand a project as a scam
@@ -286,7 +340,7 @@ export async function detectScamPatterns(
           description: signature.description,
           severity: signature.severity,
           matchType: 'code',
-          matchDetails: matchDetails.join('; '),
+          matchDetails: matchDetails.join('; ') + (isSecTool ? ' [security-tool: confidence halved]' : ''),
           confidence: Math.round(confidence)
         });
       }
@@ -294,10 +348,20 @@ export async function detectScamPatterns(
   }
 
   // Scan individual files for suspicious patterns
+  // For security tools, skip code pattern scanning since their detection
+  // signatures will contain the exact patterns we're looking for
   for (const file of repoData.files) {
     if (file.content) {
       const filePatterns = scanCodeForPatterns(file.content, file.path);
-      suspiciousPatterns.push(...filePatterns.map(p => ({ ...p, file: file.path })));
+      if (isSecTool) {
+        // Only keep critical patterns for security tools — lower severities
+        // are almost certainly detection signatures, not malicious code
+        suspiciousPatterns.push(...filePatterns
+          .filter(p => p.severity === 'critical')
+          .map(p => ({ ...p, file: file.path })));
+      } else {
+        suspiciousPatterns.push(...filePatterns.map(p => ({ ...p, file: file.path })));
+      }
     }
   }
 
@@ -383,7 +447,8 @@ export async function detectScamPatterns(
 export async function quickScamScan(
   files: string[],
   readme?: string,
-  description?: string
+  description?: string,
+  repoName?: string
 ): Promise<{
   hasRedFlags: boolean;
   redFlags: string[];
@@ -391,12 +456,21 @@ export async function quickScamScan(
 }> {
   const redFlags: string[] = [];
 
+  // Detect if this repo is itself a security tool — skip suspicious file name
+  // checks since security tools legitimately reference exploits/drains/hacks
+  const isSecTool = repoName
+    ? isSecurityToolRepo(repoName, description, readme, files)
+    : false;
+
   // Check file names (whole word match to avoid false positives like "hackathon")
-  for (const file of files) {
-    const fileName = file.split('/').pop() || '';
-    const match = isSuspiciousFileName(fileName);
-    if (match) {
-      redFlags.push(`Suspicious file: ${file}`);
+  // Skip for security tool repos — their pattern files will have exploit/drain names
+  if (!isSecTool) {
+    for (const file of files) {
+      const fileName = file.split('/').pop() || '';
+      const match = isSuspiciousFileName(fileName);
+      if (match) {
+        redFlags.push(`Suspicious file: ${file}`);
+      }
     }
   }
 

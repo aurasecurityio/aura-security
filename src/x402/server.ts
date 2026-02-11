@@ -158,7 +158,7 @@ async function handleScamcheck(body: any): Promise<any> {
   }
 
   // Run scam scan
-  const result = await quickScamScan(files, readme);
+  const result = await quickScamScan(files, readme, undefined, repoName);
 
   return {
     repo,

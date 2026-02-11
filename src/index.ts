@@ -1088,7 +1088,8 @@ async function main(): Promise<void> {
         const quickResult = await quickScamScan(
           files.map(f => f.path),
           readmeContent,
-          repoData.description
+          repoData.description,
+          repo
         );
 
         // If quick scan finds red flags, do deep scan
