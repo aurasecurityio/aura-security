@@ -4,7 +4,7 @@
  * HTTP server for x402-enabled endpoints:
  * - POST /v1/rugcheck
  * - POST /v1/scamcheck
- * - POST /v1/xcheck
+ * - POST /v1/fullprobe
  * - GET /v1/pricing
  * - GET /v1/payment/:id
  */
@@ -14,8 +14,8 @@ import { processPayment, type X402Request } from './middleware.js';
 import { getPayment, getPaymentStats } from './payments.js';
 import { PRICING } from './pricing.js';
 import { performTrustScan } from '../integrations/trust-scanner.js';
-import { detectScamPatterns, quickScamScan } from '../integrations/scam-detector.js';
-import { performXScan } from '../integrations/x-scanner.js';
+import { quickScamScan } from '../integrations/scam-detector.js';
+import { probeWebsite } from '../integrations/website-probe.js';
 
 const PORT = parseInt(process.env.X402_PORT || '3002', 10);
 
@@ -171,30 +171,59 @@ async function handleScamcheck(body: any): Promise<any> {
 }
 
 /**
- * Handle /v1/xcheck
+ * Handle /v1/fullprobe
  */
-async function handleXcheck(body: any): Promise<any> {
-  const { username } = body;
+async function handleFullprobe(body: any): Promise<any> {
+  const { url } = body;
 
-  if (!username) {
-    throw new Error('Missing required field: username');
+  if (!url) {
+    throw new Error('Missing required field: url');
   }
 
-  console.log(`[X402] Xcheck: ${username}`);
-  const result = await performXScan(username);
+  console.log(`[X402] Full probe: ${url}`);
+
+  // Probe the website
+  const probeResult = await probeWebsite(url);
+
+  // Try to find and scan linked GitHub repo
+  let repoScan = null;
+  const allUrls = [...probeResult.apiCalls.map((a: any) => a.url), url];
+  let repoUrl: string | null = null;
+
+  for (const u of allUrls) {
+    const githubMatch = u.match(/github\.com\/([^\/]+\/[^\/\s]+)/i);
+    if (githubMatch) {
+      repoUrl = `https://github.com/${githubMatch[1]}`;
+      break;
+    }
+  }
+
+  if (repoUrl) {
+    try {
+      repoScan = await performTrustScan(repoUrl);
+    } catch { /* skip if repo scan fails */ }
+  }
 
   return {
-    username,
-    score: result.score,
-    grade: result.grade,
-    verdict: result.verdict,
-    verdictEmoji: result.verdictEmoji,
-    profile: result.profile,
-    followerAnalysis: result.followerAnalysis,
-    tweetAnalysis: result.tweetAnalysis,
-    redFlags: result.redFlags,
-    greenFlags: result.greenFlags,
-    scannedAt: result.scannedAt
+    url,
+    probe: {
+      verdict: probeResult.verdict,
+      verdictReason: probeResult.verdictReason,
+      riskLevel: probeResult.riskLevel,
+      hasApiActivity: probeResult.hasApiActivity,
+      apiCalls: probeResult.apiCalls.length,
+      externalApis: probeResult.externalApis,
+      frameworks: probeResult.frameworks,
+      hosting: probeResult.hosting,
+      loadTime: probeResult.loadTime
+    },
+    repo: repoScan ? {
+      url: repoUrl,
+      trustScore: repoScan.trustScore,
+      grade: repoScan.grade,
+      verdict: repoScan.verdict
+    } : null,
+    scannedAt: new Date().toISOString()
   };
 }
 
@@ -266,7 +295,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
   }
 
   // Paid endpoints
-  const x402Paths = ['/v1/rugcheck', '/v1/scamcheck', '/v1/xcheck'];
+  const x402Paths = ['/v1/rugcheck', '/v1/scamcheck', '/v1/fullprobe'];
 
   if (x402Paths.includes(path) && method === 'POST') {
     const x402Req = toX402Request(req, body);
@@ -290,8 +319,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         case '/v1/scamcheck':
           result = await handleScamcheck(body);
           break;
-        case '/v1/xcheck':
-          result = await handleXcheck(body);
+        case '/v1/fullprobe':
+          result = await handleFullprobe(body);
           break;
         default:
           throw new Error('Unknown endpoint');
@@ -320,7 +349,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       'GET  /v1/stats',
       'POST /v1/rugcheck',
       'POST /v1/scamcheck',
-      'POST /v1/xcheck'
+      'POST /v1/fullprobe'
     ]
   });
 }
@@ -345,7 +374,7 @@ export function startX402Server(): void {
     console.log(`[X402]   GET  /v1/health      - Health check`);
     console.log(`[X402]   POST /v1/rugcheck    - Trust scan ($0.005)`);
     console.log(`[X402]   POST /v1/scamcheck   - Scam detection ($0.01)`);
-    console.log(`[X402]   POST /v1/xcheck      - X/Twitter analysis ($0.01)`);
+    console.log(`[X402]   POST /v1/fullprobe    - Website + repo probe ($0.01)`);
   });
 }
 
