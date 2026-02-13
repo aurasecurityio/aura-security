@@ -5,6 +5,7 @@
  * - POST /v1/rugcheck
  * - POST /v1/scamcheck
  * - POST /v1/fullprobe
+ * - POST /v1/attest
  * - GET /v1/pricing
  * - GET /v1/payment/:id
  */
@@ -16,6 +17,7 @@ import { PRICING } from './pricing.js';
 import { performTrustScan } from '../integrations/trust-scanner.js';
 import { quickScamScan } from '../integrations/scam-detector.js';
 import { probeWebsite } from '../integrations/website-probe.js';
+import { scanAndAttest } from '../erc7710/attestation.js';
 
 const PORT = parseInt(process.env.X402_PORT || '3002', 10);
 
@@ -228,6 +230,40 @@ async function handleFullprobe(body: any): Promise<any> {
 }
 
 /**
+ * Handle /v1/attest — scan + publish EAS attestation on Base
+ */
+async function handleAttest(body: any): Promise<any> {
+  const { target, scanType } = body;
+
+  if (!target) {
+    throw new Error('Missing required field: target');
+  }
+
+  const validTypes = ['rugcheck', 'scamcheck', 'fullprobe'];
+  if (!scanType || !validTypes.includes(scanType)) {
+    throw new Error(`Invalid scanType. Must be one of: ${validTypes.join(', ')}`);
+  }
+
+  console.log(`[X402] Attest: ${scanType} on ${target}`);
+  const result = await scanAndAttest({ target, scanType });
+
+  return {
+    attestationUID: result.attestationUID,
+    chain: result.chain,
+    codeHash: result.attestationData.codeHash,
+    reportHash: result.attestationData.reportHash,
+    findings: {
+      critical: Number(result.attestationData.criticalCount),
+      high: Number(result.attestationData.highCount),
+      medium: Number(result.attestationData.mediumCount)
+    },
+    easExplorerUrl: result.easExplorerUrl,
+    scanSummary: result.scanSummary,
+    scannedAt: new Date().toISOString()
+  };
+}
+
+/**
  * Handle requests
  */
 async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -295,7 +331,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
   }
 
   // Paid endpoints
-  const x402Paths = ['/v1/rugcheck', '/v1/scamcheck', '/v1/fullprobe'];
+  const x402Paths = ['/v1/rugcheck', '/v1/scamcheck', '/v1/fullprobe', '/v1/attest'];
 
   if (x402Paths.includes(path) && method === 'POST') {
     const x402Req = toX402Request(req, body);
@@ -321,6 +357,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           break;
         case '/v1/fullprobe':
           result = await handleFullprobe(body);
+          break;
+        case '/v1/attest':
+          result = await handleAttest(body);
           break;
         default:
           throw new Error('Unknown endpoint');
@@ -349,7 +388,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       'GET  /v1/stats',
       'POST /v1/rugcheck',
       'POST /v1/scamcheck',
-      'POST /v1/fullprobe'
+      'POST /v1/fullprobe',
+      'POST /v1/attest'
     ]
   });
 }
@@ -375,6 +415,7 @@ export function startX402Server(): void {
     console.log(`[X402]   POST /v1/rugcheck    - Trust scan ($0.005)`);
     console.log(`[X402]   POST /v1/scamcheck   - Scam detection ($0.01)`);
     console.log(`[X402]   POST /v1/fullprobe    - Website + repo probe ($0.01)`);
+    console.log(`[X402]   POST /v1/attest       - Scan + EAS attestation on Base ($0.02)`);
   });
 }
 

@@ -2698,3 +2698,7 @@ export type { EnhancedTrustResult } from './integrations/index.js';
 // Website Probe exports (detect static vs active sites)
 export { probeWebsite, formatProbeResult } from './integrations/index.js';
 export type { ProbeResult, NetworkRequest } from './integrations/index.js';
+
+// ERC-7710 Security-Gated Delegation exports (EAS attestations on Base)
+export { scanAndAttest, getAttesterAddress, AURA_SCHEMA, AURA_SCHEMA_UID, BASE_CONFIG } from './erc7710/index.js';
+export type { AttestInput, AttestResult, AttestationData, AttestScanType, FindingCounts, ScanTerms, BaseChainConfig } from './erc7710/index.js';

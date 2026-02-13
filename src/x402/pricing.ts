@@ -24,6 +24,11 @@ export const PRICING: Record<string, { usd: number; lamports: number; descriptio
     usd: 0.01,
     lamports: 50000,  // ~$0.01 at $200 SOL
     description: 'Full website + repo probe - activity, trust, hidden risks'
+  },
+  '/v1/attest': {
+    usd: 0.02,
+    lamports: 100000,  // ~$0.02 at $200 SOL
+    description: 'Security scan + on-chain EAS attestation on Base (ERC-7710)'
   }
 };
 
