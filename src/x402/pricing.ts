@@ -20,10 +20,10 @@ export const PRICING: Record<string, { usd: number; lamports: number; descriptio
     lamports: 50000,  // ~$0.01 at $200 SOL
     description: 'Scam pattern detection - 20+ signatures'
   },
-  '/v1/xcheck': {
+  '/v1/fullprobe': {
     usd: 0.01,
     lamports: 50000,  // ~$0.01 at $200 SOL
-    description: 'X/Twitter profile analysis - bot detection, legitimacy'
+    description: 'Full website + repo probe - activity, trust, hidden risks'
   }
 };
 
