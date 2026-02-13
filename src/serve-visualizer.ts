@@ -63,6 +63,8 @@ const server = createServer((req, res) => {
   if (url === '/') {
     filePath = join(VISUALIZER_DIR, 'landing.html');
   } else if (url === '/app' || url === '/app/') {
+    filePath = join(VISUALIZER_DIR, 'dashboard.html');
+  } else if (url === '/app/visualizer') {
     filePath = join(VISUALIZER_DIR, 'index-minimal.html');
   } else if (url === '/app/classic') {
     filePath = join(VISUALIZER_DIR, 'index.html');
@@ -107,9 +109,10 @@ server.listen(PORT, () => {
 ╚═══════════════════════════════════════════════════════════╝
 
 Routes:
-  /          Landing page
-  /app       3D Dashboard (visualizer)
-  /app/classic   Classic dashboard UI
+  /              Landing page
+  /app           Dashboard (scan-first UI)
+  /app/visualizer  3D Visualizer (legacy)
+  /app/classic     Classic dashboard UI
 `);
 
   // Auto-open browser (skip if NO_OPEN env var is set)

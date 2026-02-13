@@ -1,0 +1,1883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>aurasecurity - Dashboard</title>
+  <meta name="description" content="Scan any repo, website, or social profile for security threats. Trust verification for the autonomous economy.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* ============================================
+       RESET & VARIABLES
+       ============================================ */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #030712;
+      --bg-elevated: #0f172a;
+      --bg-card: rgba(15, 23, 42, 0.6);
+      --bg-input: rgba(15, 23, 42, 0.8);
+      --border: rgba(148, 163, 184, 0.1);
+      --border-hover: rgba(148, 163, 184, 0.2);
+      --text: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --primary: #06b6d4;
+      --primary-dim: rgba(6, 182, 212, 0.15);
+      --primary-glow: rgba(6, 182, 212, 0.4);
+      --secondary: #8b5cf6;
+      --secondary-dim: rgba(139, 92, 246, 0.15);
+      --danger: #ef4444;
+      --danger-dim: rgba(239, 68, 68, 0.15);
+      --warning: #f59e0b;
+      --warning-dim: rgba(245, 158, 11, 0.15);
+      --success: #10b981;
+      --success-dim: rgba(16, 185, 129, 0.15);
+      --orange: #f97316;
+      --orange-dim: rgba(249, 115, 22, 0.15);
+      --radius: 12px;
+      --radius-lg: 16px;
+      --radius-sm: 8px;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+      min-height: 100vh;
+    }
+
+    h1, h2, h3, h4, h5 {
+      font-family: 'Space Grotesk', sans-serif;
+      line-height: 1.2;
+    }
+
+    a { color: var(--primary); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ============================================
+       BACKGROUNDS
+       ============================================ */
+    .mesh-gradient {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: -2;
+      background:
+        radial-gradient(at 0% 0%, rgba(6, 182, 212, 0.12) 0%, transparent 50%),
+        radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.08) 0%, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(6, 182, 212, 0.08) 0%, transparent 50%),
+        radial-gradient(at 0% 100%, rgba(139, 92, 246, 0.12) 0%, transparent 50%);
+    }
+
+    .grid-pattern {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: -1;
+      background-image:
+        linear-gradient(rgba(148, 163, 184, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 163, 184, 0.03) 1px, transparent 1px);
+      background-size: 60px 60px;
+      mask-image: radial-gradient(ellipse at center, black 0%, transparent 70%);
+    }
+
+    /* ============================================
+       NAVIGATION
+       ============================================ */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      padding: 0.75rem 1.5rem;
+      background: linear-gradient(180deg, var(--bg) 0%, var(--bg) 60%, transparent 100%);
+    }
+
+    .nav-inner {
+      max-width: 1200px; margin: 0 auto;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0.6rem 1.25rem;
+      background: rgba(3, 7, 18, 0.85);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+    }
+
+    .nav-logo {
+      display: flex; align-items: center; gap: 0.5rem;
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700; font-size: 1.1rem; color: var(--text);
+      text-decoration: none;
+    }
+
+    .nav-logo:hover { text-decoration: none; }
+
+    .nav-logo svg { width: 28px; height: 28px; }
+
+    .nav-links {
+      display: flex; align-items: center; gap: 0.25rem;
+    }
+
+    .nav-links a {
+      color: var(--text-secondary); font-size: 0.85rem; font-weight: 500;
+      padding: 0.4rem 0.75rem; border-radius: var(--radius-sm);
+      transition: all 0.2s;
+    }
+
+    .nav-links a:hover {
+      color: var(--text); background: rgba(148, 163, 184, 0.08);
+      text-decoration: none;
+    }
+
+    .nav-live {
+      display: flex; align-items: center; gap: 0.4rem;
+      font-size: 0.8rem; color: var(--text-muted);
+    }
+
+    .live-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--text-muted);
+      transition: background 0.3s;
+    }
+
+    .live-dot.connected {
+      background: var(--success);
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+      animation: pulse-dot 2s infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* ============================================
+       MAIN CONTENT
+       ============================================ */
+    .main-content {
+      max-width: 1200px; margin: 0 auto;
+      padding: 0 1.5rem;
+    }
+
+    /* ============================================
+       HERO / SCAN ZONE
+       ============================================ */
+    .hero {
+      padding-top: 7rem;
+      padding-bottom: 2rem;
+      text-align: center;
+      min-height: 50vh;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+    }
+
+    .hero-tagline {
+      font-size: 0.85rem; font-weight: 600;
+      color: var(--primary);
+      text-transform: uppercase; letter-spacing: 0.1em;
+      margin-bottom: 0.75rem;
+    }
+
+    .hero h1 {
+      font-size: clamp(1.8rem, 4vw, 2.8rem);
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+      background: linear-gradient(135deg, var(--text) 0%, var(--text-secondary) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+
+    .hero-sub {
+      font-size: 1.05rem; color: var(--text-secondary);
+      max-width: 600px; margin: 0 auto 2rem;
+    }
+
+    /* Scan Input */
+    .scan-box {
+      width: 100%; max-width: 680px;
+      margin: 0 auto 1.25rem;
+    }
+
+    .scan-input-wrap {
+      position: relative;
+      display: flex; align-items: center;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .scan-input-wrap:focus-within {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-dim);
+    }
+
+    .scan-input-wrap .icon-search {
+      position: absolute; left: 1rem; top: 50%; transform: translateY(-50%);
+      color: var(--text-muted); pointer-events: none;
+    }
+
+    #scanInput {
+      flex: 1; background: none; border: none; outline: none;
+      color: var(--text); font-size: 1rem; font-family: inherit;
+      padding: 1rem 1rem 1rem 3rem;
+      min-width: 0;
+    }
+
+    #scanInput::placeholder { color: var(--text-muted); }
+
+    #scanBtn {
+      margin: 0.4rem 0.4rem 0.4rem 0;
+      padding: 0.65rem 1.5rem;
+      background: linear-gradient(135deg, var(--primary), #0891b2);
+      color: #fff; font-weight: 600; font-size: 0.9rem;
+      border: none; border-radius: var(--radius);
+      cursor: pointer; white-space: nowrap;
+      font-family: 'Space Grotesk', sans-serif;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+
+    #scanBtn:hover { opacity: 0.9; }
+    #scanBtn:active { transform: scale(0.97); }
+    #scanBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Scan Type Pills */
+    .scan-pills {
+      display: flex; flex-wrap: wrap; gap: 0.4rem;
+      justify-content: center;
+      max-width: 680px; margin: 0 auto;
+    }
+
+    .scan-pill {
+      padding: 0.35rem 0.85rem;
+      font-size: 0.8rem; font-weight: 500;
+      background: rgba(148, 163, 184, 0.06);
+      border: 1px solid var(--border);
+      border-radius: 999px; cursor: pointer;
+      color: var(--text-secondary);
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+
+    .scan-pill:hover {
+      border-color: var(--border-hover);
+      color: var(--text);
+      background: rgba(148, 163, 184, 0.1);
+    }
+
+    .scan-pill.active {
+      border-color: var(--primary);
+      color: var(--primary);
+      background: var(--primary-dim);
+    }
+
+    /* Auto-detect label */
+    .scan-detect {
+      text-align: center; margin-top: 0.75rem;
+      font-size: 0.8rem; color: var(--text-muted);
+      min-height: 1.2em;
+    }
+
+    .scan-detect span { color: var(--primary); font-weight: 500; }
+
+    /* ============================================
+       LOADING STATE
+       ============================================ */
+    .scan-loading {
+      display: none;
+      flex-direction: column; align-items: center;
+      padding: 3rem 0;
+    }
+
+    .scan-loading.visible { display: flex; }
+
+    .spinner {
+      width: 48px; height: 48px;
+      border: 3px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .scan-loading p {
+      margin-top: 1rem; color: var(--text-secondary); font-size: 0.95rem;
+    }
+
+    /* Toast for live findings */
+    .toast-container {
+      position: fixed; bottom: 1.5rem; right: 1.5rem;
+      display: flex; flex-direction: column; gap: 0.5rem;
+      z-index: 200; max-width: 360px;
+    }
+
+    .toast {
+      padding: 0.75rem 1rem;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-secondary); font-size: 0.82rem;
+      backdrop-filter: blur(10px);
+      animation: toast-in 0.3s ease-out;
+      border-left: 3px solid var(--primary);
+    }
+
+    .toast.critical { border-left-color: var(--danger); }
+    .toast.high { border-left-color: var(--orange); }
+    .toast.warning { border-left-color: var(--warning); }
+
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateX(20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    /* ============================================
+       RESULTS ZONE
+       ============================================ */
+    #resultsZone { display: none; padding-bottom: 1rem; }
+    #resultsZone.visible { display: block; }
+
+    .results-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.5rem;
+    }
+
+    .results-header h2 { font-size: 1.3rem; }
+
+    .results-meta {
+      font-size: 0.82rem; color: var(--text-muted);
+    }
+
+    .btn-new-scan {
+      padding: 0.4rem 1rem; font-size: 0.82rem; font-weight: 500;
+      background: rgba(148, 163, 184, 0.08);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-secondary); cursor: pointer;
+      font-family: inherit; transition: all 0.2s;
+    }
+
+    .btn-new-scan:hover {
+      border-color: var(--border-hover); color: var(--text);
+    }
+
+    /* Score Gauge */
+    .gauge-container {
+      display: flex; flex-direction: column; align-items: center;
+      margin: 1.5rem 0;
+    }
+
+    .gauge-svg { width: 180px; height: 180px; }
+
+    .gauge-bg {
+      fill: none; stroke: rgba(148, 163, 184, 0.1); stroke-width: 10;
+    }
+
+    .gauge-fill {
+      fill: none; stroke-width: 10;
+      stroke-linecap: round;
+      transform: rotate(-90deg);
+      transform-origin: center;
+      transition: stroke-dashoffset 1.2s ease-out, stroke 0.5s;
+    }
+
+    .gauge-text {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700; font-size: 2.8rem;
+      fill: var(--text);
+    }
+
+    .gauge-label {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.8rem; fill: var(--text-muted);
+    }
+
+    .gauge-grade {
+      margin-top: 0.5rem;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.1rem; font-weight: 600;
+    }
+
+    /* Verdict Banner */
+    .verdict-banner {
+      width: 100%; padding: 0.85rem 1.5rem;
+      border-radius: var(--radius);
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700; font-size: 1.1rem;
+      text-align: center; margin: 1rem 0 1.5rem;
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+
+    .verdict-SAFU, .verdict-SAFE, .verdict-LEGIT, .verdict-REAL, .verdict-TRUSTED {
+      background: var(--success-dim); color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .verdict-DYOR, .verdict-CAUTION, .verdict-NEUTRAL, .verdict-HYPE, .verdict-INTERACTIVE {
+      background: var(--warning-dim); color: var(--warning);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .verdict-RISKY, .verdict-WARNING, .verdict-SUSPICIOUS, .verdict-DANGEROUS {
+      background: var(--orange-dim); color: var(--orange);
+      border: 1px solid rgba(249, 115, 22, 0.3);
+    }
+
+    .verdict-RUG, .verdict-DANGER, .verdict-BOT_FARM, .verdict-STATIC {
+      background: var(--danger-dim); color: var(--danger);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .verdict-ACTIVE {
+      background: var(--success-dim); color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    /* Summary */
+    .result-summary {
+      font-size: 0.95rem; color: var(--text-secondary);
+      margin-bottom: 1.5rem; line-height: 1.7;
+      padding: 1rem 1.25rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      backdrop-filter: blur(10px);
+    }
+
+    /* Detail Cards Grid */
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem; margin-bottom: 1.5rem;
+    }
+
+    .detail-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      backdrop-filter: blur(10px);
+      transition: border-color 0.2s;
+    }
+
+    .detail-card:hover { border-color: var(--border-hover); }
+
+    .detail-card-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 0.75rem;
+    }
+
+    .detail-card-title {
+      font-size: 0.82rem; font-weight: 600;
+      color: var(--text-secondary); text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .detail-card-status {
+      font-size: 0.75rem; font-weight: 600;
+      padding: 0.2rem 0.6rem; border-radius: 999px;
+    }
+
+    .status-CLEAN, .status-SAFU, .status-SAFE, .status-good {
+      background: var(--success-dim); color: var(--success);
+    }
+
+    .status-WARNING, .status-DYOR, .status-warn {
+      background: var(--warning-dim); color: var(--warning);
+    }
+
+    .status-DANGER, .status-RISKY, .status-FOUND, .status-bad {
+      background: var(--danger-dim); color: var(--danger);
+    }
+
+    .status-UNAVAILABLE, .status-UNKNOWN {
+      background: rgba(148, 163, 184, 0.1); color: var(--text-muted);
+    }
+
+    .detail-card-value {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.8rem; font-weight: 700;
+      margin-bottom: 0.25rem;
+    }
+
+    .detail-card-desc {
+      font-size: 0.85rem; color: var(--text-muted);
+    }
+
+    /* Checks List */
+    .checks-section { margin-bottom: 1.5rem; }
+
+    .checks-title {
+      font-size: 1rem; font-weight: 600;
+      margin-bottom: 0.75rem;
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+
+    .check-item {
+      display: flex; align-items: flex-start; gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      margin-bottom: 0.4rem;
+      backdrop-filter: blur(10px);
+    }
+
+    .check-icon {
+      flex-shrink: 0; width: 22px; height: 22px;
+      border-radius: 50%; display: flex;
+      align-items: center; justify-content: center;
+      font-size: 0.75rem; font-weight: 700;
+      margin-top: 0.1rem;
+    }
+
+    .check-icon.good { background: var(--success-dim); color: var(--success); }
+    .check-icon.warn { background: var(--warning-dim); color: var(--warning); }
+    .check-icon.bad { background: var(--danger-dim); color: var(--danger); }
+
+    .check-content { flex: 1; min-width: 0; }
+
+    .check-name {
+      font-size: 0.88rem; font-weight: 500; color: var(--text);
+    }
+
+    .check-explanation {
+      font-size: 0.8rem; color: var(--text-muted); margin-top: 0.15rem;
+    }
+
+    .check-points {
+      flex-shrink: 0; font-size: 0.78rem; font-weight: 600;
+      color: var(--text-muted); white-space: nowrap;
+      margin-top: 0.15rem;
+    }
+
+    .check-points.positive { color: var(--success); }
+    .check-points.negative { color: var(--danger); }
+
+    /* Flags */
+    .flags-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 1rem; margin-bottom: 1.5rem;
+    }
+
+    .flags-column h4 {
+      font-size: 0.88rem; font-weight: 600;
+      margin-bottom: 0.6rem;
+      display: flex; align-items: center; gap: 0.4rem;
+    }
+
+    .flags-column h4.red { color: var(--danger); }
+    .flags-column h4.green { color: var(--success); }
+
+    .flag-item {
+      font-size: 0.82rem; color: var(--text-secondary);
+      padding: 0.4rem 0;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.05);
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+
+    .flag-dot {
+      width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+    }
+
+    .flag-dot.red { background: var(--danger); }
+    .flag-dot.green { background: var(--success); }
+
+    /* Tags */
+    .tags-wrap {
+      display: flex; flex-wrap: wrap; gap: 0.4rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .tag {
+      font-size: 0.75rem; font-weight: 500;
+      padding: 0.25rem 0.65rem; border-radius: 999px;
+      background: rgba(148, 163, 184, 0.08);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+    }
+
+    .tag.positive { background: var(--success-dim); color: var(--success); border-color: rgba(16,185,129,0.2); }
+    .tag.negative { background: var(--danger-dim); color: var(--danger); border-color: rgba(239,68,68,0.2); }
+    .tag.neutral { background: var(--primary-dim); color: var(--primary); border-color: rgba(6,182,212,0.2); }
+
+    /* ============================================
+       COMPARE LAYOUT
+       ============================================ */
+    .compare-grid {
+      display: grid; grid-template-columns: 1fr auto 1fr;
+      gap: 1.5rem; align-items: start; margin-bottom: 1.5rem;
+    }
+
+    .compare-vs {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.5rem; font-weight: 700;
+      color: var(--text-muted); align-self: center;
+      padding-top: 3rem;
+    }
+
+    .compare-side {
+      text-align: center;
+    }
+
+    .compare-side.winner {
+      border: 2px solid var(--success);
+      border-radius: var(--radius);
+      padding: 1rem;
+      position: relative;
+    }
+
+    .compare-side.winner::after {
+      content: 'WINNER';
+      position: absolute; top: -0.7rem; left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.7rem; font-weight: 700;
+      padding: 0.15rem 0.6rem; border-radius: 999px;
+      background: var(--success); color: var(--bg);
+      font-family: 'Space Grotesk', sans-serif;
+    }
+
+    .compare-name {
+      font-size: 0.9rem; font-weight: 600;
+      margin-top: 0.5rem; word-break: break-all;
+    }
+
+    .compare-summary {
+      font-size: 0.82rem; color: var(--text-muted);
+      margin-top: 0.4rem;
+    }
+
+    /* ============================================
+       X-SCAN PROFILE CARD
+       ============================================ */
+    .profile-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.5rem;
+      backdrop-filter: blur(10px);
+      text-align: center; margin-bottom: 1.5rem;
+    }
+
+    .profile-username {
+      font-size: 1.2rem; font-weight: 700;
+      font-family: 'Space Grotesk', sans-serif;
+      color: var(--primary);
+    }
+
+    .profile-meta {
+      font-size: 0.85rem; color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+
+    /* ============================================
+       RECENT SCANS
+       ============================================ */
+    .section { margin-bottom: 2.5rem; }
+
+    .section-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+
+    .section-title {
+      font-size: 1.15rem; font-weight: 600;
+    }
+
+    .section-subtitle {
+      font-size: 0.82rem; color: var(--text-muted);
+    }
+
+    .recent-list { display: flex; flex-direction: column; gap: 0.4rem; }
+
+    .recent-item {
+      display: flex; align-items: center; gap: 1rem;
+      padding: 0.85rem 1.1rem;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      cursor: pointer; transition: all 0.2s;
+      backdrop-filter: blur(10px);
+    }
+
+    .recent-item:hover {
+      border-color: var(--border-hover);
+      background: rgba(15, 23, 42, 0.8);
+    }
+
+    .recent-score {
+      width: 42px; height: 42px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700; font-size: 0.9rem; flex-shrink: 0;
+    }
+
+    .recent-info { flex: 1; min-width: 0; }
+
+    .recent-name {
+      font-size: 0.9rem; font-weight: 500;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+
+    .recent-details {
+      font-size: 0.78rem; color: var(--text-muted);
+      display: flex; gap: 0.75rem; margin-top: 0.15rem;
+    }
+
+    .recent-time {
+      font-size: 0.78rem; color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    /* ============================================
+       PLATFORM STATS
+       ============================================ */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+
+    .stat-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.25rem;
+      backdrop-filter: blur(10px);
+      text-align: center;
+    }
+
+    .stat-value {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 2rem; font-weight: 700;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+
+    .stat-label {
+      font-size: 0.82rem; color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+
+    /* ============================================
+       FOOTER
+       ============================================ */
+    .footer {
+      text-align: center; padding: 2rem 0 1.5rem;
+      border-top: 1px solid var(--border);
+      margin-top: 1rem;
+    }
+
+    .footer p {
+      font-size: 0.8rem; color: var(--text-muted);
+    }
+
+    .footer a { color: var(--text-muted); }
+    .footer a:hover { color: var(--primary); }
+
+    /* ============================================
+       ERROR STATE
+       ============================================ */
+    .error-box {
+      padding: 1rem 1.25rem;
+      background: var(--danger-dim);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: var(--radius);
+      color: var(--danger);
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+    }
+
+    /* ============================================
+       RESPONSIVE
+       ============================================ */
+    @media (max-width: 768px) {
+      nav { padding: 0.5rem 0.75rem; }
+      .nav-inner { padding: 0.5rem 0.75rem; border-radius: var(--radius); }
+      .nav-links a { padding: 0.3rem 0.5rem; font-size: 0.78rem; }
+      .hero { padding-top: 5.5rem; min-height: auto; }
+      .hero h1 { font-size: 1.6rem; }
+      .hero-sub { font-size: 0.92rem; }
+      #scanInput { font-size: 0.92rem; padding: 0.85rem 0.85rem 0.85rem 2.5rem; }
+      #scanBtn { padding: 0.55rem 1rem; font-size: 0.82rem; }
+      .detail-grid { grid-template-columns: 1fr; }
+      .flags-grid { grid-template-columns: 1fr; }
+      .compare-grid { grid-template-columns: 1fr; }
+      .compare-vs { display: none; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .scan-pills { gap: 0.3rem; }
+      .main-content { padding: 0 1rem; }
+    }
+
+    @media (max-width: 480px) {
+      .nav-links a:not(:first-child):not(:last-child) { display: none; }
+      .stats-grid { grid-template-columns: 1fr; }
+      .gauge-svg { width: 150px; height: 150px; }
+      .gauge-text { font-size: 2.2rem; }
+    }
+
+    /* ============================================
+       UTILITY
+       ============================================ */
+    .hidden { display: none !important; }
+
+    .text-center { text-align: center; }
+
+    .mb-1 { margin-bottom: 0.5rem; }
+    .mb-2 { margin-bottom: 1rem; }
+    .mb-3 { margin-bottom: 1.5rem; }
+  </style>
+</head>
+<body>
+
+  <div class="mesh-gradient"></div>
+  <div class="grid-pattern"></div>
+
+  <!-- ============================================
+       NAVIGATION
+       ============================================ -->
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo">
+        <svg viewBox="0 0 32 32" fill="none">
+          <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="1.5" opacity="0.3"/>
+          <circle cx="16" cy="16" r="8" stroke="#06b6d4" stroke-width="2"/>
+          <circle cx="16" cy="16" r="3" fill="#06b6d4"/>
+        </svg>
+        aurasecurity
+      </a>
+      <div class="nav-links">
+        <a href="/docs">Docs</a>
+        <a href="https://github.com/aurasecurityio/aura-security" target="_blank">GitHub</a>
+        <a href="https://t.me/aurasecuritychecker_bot" target="_blank">Telegram</a>
+        <a href="https://discord.gg/aurasecurity" target="_blank">Discord</a>
+        <div class="nav-live">
+          <div class="live-dot" id="liveDot"></div>
+          <span id="liveLabel">offline</span>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="main-content">
+
+    <!-- ============================================
+         HERO / SCAN ZONE
+         ============================================ -->
+    <section class="hero" id="heroSection">
+      <div class="hero-tagline">Trust Verification Infrastructure</div>
+      <h1>Scan Anything. Trust Nothing.</h1>
+      <p class="hero-sub">Paste a GitHub repo, website URL, or X handle to get an instant security analysis.</p>
+
+      <div class="scan-box">
+        <div class="scan-input-wrap">
+          <svg class="icon-search" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input type="text" id="scanInput" placeholder="github.com/owner/repo, @handle, or any URL..." autocomplete="off" spellcheck="false">
+          <button id="scanBtn" onclick="runScan()">Scan</button>
+        </div>
+      </div>
+
+      <div class="scan-pills" id="scanPills">
+        <button class="scan-pill active" data-tool="auto">Auto Detect</button>
+        <button class="scan-pill" data-tool="trust-scan">Quick Scan</button>
+        <button class="scan-pill" data-tool="scam-scan">Deep Scan</button>
+        <button class="scan-pill" data-tool="x-scan">X Scan</button>
+        <button class="scan-pill" data-tool="compare">Compare</button>
+        <button class="scan-pill" data-tool="ai-check">AI Check</button>
+        <button class="scan-pill" data-tool="scan-skill">Skill Scan</button>
+      </div>
+
+      <div class="scan-detect" id="scanDetect"></div>
+    </section>
+
+    <!-- Loading State -->
+    <div class="scan-loading" id="scanLoading">
+      <div class="spinner"></div>
+      <p id="loadingText">Scanning...</p>
+    </div>
+
+    <!-- ============================================
+         RESULTS ZONE
+         ============================================ -->
+    <section id="resultsZone"></section>
+
+    <!-- ============================================
+         RECENT SCANS
+         ============================================ -->
+    <section class="section" id="recentSection">
+      <div class="section-header">
+        <div>
+          <h3 class="section-title">Recent Scans</h3>
+          <p class="section-subtitle">Latest audits from the platform</p>
+        </div>
+      </div>
+      <div class="recent-list" id="recentList">
+        <p style="color: var(--text-muted); font-size: 0.85rem; padding: 1rem;">Loading recent scans...</p>
+      </div>
+    </section>
+
+    <!-- ============================================
+         PLATFORM STATS
+         ============================================ -->
+    <section class="section" id="statsSection">
+      <div class="section-header">
+        <div>
+          <h3 class="section-title">Platform Stats</h3>
+          <p class="section-subtitle">Real-time intelligence metrics</p>
+        </div>
+      </div>
+      <div class="stats-grid" id="statsGrid">
+        <div class="stat-card"><div class="stat-value" id="statScans">--</div><div class="stat-label">Total Scans</div></div>
+        <div class="stat-card"><div class="stat-value" id="statRugs">--</div><div class="stat-label">Rugs Detected</div></div>
+        <div class="stat-card"><div class="stat-value" id="statDevs">--</div><div class="stat-label">Flagged Devs</div></div>
+        <div class="stat-card"><div class="stat-value" id="statAccuracy">--</div><div class="stat-label">Accuracy</div></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>aurasecurity &mdash; Protection infrastructure for the autonomous economy. <a href="/app/visualizer">Legacy Visualizer</a></p>
+  </footer>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- ============================================
+       JAVASCRIPT
+       ============================================ -->
+  <script>
+    // ============================================
+    // CONFIG & STATE
+    // ============================================
+    const API_BASE = window.location.origin;
+    const WS_PORT = 3001;
+    let wsConnection = null;
+    let wsReconnectTimer = null;
+    let wsReconnectDelay = 1000;
+    let activeScanTool = 'auto';
+    let currentResults = null;
+
+    // ============================================
+    // UTILITY FUNCTIONS
+    // ============================================
+    function getScoreColor(score) {
+      if (score == null) return 'var(--text-muted)';
+      if (score >= 70) return 'var(--success)';
+      if (score >= 50) return 'var(--warning)';
+      if (score >= 30) return 'var(--orange)';
+      return 'var(--danger)';
+    }
+
+    function getScoreBg(score) {
+      if (score == null) return 'rgba(148,163,184,0.1)';
+      if (score >= 70) return 'var(--success-dim)';
+      if (score >= 50) return 'var(--warning-dim)';
+      if (score >= 30) return 'var(--orange-dim)';
+      return 'var(--danger-dim)';
+    }
+
+    function getVerdictClass(verdict) {
+      if (!verdict) return '';
+      const v = verdict.toUpperCase().replace(/\s+/g, '_').replace(/!/g, '');
+      if (v.includes('SAFU') || v.includes('SAFE') || v.includes('LEGIT') || v.includes('REAL') || v.includes('TRUSTED') || v.includes('ACTIVE')) return 'verdict-SAFU';
+      if (v.includes('DYOR') || v.includes('CAUTION') || v.includes('NEUTRAL') || v.includes('HYPE') || v.includes('INTERACTIVE')) return 'verdict-DYOR';
+      if (v.includes('RISKY') || v.includes('WARNING') || v.includes('SUSPICIOUS') || v.includes('DANGEROUS')) return 'verdict-RISKY';
+      if (v.includes('RUG') || v.includes('DANGER') || v.includes('BOT') || v.includes('STATIC')) return 'verdict-RUG';
+      return 'verdict-DYOR';
+    }
+
+    function timeAgo(dateStr) {
+      if (!dateStr) return '';
+      const diff = Date.now() - new Date(dateStr).getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return 'just now';
+      if (mins < 60) return mins + 'm ago';
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return hrs + 'h ago';
+      const days = Math.floor(hrs / 24);
+      return days + 'd ago';
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function showToast(message, severity) {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = 'toast' + (severity ? ' ' + severity : '');
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 4000);
+    }
+
+    // ============================================
+    // SCAN INPUT DETECTION
+    // ============================================
+    function detectScanType(input) {
+      const trimmed = input.trim();
+      if (!trimmed) return { tool: null, label: '' };
+
+      // X/Twitter handle or URL
+      if (/^@\w+/.test(trimmed) || /(?:x\.com|twitter\.com)\/\w+/i.test(trimmed)) {
+        return { tool: 'x-scan', label: 'X Profile Scan', args: { username: trimmed } };
+      }
+
+      // GitHub URL
+      if (/github\.com\/[\w.-]+\/[\w.-]+/i.test(trimmed)) {
+        return { tool: 'trust-scan', label: 'GitHub Trust Scan', args: { gitUrl: trimmed.startsWith('http') ? trimmed : 'https://' + trimmed } };
+      }
+
+      // owner/repo shorthand
+      if (/^[\w.-]+\/[\w.-]+$/.test(trimmed) && !trimmed.includes('.')) {
+        return { tool: 'trust-scan', label: 'GitHub Trust Scan', args: { gitUrl: 'https://github.com/' + trimmed } };
+      }
+
+      // Generic URL (non-GitHub)
+      if (/^https?:\/\//i.test(trimmed) || /^[\w.-]+\.[a-z]{2,}/i.test(trimmed)) {
+        const url = trimmed.startsWith('http') ? trimmed : 'https://' + trimmed;
+        return { tool: 'full-probe', label: 'Full Website Probe', args: { url: url } };
+      }
+
+      return { tool: 'trust-scan', label: 'Search', args: { gitUrl: trimmed } };
+    }
+
+    function buildScanArgs(tool, input) {
+      const trimmed = input.trim();
+      switch (tool) {
+        case 'trust-scan':
+        case 'scam-scan':
+        case 'ai-check': {
+          let gitUrl = trimmed;
+          if (/^[\w.-]+\/[\w.-]+$/.test(gitUrl) && !gitUrl.includes('.')) {
+            gitUrl = 'https://github.com/' + gitUrl;
+          } else if (!gitUrl.startsWith('http')) {
+            gitUrl = 'https://' + gitUrl;
+          }
+          return { gitUrl };
+        }
+        case 'x-scan':
+          return { username: trimmed };
+        case 'compare': {
+          const parts = trimmed.split(/\s+vs\s+|\s*,\s*|\s+/);
+          let r1 = parts[0] || '';
+          let r2 = parts[1] || '';
+          if (/^[\w.-]+\/[\w.-]+$/.test(r1) && !r1.includes('.')) r1 = 'https://github.com/' + r1;
+          if (/^[\w.-]+\/[\w.-]+$/.test(r2) && !r2.includes('.')) r2 = 'https://github.com/' + r2;
+          if (!r1.startsWith('http')) r1 = 'https://' + r1;
+          if (r2 && !r2.startsWith('http')) r2 = 'https://' + r2;
+          return { repo1: r1, repo2: r2 };
+        }
+        case 'scan-skill': {
+          let skillUrl = trimmed;
+          if (!skillUrl.startsWith('http')) skillUrl = 'https://' + skillUrl;
+          return { skillUrl, format: 'auto', includeRepoTrust: true };
+        }
+        case 'full-probe': {
+          let url = trimmed;
+          if (!url.startsWith('http')) url = 'https://' + url;
+          return { url };
+        }
+        default: {
+          const detected = detectScanType(trimmed);
+          return detected.args || { gitUrl: trimmed };
+        }
+      }
+    }
+
+    // Pill click handlers
+    document.getElementById('scanPills').addEventListener('click', (e) => {
+      const pill = e.target.closest('.scan-pill');
+      if (!pill) return;
+      document.querySelectorAll('.scan-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      activeScanTool = pill.dataset.tool;
+      updateDetectLabel();
+    });
+
+    // Input change handler
+    document.getElementById('scanInput').addEventListener('input', updateDetectLabel);
+    document.getElementById('scanInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') runScan();
+    });
+
+    function updateDetectLabel() {
+      const input = document.getElementById('scanInput').value;
+      const detectEl = document.getElementById('scanDetect');
+      if (activeScanTool !== 'auto') {
+        detectEl.innerHTML = 'Mode: <span>' + escapeHtml(activeScanTool) + '</span>';
+        return;
+      }
+      if (!input.trim()) { detectEl.innerHTML = ''; return; }
+      const detected = detectScanType(input);
+      if (detected.label) {
+        detectEl.innerHTML = 'Detected: <span>' + escapeHtml(detected.label) + '</span>';
+      } else {
+        detectEl.innerHTML = '';
+      }
+    }
+
+    // ============================================
+    // RUN SCAN
+    // ============================================
+    async function runScan() {
+      const input = document.getElementById('scanInput').value.trim();
+      if (!input) return;
+
+      let tool = activeScanTool;
+      let args;
+
+      if (tool === 'auto') {
+        const detected = detectScanType(input);
+        tool = detected.tool || 'trust-scan';
+        args = detected.args || { gitUrl: input };
+      } else {
+        args = buildScanArgs(tool, input);
+      }
+
+      // Validate compare has 2 repos
+      if (tool === 'compare' && !args.repo2) {
+        showToast('Compare requires two repos separated by "vs" or comma', 'warning');
+        return;
+      }
+
+      // Show loading
+      document.getElementById('scanLoading').classList.add('visible');
+      document.getElementById('resultsZone').classList.remove('visible');
+      document.getElementById('resultsZone').innerHTML = '';
+      document.getElementById('scanBtn').disabled = true;
+      document.getElementById('loadingText').textContent = 'Scanning with ' + tool + '...';
+
+      try {
+        const resp = await fetch(API_BASE + '/tools', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tool, arguments: args })
+        });
+
+        const data = await resp.json();
+        currentResults = { tool, args, data, timestamp: new Date().toISOString() };
+        renderResults(tool, data);
+      } catch (err) {
+        document.getElementById('resultsZone').innerHTML = '<div class="error-box">Scan failed: ' + escapeHtml(err.message) + '</div>';
+        document.getElementById('resultsZone').classList.add('visible');
+      } finally {
+        document.getElementById('scanLoading').classList.remove('visible');
+        document.getElementById('scanBtn').disabled = false;
+      }
+    }
+
+    // ============================================
+    // RENDER RESULTS — DISPATCHER
+    // ============================================
+    function renderResults(tool, data) {
+      const zone = document.getElementById('resultsZone');
+
+      // Handle error responses
+      if (data.error && !data.trustScore && !data.score && !data.aiScore) {
+        zone.innerHTML = '<div class="error-box">' + escapeHtml(data.error) + '</div>';
+        zone.classList.add('visible');
+        return;
+      }
+
+      let html = '<div class="results-header"><h2>Scan Results</h2><button class="btn-new-scan" onclick="resetToScan()">New Scan</button></div>';
+
+      switch (tool) {
+        case 'trust-scan':
+        case 'enhanced-trust-scan':
+          html += renderTrustScan(data);
+          break;
+        case 'scam-scan':
+          html += renderScamScan(data);
+          break;
+        case 'x-scan':
+          html += renderXScan(data);
+          break;
+        case 'compare':
+          html += renderCompare(data);
+          break;
+        case 'ai-check':
+          html += renderAICheck(data);
+          break;
+        case 'scan-skill':
+          html += renderSkillScan(data);
+          break;
+        case 'full-probe':
+          html += renderFullProbe(data);
+          break;
+        default:
+          html += renderGeneric(data);
+      }
+
+      zone.innerHTML = html;
+      zone.classList.add('visible');
+
+      // Animate gauge if present
+      requestAnimationFrame(() => animateGauges());
+
+      // Scroll to results
+      zone.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function resetToScan() {
+      document.getElementById('resultsZone').classList.remove('visible');
+      document.getElementById('resultsZone').innerHTML = '';
+      document.getElementById('scanInput').value = '';
+      document.getElementById('scanInput').focus();
+      document.getElementById('heroSection').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // ============================================
+    // GAUGE SVG
+    // ============================================
+    function gaugeHTML(score, label, size) {
+      size = size || 180;
+      const r = (size / 2) - 12;
+      const circumference = 2 * Math.PI * r;
+      const fillPct = score != null ? score / 100 : 0;
+      const offset = circumference * (1 - fillPct);
+      const color = getScoreColor(score);
+      const center = size / 2;
+
+      return '<div class="gauge-container">' +
+        '<svg class="gauge-svg" width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">' +
+          '<circle class="gauge-bg" cx="' + center + '" cy="' + center + '" r="' + r + '"/>' +
+          '<circle class="gauge-fill" cx="' + center + '" cy="' + center + '" r="' + r + '"' +
+            ' stroke="' + color + '"' +
+            ' stroke-dasharray="' + circumference + '"' +
+            ' stroke-dashoffset="' + circumference + '"' +
+            ' data-target-offset="' + offset + '"/>' +
+          '<text class="gauge-text" x="' + center + '" y="' + (center + 4) + '" text-anchor="middle" dominant-baseline="middle">' +
+            (score != null ? score : '--') +
+          '</text>' +
+          '<text class="gauge-label" x="' + center + '" y="' + (center + 24) + '" text-anchor="middle">' +
+            escapeHtml(label || 'Score') +
+          '</text>' +
+        '</svg>' +
+      '</div>';
+    }
+
+    function animateGauges() {
+      document.querySelectorAll('.gauge-fill').forEach(el => {
+        const target = parseFloat(el.getAttribute('data-target-offset'));
+        if (!isNaN(target)) {
+          requestAnimationFrame(() => { el.style.strokeDashoffset = target; });
+        }
+      });
+    }
+
+    // ============================================
+    // VERDICT BANNER
+    // ============================================
+    function verdictHTML(verdict) {
+      if (!verdict) return '';
+      return '<div class="verdict-banner ' + getVerdictClass(verdict) + '">' + escapeHtml(verdict) + '</div>';
+    }
+
+    // ============================================
+    // CHECKS LIST
+    // ============================================
+    function checksHTML(checks, title) {
+      if (!checks || !checks.length) return '';
+      let html = '<div class="checks-section"><div class="checks-title">' + escapeHtml(title || 'Security Checks') + '</div>';
+      checks.forEach(c => {
+        const status = c.status || 'warn';
+        const icon = status === 'good' ? '+' : status === 'bad' ? '!' : '~';
+        const pointsClass = c.points > 0 ? 'positive' : c.points < 0 ? 'negative' : '';
+        html += '<div class="check-item">' +
+          '<div class="check-icon ' + status + '">' + icon + '</div>' +
+          '<div class="check-content">' +
+            '<div class="check-name">' + escapeHtml(c.name || c.id) + '</div>' +
+            (c.explanation ? '<div class="check-explanation">' + escapeHtml(c.explanation) + '</div>' : '') +
+          '</div>' +
+          (c.points != null ? '<div class="check-points ' + pointsClass + '">' + (c.points > 0 ? '+' : '') + c.points + ' pts</div>' : '') +
+        '</div>';
+      });
+      html += '</div>';
+      return html;
+    }
+
+    // ============================================
+    // FLAGS
+    // ============================================
+    function flagsHTML(redFlags, greenFlags) {
+      if ((!redFlags || !redFlags.length) && (!greenFlags || !greenFlags.length)) return '';
+      let html = '<div class="flags-grid">';
+      html += '<div class="flags-column"><h4 class="red">Red Flags</h4>';
+      if (redFlags && redFlags.length) {
+        redFlags.forEach(f => {
+          html += '<div class="flag-item"><div class="flag-dot red"></div>' + escapeHtml(f) + '</div>';
+        });
+      } else {
+        html += '<div class="flag-item" style="color:var(--text-muted)">None detected</div>';
+      }
+      html += '</div>';
+      html += '<div class="flags-column"><h4 class="green">Green Flags</h4>';
+      if (greenFlags && greenFlags.length) {
+        greenFlags.forEach(f => {
+          html += '<div class="flag-item"><div class="flag-dot green"></div>' + escapeHtml(f) + '</div>';
+        });
+      } else {
+        html += '<div class="flag-item" style="color:var(--text-muted)">None detected</div>';
+      }
+      html += '</div></div>';
+      return html;
+    }
+
+    // ============================================
+    // TAGS
+    // ============================================
+    function tagsHTML(tags) {
+      if (!tags || !tags.length) return '';
+      let html = '<div class="tags-wrap">';
+      tags.forEach(t => {
+        const text = t.replace(/^#/, '');
+        let cls = 'tag';
+        const lower = text.toLowerCase();
+        if (lower.includes('clean') || lower.includes('active') || lower.includes('test') || lower.includes('safe') || lower.includes('license') || lower.includes('verified')) cls += ' positive';
+        else if (lower.includes('leak') || lower.includes('scam') || lower.includes('rug') || lower.includes('risk') || lower.includes('danger') || lower.includes('honeypot') || lower.includes('dead') || lower.includes('abandoned')) cls += ' negative';
+        else cls += ' neutral';
+        html += '<span class="' + cls + '">' + escapeHtml(text) + '</span>';
+      });
+      html += '</div>';
+      return html;
+    }
+
+    // ============================================
+    // RENDER: TRUST SCAN
+    // ============================================
+    function renderTrustScan(data) {
+      let html = '';
+      html += gaugeHTML(data.trustScore, 'Trust Score');
+
+      if (data.grade) {
+        html += '<div class="gauge-grade text-center" style="color:' + getScoreColor(data.trustScore) + '">' +
+          'Grade: ' + escapeHtml(data.grade) + '</div>';
+      }
+
+      html += verdictHTML(data.verdict);
+
+      if (data.summary) {
+        html += '<div class="result-summary">' + escapeHtml(data.summary) + '</div>';
+      }
+
+      // Metrics cards
+      if (data.metrics) {
+        const m = data.metrics;
+        html += '<div class="detail-grid">';
+        html += detailCard('Repository Age', m.repoAgeDays != null ? m.repoAgeDays + ' days' : '--', 'How old the repo is');
+        html += detailCard('Commits', m.commitCount != null ? m.commitCount : '--', 'Total commits');
+        html += detailCard('Contributors', m.contributorCount != null ? m.contributorCount : '--', 'Unique contributors');
+        html += detailCard('Code Files', m.codeFileCount != null ? m.codeFileCount : '--', 'Source code files');
+        html += detailCard('Language', m.language || '--', 'Primary language');
+        html += detailCard('Secrets Found', m.secretsFound != null ? m.secretsFound : '--', 'Leaked secrets detected', m.secretsFound > 0 ? 'bad' : 'good');
+        html += '</div>';
+      }
+
+      html += checksHTML(data.checks, 'Security Checks');
+
+      // Readme red flags
+      if (data.metrics && data.metrics.readmeRedFlags && data.metrics.readmeRedFlags.length) {
+        html += flagsHTML(data.metrics.readmeRedFlags, []);
+      }
+
+      return html;
+    }
+
+    function detailCard(title, value, desc, status) {
+      const statusClass = status ? ' status-' + status : '';
+      return '<div class="detail-card">' +
+        '<div class="detail-card-header">' +
+          '<span class="detail-card-title">' + escapeHtml(title) + '</span>' +
+          (status ? '<span class="detail-card-status' + statusClass + '">' + escapeHtml(status) + '</span>' : '') +
+        '</div>' +
+        '<div class="detail-card-value">' + escapeHtml(String(value)) + '</div>' +
+        (desc ? '<div class="detail-card-desc">' + escapeHtml(desc) + '</div>' : '') +
+      '</div>';
+    }
+
+    // ============================================
+    // RENDER: SCAM SCAN
+    // ============================================
+    function renderScamScan(data) {
+      let html = '';
+      const score = data.score != null ? data.score : data.scamScore;
+      html += gaugeHTML(score, 'Safety Score');
+
+      if (data.grade) {
+        html += '<div class="gauge-grade text-center" style="color:' + getScoreColor(score) + '">' +
+          'Grade: ' + escapeHtml(data.grade) + '</div>';
+      }
+
+      html += verdictHTML(data.verdict);
+
+      if (data.analysis) {
+        html += '<div class="result-summary">' + escapeHtml(data.analysis) + '</div>';
+      } else if (data.summary) {
+        html += '<div class="result-summary">' + escapeHtml(data.summary) + '</div>';
+      }
+
+      // Detail cards: Code Safety, Project Trust, Secrets
+      html += '<div class="detail-grid">';
+      if (data.codeSafety) {
+        const cs = data.codeSafety;
+        html += '<div class="detail-card">' +
+          '<div class="detail-card-header">' +
+            '<span class="detail-card-title">Code Safety</span>' +
+            '<span class="detail-card-status status-' + (cs.status || 'UNKNOWN') + '">' + escapeHtml(cs.status || 'N/A') + '</span>' +
+          '</div>' +
+          '<div class="detail-card-value">' + (cs.scamScore != null ? cs.scamScore : '--') + '</div>' +
+          '<div class="detail-card-desc">' + escapeHtml(cs.summary || 'Scam pattern detection score') + '</div>' +
+        '</div>';
+      }
+      if (data.projectTrust) {
+        const pt = data.projectTrust;
+        html += '<div class="detail-card">' +
+          '<div class="detail-card-header">' +
+            '<span class="detail-card-title">Project Trust</span>' +
+            '<span class="detail-card-status status-' + (pt.status || 'UNKNOWN') + '">' + escapeHtml(pt.status || 'N/A') + '</span>' +
+          '</div>' +
+          '<div class="detail-card-value">' + (pt.trustScore != null ? pt.trustScore : '--') + '</div>' +
+          '<div class="detail-card-desc">' + escapeHtml(pt.summary || 'Overall project trust assessment') + '</div>' +
+        '</div>';
+      }
+      if (data.secretsScan) {
+        const ss = data.secretsScan;
+        html += '<div class="detail-card">' +
+          '<div class="detail-card-header">' +
+            '<span class="detail-card-title">Secrets Scan</span>' +
+            '<span class="detail-card-status status-' + (ss.status || 'UNKNOWN') + '">' + escapeHtml(ss.status || 'N/A') + '</span>' +
+          '</div>' +
+          '<div class="detail-card-value">' + (ss.count != null ? ss.count : '--') + '</div>' +
+          '<div class="detail-card-desc">Leaked secrets detected</div>' +
+        '</div>';
+      }
+      html += '</div>';
+
+      // Scam matches
+      if (data.codeSafety && data.codeSafety.matches && data.codeSafety.matches.length) {
+        html += '<div class="checks-section"><div class="checks-title">Scam Pattern Matches</div>';
+        data.codeSafety.matches.forEach(m => {
+          const status = m.severity === 'critical' || m.severity === 'high' ? 'bad' : m.severity === 'medium' ? 'warn' : 'good';
+          html += '<div class="check-item">' +
+            '<div class="check-icon ' + status + '">!</div>' +
+            '<div class="check-content">' +
+              '<div class="check-name">' + escapeHtml(m.signatureName) + '</div>' +
+              '<div class="check-explanation">' + escapeHtml(m.description) + '</div>' +
+            '</div>' +
+            '<div class="check-points negative">' + escapeHtml(m.severity) + '</div>' +
+          '</div>';
+        });
+        html += '</div>';
+      }
+
+      // Trust checks
+      if (data.projectTrust && data.projectTrust.checks) {
+        html += checksHTML(data.projectTrust.checks, 'Trust Checks');
+      }
+
+      html += flagsHTML(data.redFlags, data.greenFlags);
+      html += tagsHTML(data.tags);
+
+      return html;
+    }
+
+    // ============================================
+    // RENDER: X SCAN
+    // ============================================
+    function renderXScan(data) {
+      let html = '';
+
+      // Profile card
+      html += '<div class="profile-card">';
+      html += '<div class="profile-username">@' + escapeHtml(data.username || '') + '</div>';
+      if (data.analysis) {
+        html += '<div class="profile-meta">' + escapeHtml(data.analysis.contentAnalysis || '') + '</div>';
+      }
+      html += '</div>';
+
+      html += gaugeHTML(data.score, 'Legitimacy Score');
+
+      if (data.grade) {
+        html += '<div class="gauge-grade text-center" style="color:' + getScoreColor(data.score) + '">' +
+          'Grade: ' + escapeHtml(data.grade) + '</div>';
+      }
+
+      html += verdictHTML(data.verdict);
+
+      if (data.summary) {
+        html += '<div class="result-summary">' + escapeHtml(data.summary) + '</div>';
+      }
+
+      // Analysis details
+      if (data.analysis) {
+        const a = data.analysis;
+        html += '<div class="detail-grid">';
+        html += detailCard('Follower Quality', a.followerQuality || '--', 'Quality of followers');
+        html += detailCard('Bot Score', a.botScore != null ? a.botScore + '%' : '--', 'Automated activity detection', a.botScore > 50 ? 'bad' : 'good');
+        html += detailCard('Engagement', a.engagement || '--', 'Content engagement level');
+        html += detailCard('Account Age', a.age != null ? a.age + ' days' : '--', 'Days since account creation');
+        html += '</div>';
+
+        if (a.flags && a.flags.length) {
+          html += flagsHTML(a.flags, []);
+        }
+      }
+
+      return html;
+    }
+
+    // ============================================
+    // RENDER: COMPARE
+    // ============================================
+    function renderCompare(data) {
+      let html = '';
+
+      if (data.error) {
+        html += '<div class="error-box">' + escapeHtml(data.error) + '</div>';
+        return html;
+      }
+
+      html += '<div class="compare-grid">';
+
+      // Repo 1
+      const r1 = data.repo1 || {};
+      const r1Winner = data.winner === 1;
+      html += '<div class="compare-side' + (r1Winner ? ' winner' : '') + '">';
+      html += gaugeHTML(r1.score, 'Score', 140);
+      html += '<div class="compare-name">' + escapeHtml(r1.name || r1.url || 'Repo 1') + '</div>';
+      if (r1.verdict) {
+        html += '<div style="margin-top:0.5rem">' + verdictHTML(r1.verdict) + '</div>';
+      }
+      html += '<div class="compare-summary">' + escapeHtml(r1.summary || '') + '</div>';
+      html += '</div>';
+
+      // VS
+      html += '<div class="compare-vs">VS</div>';
+
+      // Repo 2
+      const r2 = data.repo2 || {};
+      const r2Winner = data.winner === 2;
+      html += '<div class="compare-side' + (r2Winner ? ' winner' : '') + '">';
+      html += gaugeHTML(r2.score, 'Score', 140);
+      html += '<div class="compare-name">' + escapeHtml(r2.name || r2.url || 'Repo 2') + '</div>';
+      if (r2.verdict) {
+        html += '<div style="margin-top:0.5rem">' + verdictHTML(r2.verdict) + '</div>';
+      }
+      html += '<div class="compare-summary">' + escapeHtml(r2.summary || '') + '</div>';
+      html += '</div>';
+
+      html += '</div>'; // end compare-grid
+
+      if (data.recommendation) {
+        html += '<div class="result-summary">' + escapeHtml(data.recommendation) + '</div>';
+      }
+
+      return html;
+    }
+
+    // ============================================
+    // RENDER: AI CHECK
+    // ============================================
+    function renderAICheck(data) {
+      let html = '';
+      html += gaugeHTML(data.aiScore, 'AI Score');
+
+      html += verdictHTML(data.verdict);
+
+      if (data.summary) {
+        html += '<div class="result-summary">' + escapeHtml(data.summary) + '</div>';
+      }
+
+      html += '<div class="detail-grid">';
+      html += detailCard('Is Real AI?', data.isRealAI ? 'Yes' : 'No', 'Whether the project uses real AI/ML', data.isRealAI ? 'good' : 'bad');
+      html += detailCard('AI Score', data.aiScore != null ? data.aiScore + '/100' : '--', 'Confidence that AI is genuinely used');
+      html += '</div>';
+
+      return html;
+    }
+
+    // ============================================
+    // RENDER: SKILL SCAN
+    // ============================================
+    function renderSkillScan(data) {
+      let html = '';
+      html += gaugeHTML(100 - (data.riskScore || 0), 'Safety Score');
+
+      html += verdictHTML(data.verdict);
+
+      if (data.formatted) {
+        html += '<div class="result-summary" style="white-space:pre-wrap">' + escapeHtml(data.formatted) + '</div>';
+      }
+
+      html += '<div class="detail-grid">';
+      html += detailCard('Format', data.format || '--', 'Detected skill format');
+      html += detailCard('Risk Score', data.riskScore != null ? data.riskScore + '/100' : '--', 'Risk assessment', data.riskScore > 50 ? 'bad' : data.riskScore > 25 ? 'warn' : 'good');
+      html += detailCard('Verified', data.verifiedBadge ? 'Yes' : 'No', 'Verification status', data.verifiedBadge ? 'good' : 'warn');
+      html += '</div>';
+
+      // Findings
+      if (data.findings && data.findings.length) {
+        html += '<div class="checks-section"><div class="checks-title">Security Findings</div>';
+        data.findings.forEach(f => {
+          const status = f.severity === 'critical' || f.severity === 'high' ? 'bad' : f.severity === 'medium' ? 'warn' : 'good';
+          html += '<div class="check-item">' +
+            '<div class="check-icon ' + status + '">!</div>' +
+            '<div class="check-content">' +
+              '<div class="check-name">' + escapeHtml(f.type) + '</div>' +
+              '<div class="check-explanation">' + escapeHtml(f.description) + (f.location ? ' (' + escapeHtml(f.location) + ')' : '') + '</div>' +
+            '</div>' +
+            '<div class="check-points negative">' + escapeHtml(f.severity) + '</div>' +
+          '</div>';
+        });
+        html += '</div>';
+      }
+
+      // Repo trust if included
+      if (data.repoTrust) {
+        html += '<div class="detail-grid">';
+        html += detailCard('Repo Trust', data.repoTrust.score != null ? data.repoTrust.score + '/100' : '--', data.repoTrust.verdict || '');
+        html += '</div>';
+      }
+
+      return html;
+    }
+
+    // ============================================
+    // RENDER: FULL PROBE
+    // ============================================
+    function renderFullProbe(data) {
+      let html = '';
+
+      // Combined score
+      const combined = data.combined || {};
+      html += gaugeHTML(combined.score, 'Combined Score');
+      html += verdictHTML(combined.verdict);
+
+      if (combined.reason) {
+        html += '<div class="result-summary">' + escapeHtml(combined.reason) + '</div>';
+      }
+
+      // Website probe
+      if (data.probe) {
+        const p = data.probe;
+        html += '<div class="detail-grid">';
+        html += detailCard('Website Verdict', p.verdict || '--', 'Activity detection');
+        html += detailCard('Requests', p.totalRequests != null ? p.totalRequests : '--', 'Total network requests');
+        html += detailCard('API Calls', p.apiCalls != null ? (typeof p.apiCalls === 'number' ? p.apiCalls : p.apiCalls.length) : '--', 'Backend API activity');
+        html += detailCard('WebSocket', p.hasWebSocket ? 'Yes' : 'No', 'Real-time connections', p.hasWebSocket ? 'good' : 'warn');
+        html += detailCard('Load Time', p.loadTime != null ? p.loadTime + 'ms' : '--', 'Page load time');
+        html += detailCard('Frameworks', p.frameworks ? p.frameworks.join(', ') : '--', 'Detected tech stack');
+        html += '</div>';
+      }
+
+      // Repo trust
+      if (data.trust) {
+        const t = data.trust;
+        html += '<h3 style="margin: 1.5rem 0 1rem; font-size: 1.05rem;">Repository Analysis</h3>';
+        html += '<div class="detail-grid">';
+        html += detailCard('Trust Score', t.score != null ? t.score + '/100' : '--', t.verdict || '');
+        html += detailCard('Grade', t.grade || '--', 'Repository grade');
+        html += '</div>';
+
+        if (t.redFlags && t.redFlags.length) {
+          html += flagsHTML(t.redFlags, []);
+        }
+      }
+
+      if (data.formatted) {
+        html += '<div class="result-summary" style="white-space:pre-wrap; margin-top: 1rem;">' + escapeHtml(data.formatted) + '</div>';
+      }
+
+      return html;
+    }
+
+    // ============================================
+    // RENDER: GENERIC (fallback)
+    // ============================================
+    function renderGeneric(data) {
+      let html = '<div class="result-summary" style="white-space:pre-wrap">';
+      html += escapeHtml(JSON.stringify(data, null, 2));
+      html += '</div>';
+      return html;
+    }
+
+    // ============================================
+    // RECENT SCANS
+    // ============================================
+    async function loadRecentScans() {
+      try {
+        const resp = await fetch(API_BASE + '/audits?limit=10');
+        const audits = await resp.json();
+        renderRecentScans(audits);
+      } catch (err) {
+        document.getElementById('recentList').innerHTML =
+          '<p style="color: var(--text-muted); font-size: 0.85rem; padding: 1rem;">Could not load recent scans</p>';
+      }
+    }
+
+    function renderRecentScans(audits) {
+      const list = document.getElementById('recentList');
+      if (!audits || !audits.length) {
+        list.innerHTML = '<p style="color: var(--text-muted); font-size: 0.85rem; padding: 1rem;">No recent scans</p>';
+        return;
+      }
+
+      let html = '';
+      audits.forEach(audit => {
+        const result = audit.result || audit;
+        const score = result.trustScore ?? result.score ?? result.aiScore ?? result.combined?.score ?? null;
+        const verdict = result.verdict ?? result.combined?.verdict ?? '';
+        const name = result.repoName || result.username || audit.change_event?.repo || audit.id || 'Unknown';
+        const tool = audit.tool || audit.change_event?.type || '';
+        const time = audit.timestamp || audit.scannedAt || '';
+
+        html += '<div class="recent-item" onclick="viewAudit(\'' + escapeHtml(audit.id) + '\')">' +
+          '<div class="recent-score" style="background:' + getScoreBg(score) + '; color:' + getScoreColor(score) + '">' +
+            (score != null ? score : '--') +
+          '</div>' +
+          '<div class="recent-info">' +
+            '<div class="recent-name">' + escapeHtml(name) + '</div>' +
+            '<div class="recent-details">' +
+              '<span>' + escapeHtml(verdict) + '</span>' +
+              (tool ? '<span>' + escapeHtml(tool) + '</span>' : '') +
+            '</div>' +
+          '</div>' +
+          '<div class="recent-time">' + timeAgo(time) + '</div>' +
+        '</div>';
+      });
+
+      list.innerHTML = html;
+    }
+
+    async function viewAudit(id) {
+      if (!id) return;
+      try {
+        const resp = await fetch(API_BASE + '/audits/' + encodeURIComponent(id));
+        const audit = await resp.json();
+        const result = audit.result || audit;
+        const tool = audit.tool || 'trust-scan';
+        renderResults(tool, result);
+      } catch (err) {
+        showToast('Failed to load audit', 'warning');
+      }
+    }
+
+    // ============================================
+    // PLATFORM STATS
+    // ============================================
+    async function loadStats() {
+      try {
+        const [statsResp, rugResp] = await Promise.allSettled([
+          fetch(API_BASE + '/stats').then(r => r.json()),
+          fetch(API_BASE + '/tools', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tool: 'rug-db-stats', arguments: {} })
+          }).then(r => r.json())
+        ]);
+
+        // From /stats
+        if (statsResp.status === 'fulfilled' && statsResp.value) {
+          const s = statsResp.value;
+          const total = (s.total_audits || s.totalAudits || s.total || 0);
+          if (total) document.getElementById('statScans').textContent = total.toLocaleString();
+        }
+
+        // From rug-db-stats
+        if (rugResp.status === 'fulfilled' && rugResp.value) {
+          const r = rugResp.value;
+          if (r.database) {
+            if (r.database.confirmedRugs != null) document.getElementById('statRugs').textContent = r.database.confirmedRugs.toLocaleString();
+            if (r.database.flaggedDevelopers != null) document.getElementById('statDevs').textContent = r.database.flaggedDevelopers.toLocaleString();
+          }
+          if (r.accuracy && r.accuracy.accuracy != null) {
+            document.getElementById('statAccuracy').textContent = r.accuracy.accuracy + '%';
+          }
+        }
+      } catch (err) {
+        // Stats are non-critical, silently fail
+      }
+    }
+
+    // ============================================
+    // WEBSOCKET
+    // ============================================
+    function connectWebSocket() {
+      const wsHost = window.location.hostname || 'localhost';
+      const wsUrl = 'ws://' + wsHost + ':' + WS_PORT;
+
+      try {
+        wsConnection = new WebSocket(wsUrl);
+
+        wsConnection.onopen = () => {
+          document.getElementById('liveDot').classList.add('connected');
+          document.getElementById('liveLabel').textContent = 'live';
+          wsReconnectDelay = 1000;
+        };
+
+        wsConnection.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            handleWsMessage(msg);
+          } catch (e) {
+            // Ignore non-JSON messages
+          }
+        };
+
+        wsConnection.onclose = () => {
+          document.getElementById('liveDot').classList.remove('connected');
+          document.getElementById('liveLabel').textContent = 'offline';
+          scheduleReconnect();
+        };
+
+        wsConnection.onerror = () => {
+          // Will trigger onclose
+        };
+      } catch (e) {
+        scheduleReconnect();
+      }
+    }
+
+    function scheduleReconnect() {
+      if (wsReconnectTimer) clearTimeout(wsReconnectTimer);
+      wsReconnectTimer = setTimeout(() => {
+        connectWebSocket();
+      }, wsReconnectDelay);
+      wsReconnectDelay = Math.min(wsReconnectDelay * 1.5, 30000);
+    }
+
+    function handleWsMessage(msg) {
+      switch (msg.type) {
+        case 'ping':
+          if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
+            wsConnection.send(JSON.stringify({ type: 'pong' }));
+          }
+          break;
+        case 'audit_started':
+          document.getElementById('loadingText').textContent = msg.message || 'Scan in progress...';
+          break;
+        case 'finding':
+          if (msg.finding) {
+            showToast(msg.finding.name || msg.finding.type || 'Finding detected', msg.finding.severity || '');
+          }
+          break;
+        case 'audit_completed':
+          showToast('Scan complete', '');
+          // Refresh recent scans
+          setTimeout(loadRecentScans, 500);
+          break;
+      }
+    }
+
+    // ============================================
+    // INIT
+    // ============================================
+    document.addEventListener('DOMContentLoaded', () => {
+      loadRecentScans();
+      loadStats();
+      connectWebSocket();
+
+      // Focus input
+      document.getElementById('scanInput').focus();
+    });
+  </script>
+</body>
+</html>
