@@ -303,6 +303,42 @@ export async function scanAndAttest(input: AttestInput): Promise<AttestResult> {
 }
 
 /**
+ * Dry-run: run scan + compute hashes without publishing on-chain.
+ * Used for testing and demos when wallet isn't funded.
+ */
+export async function scanAndAttestDryRun(input: AttestInput): Promise<{
+  chain: 'base';
+  dryRun: true;
+  codeHash: `0x${string}`;
+  reportHash: `0x${string}`;
+  findings: { critical: number; high: number; medium: number };
+  encodedData: `0x${string}`;
+  scanSummary: any;
+}> {
+  const { target, scanType } = input;
+
+  const scanResult = await runScan(scanType, target);
+  const findings = countFindings(scanType, scanResult);
+  const codeHash = keccak256(toBytes(target));
+  const reportHash = keccak256(toBytes(JSON.stringify(scanResult)));
+
+  const encodedData = encodeAbiParameters(
+    parseAbiParameters('bytes32, uint256, uint256, uint256, bytes32'),
+    [codeHash, BigInt(findings.critical), BigInt(findings.high), BigInt(findings.medium), reportHash]
+  );
+
+  return {
+    chain: 'base',
+    dryRun: true,
+    codeHash,
+    reportHash,
+    findings,
+    encodedData,
+    scanSummary: scanResult
+  };
+}
+
+/**
  * Get the Aura attester address (for enforcer deployment)
  */
 export function getAttesterAddress(): `0x${string}` {

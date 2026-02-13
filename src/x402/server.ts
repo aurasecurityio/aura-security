@@ -17,7 +17,7 @@ import { PRICING } from './pricing.js';
 import { performTrustScan } from '../integrations/trust-scanner.js';
 import { quickScamScan } from '../integrations/scam-detector.js';
 import { probeWebsite } from '../integrations/website-probe.js';
-import { scanAndAttest } from '../erc7710/attestation.js';
+import { scanAndAttest, scanAndAttestDryRun } from '../erc7710/attestation.js';
 
 const PORT = parseInt(process.env.X402_PORT || '3002', 10);
 
@@ -327,6 +327,29 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
   // GET /v1/health - Health check
   if (path === '/v1/health' && method === 'GET') {
     sendJson(res, 200, { status: 'ok', timestamp: new Date().toISOString() });
+    return;
+  }
+
+  // POST /v1/attest/test - Free dry-run attestation (no payment, no on-chain publish)
+  if (path === '/v1/attest/test' && method === 'POST') {
+    try {
+      const { target, scanType } = body;
+      if (!target) {
+        sendJson(res, 400, { error: 'Missing required field: target' });
+        return;
+      }
+      const validTypes = ['rugcheck', 'scamcheck', 'fullprobe'];
+      if (!scanType || !validTypes.includes(scanType)) {
+        sendJson(res, 400, { error: `Invalid scanType. Must be one of: ${validTypes.join(', ')}` });
+        return;
+      }
+      console.log(`[X402] Attest dry-run: ${scanType} on ${target}`);
+      const result = await scanAndAttestDryRun({ target, scanType });
+      sendJson(res, 200, result);
+    } catch (err) {
+      console.error(`[X402] Attest dry-run error:`, err);
+      sendJson(res, 500, { error: 'Scan failed', message: err instanceof Error ? err.message : 'Unknown error' });
+    }
     return;
   }
 
