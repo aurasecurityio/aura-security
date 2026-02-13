@@ -944,6 +944,8 @@
     // CONFIG & STATE
     // ============================================
     const API_BASE = window.location.origin;
+    const API_KEY = 'aura_a82ffd7e89cec3a909a2c405d217e5fbcda39260fba24ab60c393c87ea599aab';
+    const AUTH_HEADERS = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY };
     const WS_PORT = 3001;
     let wsConnection = null;
     let wsReconnectTimer = null;
@@ -1148,7 +1150,7 @@
       try {
         const resp = await fetch(API_BASE + '/tools', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: AUTH_HEADERS,
           body: JSON.stringify({ tool, arguments: args })
         });
 
@@ -1704,7 +1706,7 @@
     // ============================================
     async function loadRecentScans() {
       try {
-        const resp = await fetch(API_BASE + '/audits?limit=10');
+        const resp = await fetch(API_BASE + '/audits?limit=10', { headers: AUTH_HEADERS });
         const audits = await resp.json();
         renderRecentScans(audits);
       } catch (err) {
@@ -1750,7 +1752,7 @@
     async function viewAudit(id) {
       if (!id) return;
       try {
-        const resp = await fetch(API_BASE + '/audits/' + encodeURIComponent(id));
+        const resp = await fetch(API_BASE + '/audits/' + encodeURIComponent(id), { headers: AUTH_HEADERS });
         const audit = await resp.json();
         const result = audit.result || audit;
         const tool = audit.tool || 'trust-scan';
@@ -1766,10 +1768,10 @@
     async function loadStats() {
       try {
         const [statsResp, rugResp] = await Promise.allSettled([
-          fetch(API_BASE + '/stats').then(r => r.json()),
+          fetch(API_BASE + '/stats', { headers: AUTH_HEADERS }).then(r => r.json()),
           fetch(API_BASE + '/tools', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: AUTH_HEADERS,
             body: JSON.stringify({ tool: 'rug-db-stats', arguments: {} })
           }).then(r => r.json())
         ]);
