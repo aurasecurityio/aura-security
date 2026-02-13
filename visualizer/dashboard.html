@@ -1154,7 +1154,8 @@
           body: JSON.stringify({ tool, arguments: args })
         });
 
-        const data = await resp.json();
+        const raw = await resp.json();
+        const data = raw.result || raw;
         currentResults = { tool, args, data, timestamp: new Date().toISOString() };
         renderResults(tool, data);
       } catch (err) {
@@ -1707,8 +1708,9 @@
     async function loadRecentScans() {
       try {
         const resp = await fetch(API_BASE + '/audits?limit=10', { headers: AUTH_HEADERS });
-        const audits = await resp.json();
-        renderRecentScans(audits);
+        const data = await resp.json();
+        const audits = data.audits || data;
+        renderRecentScans(Array.isArray(audits) ? audits : []);
       } catch (err) {
         document.getElementById('recentList').innerHTML =
           '<p style="color: var(--text-muted); font-size: 0.85rem; padding: 1rem;">Could not load recent scans</p>';
@@ -1718,28 +1720,32 @@
     function renderRecentScans(audits) {
       const list = document.getElementById('recentList');
       if (!audits || !audits.length) {
-        list.innerHTML = '<p style="color: var(--text-muted); font-size: 0.85rem; padding: 1rem;">No recent scans</p>';
+        list.innerHTML = '<p style="color: var(--text-muted); font-size: 0.85rem; padding: 1rem;">No recent scans yet</p>';
         return;
       }
 
       let html = '';
       audits.forEach(audit => {
-        const result = audit.result || audit;
-        const score = result.trustScore ?? result.score ?? result.aiScore ?? result.combined?.score ?? null;
-        const verdict = result.verdict ?? result.combined?.verdict ?? '';
-        const name = result.repoName || result.username || audit.change_event?.repo || audit.id || 'Unknown';
-        const tool = audit.tool || audit.change_event?.type || '';
-        const time = audit.timestamp || audit.scannedAt || '';
+        // Extract target URL or name from the audit
+        const target = audit.target || '';
+        const name = target.replace(/^https?:\/\/(www\.)?github\.com\//, '').replace(/\/$/, '') || audit.id || 'Unknown';
+        const type = audit.type || '';
+        const time = audit.timestamp || '';
+        const sev = audit.summary || {};
+        const critCount = (sev.critical || 0) + (sev.high || 0);
+        const hasIssues = critCount > 0;
 
         html += '<div class="recent-item" onclick="viewAudit(\'' + escapeHtml(audit.id) + '\')">' +
-          '<div class="recent-score" style="background:' + getScoreBg(score) + '; color:' + getScoreColor(score) + '">' +
-            (score != null ? score : '--') +
+          '<div class="recent-score" style="background:' + (hasIssues ? 'var(--danger-dim)' : 'var(--success-dim)') + '; color:' + (hasIssues ? 'var(--danger)' : 'var(--success)') + '">' +
+            (hasIssues ? critCount : 'OK') +
           '</div>' +
           '<div class="recent-info">' +
             '<div class="recent-name">' + escapeHtml(name) + '</div>' +
             '<div class="recent-details">' +
-              '<span>' + escapeHtml(verdict) + '</span>' +
-              (tool ? '<span>' + escapeHtml(tool) + '</span>' : '') +
+              (sev.critical ? '<span style="color:var(--danger)">' + sev.critical + ' critical</span>' : '') +
+              (sev.high ? '<span style="color:var(--orange)">' + sev.high + ' high</span>' : '') +
+              (sev.medium ? '<span style="color:var(--warning)">' + sev.medium + ' medium</span>' : '') +
+              '<span>' + escapeHtml(type) + '</span>' +
             '</div>' +
           '</div>' +
           '<div class="recent-time">' + timeAgo(time) + '</div>' +
@@ -1785,7 +1791,8 @@
 
         // From rug-db-stats
         if (rugResp.status === 'fulfilled' && rugResp.value) {
-          const r = rugResp.value;
+          const raw = rugResp.value;
+          const r = raw.result || raw;
           if (r.database) {
             if (r.database.confirmedRugs != null) document.getElementById('statRugs').textContent = r.database.confirmedRugs.toLocaleString();
             if (r.database.flaggedDevelopers != null) document.getElementById('statDevs').textContent = r.database.flaggedDevelopers.toLocaleString();
