@@ -21,6 +21,283 @@ import { scanAndAttest, scanAndAttestDryRun } from '../erc7710/attestation.js';
 
 const PORT = parseInt(process.env.X402_PORT || '3002', 10);
 
+const ATTEST_DEMO_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aura Security — ERC-7710 Attestation Demo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; background: #0a0a0f; color: #e0e0e0; min-height: 100vh; }
+  .container { max-width: 860px; margin: 0 auto; padding: 40px 24px; }
+  h1 { font-size: 20px; color: #00ffaa; margin-bottom: 4px; letter-spacing: 1px; }
+  .subtitle { color: #666; font-size: 13px; margin-bottom: 32px; }
+  .subtitle a { color: #4a9eff; text-decoration: none; }
+  .input-row { display: flex; gap: 10px; margin-bottom: 16px; }
+  input[type="text"] { flex: 1; background: #111118; border: 1px solid #2a2a3a; color: #e0e0e0; padding: 12px 16px; border-radius: 6px; font-family: inherit; font-size: 14px; outline: none; }
+  input[type="text"]:focus { border-color: #00ffaa; }
+  input[type="text"]::placeholder { color: #444; }
+  select { background: #111118; border: 1px solid #2a2a3a; color: #e0e0e0; padding: 12px 16px; border-radius: 6px; font-family: inherit; font-size: 14px; outline: none; cursor: pointer; min-width: 150px; }
+  select:focus { border-color: #00ffaa; }
+  button { background: #00ffaa; color: #0a0a0f; border: none; padding: 12px 28px; border-radius: 6px; font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; letter-spacing: 0.5px; transition: all 0.2s; }
+  button:hover { background: #00dd88; }
+  button:disabled { background: #333; color: #666; cursor: not-allowed; }
+  .status { margin: 20px 0; padding: 16px; border-radius: 6px; font-size: 13px; display: none; }
+  .status.loading { display: block; background: #111128; border: 1px solid #2a2a4a; color: #8888ff; }
+  .status.error { display: block; background: #1a1118; border: 1px solid #4a2a2a; color: #ff6666; }
+  .result { display: none; margin-top: 24px; }
+  .result.show { display: block; }
+  .card { background: #111118; border: 1px solid #2a2a3a; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+  .card-title { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px; }
+  .verdict-row { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+  .score { font-size: 48px; font-weight: 700; line-height: 1; }
+  .score.safe { color: #00ffaa; }
+  .score.warn { color: #ffaa00; }
+  .score.danger { color: #ff4444; }
+  .verdict-text { font-size: 16px; font-weight: 600; }
+  .verdict-text.safe { color: #00ffaa; }
+  .verdict-text.warn { color: #ffaa00; }
+  .verdict-text.danger { color: #ff4444; }
+  .grade-badge { display: inline-block; padding: 4px 12px; border-radius: 4px; font-weight: 700; font-size: 14px; }
+  .grade-A { background: #003322; color: #00ffaa; }
+  .grade-B { background: #1a2800; color: #aaff00; }
+  .grade-C { background: #2a1a00; color: #ffaa00; }
+  .grade-F { background: #2a0a0a; color: #ff4444; }
+  .findings-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 12px; }
+  .finding-box { text-align: center; padding: 16px; border-radius: 6px; }
+  .finding-box.critical { background: #1a0a0a; border: 1px solid #4a1a1a; }
+  .finding-box.high { background: #1a1000; border: 1px solid #4a3000; }
+  .finding-box.medium { background: #0a1a1a; border: 1px solid #1a3a3a; }
+  .finding-count { font-size: 28px; font-weight: 700; }
+  .finding-box.critical .finding-count { color: #ff4444; }
+  .finding-box.high .finding-count { color: #ffaa00; }
+  .finding-box.medium .finding-count { color: #44aaff; }
+  .finding-label { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+  .hash-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #1a1a2a; font-size: 13px; }
+  .hash-row:last-child { border-bottom: none; }
+  .hash-label { color: #666; min-width: 100px; }
+  .hash-value { color: #4a9eff; word-break: break-all; font-size: 12px; cursor: pointer; }
+  .hash-value:hover { color: #6ab4ff; }
+  .encoded-data { margin-top: 12px; padding: 12px; background: #0a0a14; border-radius: 4px; font-size: 11px; color: #4a9eff; word-break: break-all; max-height: 80px; overflow-y: auto; }
+  .checks-list { margin-top: 8px; }
+  .check-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 13px; border-bottom: 1px solid #1a1a2a; }
+  .check-item:last-child { border-bottom: none; }
+  .check-icon { width: 18px; text-align: center; }
+  .check-icon.good { color: #00ffaa; }
+  .check-icon.warn { color: #ffaa00; }
+  .check-icon.bad { color: #ff4444; }
+  .check-icon.info { color: #4a9eff; }
+  .check-name { color: #aaa; min-width: 140px; }
+  .check-detail { color: #666; font-size: 12px; }
+  .flow-diagram { padding: 20px; text-align: center; }
+  .flow-step { display: inline-block; padding: 8px 16px; border-radius: 4px; font-size: 12px; margin: 0 4px; }
+  .flow-arrow { color: #333; margin: 0 2px; }
+  .flow-step.active { background: #00ffaa15; border: 1px solid #00ffaa40; color: #00ffaa; }
+  .flow-step.pending { background: #ffffff08; border: 1px solid #ffffff15; color: #444; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; margin-left: 8px; }
+  .tag.dry { background: #2a2a00; color: #aaaa00; }
+  .tag.base { background: #001a2a; color: #4a9eff; }
+  .summary-text { color: #888; font-size: 13px; line-height: 1.6; margin-top: 8px; }
+  .copy-toast { position: fixed; bottom: 24px; right: 24px; background: #00ffaa; color: #0a0a0f; padding: 8px 16px; border-radius: 4px; font-size: 12px; font-weight: 600; display: none; }
+  .copy-toast.show { display: block; }
+  @media (max-width: 600px) {
+    .input-row { flex-direction: column; }
+    .findings-grid { grid-template-columns: 1fr; }
+    .verdict-row { flex-direction: column; text-align: center; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>AURA SECURITY</h1>
+  <div class="subtitle">ERC-7710 Security-Gated Delegation — <a href="https://eips.ethereum.org/EIPS/eip-7710" target="_blank">EIP-7710</a> x <a href="https://attest.org" target="_blank">EAS</a> on Base</div>
+
+  <div class="card">
+    <div class="flow-diagram">
+      <span class="flow-step active" id="f1">Scan Target</span>
+      <span class="flow-arrow">&rarr;</span>
+      <span class="flow-step pending" id="f2">Hash Findings</span>
+      <span class="flow-arrow">&rarr;</span>
+      <span class="flow-step pending" id="f3">ABI Encode</span>
+      <span class="flow-arrow">&rarr;</span>
+      <span class="flow-step pending" id="f4">Publish to EAS</span>
+      <span class="flow-arrow">&rarr;</span>
+      <span class="flow-step pending" id="f5">Enforcer Reads</span>
+    </div>
+  </div>
+
+  <div class="input-row">
+    <input type="text" id="target" placeholder="https://github.com/owner/repo" value="https://github.com/aurasecurityio/aura-security">
+    <select id="scanType">
+      <option value="rugcheck">Rugcheck</option>
+      <option value="scamcheck">Scamcheck</option>
+    </select>
+    <button id="btn" onclick="runAttest()">Scan & Attest</button>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <div class="result" id="result">
+    <div class="card">
+      <div class="card-title">Scan Verdict</div>
+      <div class="verdict-row">
+        <div class="score" id="r-score"></div>
+        <div>
+          <div class="verdict-text" id="r-verdict"></div>
+          <span class="grade-badge" id="r-grade"></span>
+          <span class="tag dry">DRY RUN</span>
+          <span class="tag base">BASE</span>
+        </div>
+      </div>
+      <div class="summary-text" id="r-summary"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">On-Chain Attestation Data</div>
+      <div class="findings-grid">
+        <div class="finding-box critical">
+          <div class="finding-count" id="r-critical">0</div>
+          <div class="finding-label">Critical</div>
+        </div>
+        <div class="finding-box high">
+          <div class="finding-count" id="r-high">0</div>
+          <div class="finding-label">High</div>
+        </div>
+        <div class="finding-box medium">
+          <div class="finding-count" id="r-medium">0</div>
+          <div class="finding-label">Medium</div>
+        </div>
+      </div>
+      <div style="margin-top: 16px;">
+        <div class="hash-row">
+          <span class="hash-label">codeHash</span>
+          <span class="hash-value" id="r-codehash" onclick="copyHash(this)"></span>
+        </div>
+        <div class="hash-row">
+          <span class="hash-label">reportHash</span>
+          <span class="hash-value" id="r-reporthash" onclick="copyHash(this)"></span>
+        </div>
+      </div>
+      <div class="card-title" style="margin-top: 16px;">ABI-Encoded (bytes)</div>
+      <div class="encoded-data" id="r-encoded" onclick="copyHash(this)"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Security Checks</div>
+      <div class="checks-list" id="r-checks"></div>
+    </div>
+  </div>
+</div>
+
+<div class="copy-toast" id="toast">Copied to clipboard</div>
+
+<script>
+const icons = { good: '&#10003;', warn: '&#9888;', bad: '&#10007;', info: '&#8505;' };
+
+async function runAttest() {
+  const target = document.getElementById('target').value.trim();
+  const scanType = document.getElementById('scanType').value;
+  const btn = document.getElementById('btn');
+  const status = document.getElementById('status');
+  const result = document.getElementById('result');
+
+  if (!target) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Scanning...';
+  result.classList.remove('show');
+  status.className = 'status loading';
+  status.style.display = 'block';
+  status.textContent = 'Running ' + scanType + ' scan on ' + target + ' ...';
+
+  setFlow(1);
+
+  try {
+    const apiBase = window.location.origin;
+    const res = await fetch(apiBase + '/v1/attest/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target, scanType })
+    });
+
+    setFlow(2);
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.error || data.message || 'Scan failed');
+
+    setFlow(3);
+
+    status.style.display = 'none';
+    render(data);
+    result.classList.add('show');
+
+    setTimeout(() => setFlow(4), 400);
+  } catch (err) {
+    status.className = 'status error';
+    status.textContent = 'Error: ' + err.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Scan & Attest';
+  }
+}
+
+function render(d) {
+  const s = d.scanSummary || {};
+
+  const score = s.trustScore ?? (d.findings.critical === 0 && d.findings.high === 0 ? 80 : 30);
+  const cls = score >= 70 ? 'safe' : score >= 40 ? 'warn' : 'danger';
+
+  document.getElementById('r-score').textContent = score;
+  document.getElementById('r-score').className = 'score ' + cls;
+
+  const verdict = s.verdict || (d.findings.critical > 0 ? 'RISKY' : 'CLEAN');
+  document.getElementById('r-verdict').textContent = verdict;
+  document.getElementById('r-verdict').className = 'verdict-text ' + cls;
+
+  const grade = s.grade || '?';
+  const gradeEl = document.getElementById('r-grade');
+  gradeEl.textContent = 'Grade: ' + grade;
+  gradeEl.className = 'grade-badge grade-' + grade;
+
+  document.getElementById('r-summary').textContent = s.summary || '';
+
+  document.getElementById('r-critical').textContent = d.findings.critical;
+  document.getElementById('r-high').textContent = d.findings.high;
+  document.getElementById('r-medium').textContent = d.findings.medium;
+
+  document.getElementById('r-codehash').textContent = d.codeHash;
+  document.getElementById('r-reporthash').textContent = d.reportHash;
+  document.getElementById('r-encoded').textContent = d.encodedData;
+
+  const checks = s.checks || [];
+  const checksEl = document.getElementById('r-checks');
+  checksEl.innerHTML = checks.map(c =>
+    '<div class="check-item">' +
+    '<span class="check-icon ' + c.status + '">' + (icons[c.status] || '') + '</span>' +
+    '<span class="check-name">' + c.name + '</span>' +
+    '<span class="check-detail">' + c.explanation + '</span>' +
+    '</div>'
+  ).join('');
+}
+
+function setFlow(step) {
+  for (let i = 1; i <= 5; i++) {
+    document.getElementById('f' + i).className = 'flow-step ' + (i <= step ? 'active' : 'pending');
+  }
+}
+
+function copyHash(el) {
+  navigator.clipboard.writeText(el.textContent);
+  const toast = document.getElementById('toast');
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 1500);
+}
+</script>
+</body>
+</html>`;
+
+
 /**
  * Parse JSON body from request
  */
@@ -327,6 +604,16 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
   // GET /v1/health - Health check
   if (path === '/v1/health' && method === 'GET') {
     sendJson(res, 200, { status: 'ok', timestamp: new Date().toISOString() });
+    return;
+  }
+
+  // GET /v1/attest/demo - Interactive demo page
+  if (path === '/v1/attest/demo' && method === 'GET') {
+    res.writeHead(200, {
+      'Content-Type': 'text/html',
+      'Access-Control-Allow-Origin': '*'
+    });
+    res.end(ATTEST_DEMO_HTML);
     return;
   }
 
