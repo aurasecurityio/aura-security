@@ -57,16 +57,16 @@ export class AuditorWebSocket {
    */
   start(): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.wss = new WebSocketServer({ port: this.port });
+      this.wss = new WebSocketServer({ port: this.port, host: '127.0.0.1' });
 
       this.wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
         console.log(`[WS] Client connected from ${req.socket.remoteAddress}`);
         this.clients.add(ws);
 
-        // Send welcome message
+        // Send welcome message — do NOT leak client count
         this.sendTo(ws, {
           type: 'status',
-          payload: { connected: true, clientCount: this.clients.size },
+          payload: { connected: true },
           timestamp: new Date().toISOString()
         });
 

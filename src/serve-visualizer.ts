@@ -96,7 +96,7 @@ const server = createServer((req, res) => {
   }
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, '127.0.0.1', () => {
   const dashboardUrl = `http://127.0.0.1:${PORT}/app`;
 
   console.log(`

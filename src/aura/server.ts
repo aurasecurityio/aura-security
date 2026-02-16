@@ -39,6 +39,11 @@ export class AuraServer {
   private db: AuditorDatabase;
   private notificationService: NotificationService;
 
+  // Auth failure rate limiting — per IP
+  private static readonly AUTH_MAX_FAILURES = 10;
+  private static readonly AUTH_LOCKOUT_MS = 15 * 60 * 1000; // 15 minutes
+  private authFailures = new Map<string, { count: number; lastAttempt: number }>();
+
   constructor(config: AuraServerConfig) {
     this.config = {
       port: config.port,
@@ -106,7 +111,7 @@ export class AuraServer {
     // Public endpoints that never require auth (scanning is the product)
     // POST /tools has per-tool auth enforcement inside handleCallTool
     const isPublic = path === '/health' || path === '/info' || path.startsWith('/badge/')
-      || path === '/tools' || path.startsWith('/score') || path.startsWith('/v1/');
+      || path === '/tools' || path.startsWith('/score');
 
     // Auth check (when enabled)
     let authScopes: string[] = [];
@@ -207,14 +212,10 @@ export class AuraServer {
         res.end(JSON.stringify({ error: 'Not found' }));
       }
     } catch (err) {
-      console.error('[SERVER] Error:', err);
-      // Fail-closed: return 500 on any error
+      console.error('[SERVER] Request error on', path);
+      // Fail-closed: return 500 — never leak internal error details
       res.statusCode = 500;
-      res.end(JSON.stringify({
-        error: 'Internal server error',
-        message: err instanceof Error ? err.message : 'Unknown error',
-        blocked: true
-      }));
+      res.end(JSON.stringify({ error: 'Internal server error' }));
     }
   }
 
@@ -227,10 +228,22 @@ export class AuraServer {
   }
 
   private async handleListTools(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    // Only show auth-protected tools if the caller is authenticated
-    const authResult = this.config.authEnabled ? this.validateAuth(req) : { valid: true };
+    // Check if caller provided valid auth — but do NOT count failures
+    // (this is a public endpoint, don't let it be weaponized for lockouts)
+    let isAuthed = false;
+    if (this.config.authEnabled && req.headers.authorization) {
+      const token = req.headers.authorization.split(' ')[1];
+      if (token && this.config.masterKey && this.safeCompare(token, this.config.masterKey)) {
+        isAuthed = true;
+      } else if (token) {
+        const keyRecord = this.db.validateApiKey(token);
+        if (keyRecord) isAuthed = true;
+      }
+    } else if (!this.config.authEnabled) {
+      isAuthed = true;
+    }
     const toolList = Array.from(this.tools.values())
-      .filter(t => authResult.valid || AuraServer.PUBLIC_TOOLS.has(t.name))
+      .filter(t => isAuthed || AuraServer.PUBLIC_TOOLS.has(t.name))
       .map(t => ({
         name: t.name,
         description: t.description,
@@ -312,7 +325,13 @@ export class AuraServer {
 
   private async handleMemoryWrite(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const body = await this.readBody(req);
-    const { key, value, metadata } = JSON.parse(body);
+    let parsed: any;
+    try { parsed = JSON.parse(body); } catch {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: 'Invalid JSON' }));
+      return;
+    }
+    const { key, value, metadata } = parsed;
 
     this.memory.set(key, { value, metadata, timestamp: new Date().toISOString() });
 
@@ -356,7 +375,13 @@ export class AuraServer {
 
   private async handleSaveSettings(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const body = await this.readBody(req);
-    const { settings } = JSON.parse(body);
+    let parsed: any;
+    try { parsed = JSON.parse(body); } catch {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: 'Invalid JSON' }));
+      return;
+    }
+    const { settings } = parsed;
 
     if (!settings || typeof settings !== 'object') {
       res.statusCode = 400;
@@ -457,7 +482,13 @@ export class AuraServer {
 
   private async handleTestNotification(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const body = await this.readBody(req);
-    const { channel } = JSON.parse(body);
+    let parsed: any;
+    try { parsed = JSON.parse(body); } catch {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: 'Invalid JSON' }));
+      return;
+    }
+    const { channel } = parsed;
 
     if (!channel || !['slack', 'discord', 'webhook'].includes(channel)) {
       res.statusCode = 400;
@@ -476,7 +507,13 @@ export class AuraServer {
 
   private async handleSendNotification(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const body = await this.readBody(req);
-    const { auditId, title, message, severity } = JSON.parse(body);
+    let parsed: any;
+    try { parsed = JSON.parse(body); } catch {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: 'Invalid JSON' }));
+      return;
+    }
+    const { auditId, title, message, severity } = parsed;
 
     // If auditId provided, create notification from audit data
     let payload;
@@ -617,7 +654,6 @@ export class AuraServer {
     // Public health check — only expose status, no internal details
     const health: Record<string, any> = {
       status: 'healthy',
-      timestamp: new Date().toISOString(),
     };
 
     // Check GitHub API reachability (internal only — don't expose details)
@@ -667,35 +703,51 @@ export class AuraServer {
   }
 
   private validateAuth(req: IncomingMessage, requireMaster = false): AuthResult {
+    // Rate limit auth failures per IP
+    const ip = (req.headers['x-real-ip'] as string) || req.socket.remoteAddress || 'unknown';
+    const failure = this.authFailures.get(ip);
+    if (failure && failure.count >= AuraServer.AUTH_MAX_FAILURES) {
+      if (Date.now() - failure.lastAttempt < AuraServer.AUTH_LOCKOUT_MS) {
+        return { valid: false, status: 429, message: 'Too many failed attempts. Try again later.' };
+      }
+      this.authFailures.delete(ip); // lockout expired
+    }
+
     const authHeader = req.headers.authorization;
 
     if (!authHeader) {
-      return { valid: false, status: 401, message: 'Authorization header required. Use: Bearer <api-key>' };
+      this.recordAuthFailure(ip);
+      return { valid: false, status: 401, message: 'Authorization required' };
     }
 
     const parts = authHeader.split(' ');
     if (parts.length !== 2 || parts[0].toLowerCase() !== 'bearer') {
-      return { valid: false, status: 401, message: 'Invalid authorization format. Use: Bearer <api-key>' };
+      this.recordAuthFailure(ip);
+      return { valid: false, status: 401, message: 'Invalid authorization format' };
     }
 
     const token = parts[1];
 
     // Check master key first (constant-time comparison to prevent timing attacks)
     if (this.config.masterKey && this.safeCompare(token, this.config.masterKey)) {
+      this.authFailures.delete(ip); // reset on success
       return { valid: true, status: 200, message: 'OK', keyName: 'master', scopes: ['admin', 'read', 'write', 'scan'] };
     }
 
     // Auth management endpoints require master key
     if (requireMaster) {
+      this.recordAuthFailure(ip);
       return { valid: false, status: 403, message: 'Master key required for auth management' };
     }
 
     // Validate against database
     const keyRecord = this.db.validateApiKey(token);
     if (!keyRecord) {
+      this.recordAuthFailure(ip);
       return { valid: false, status: 401, message: 'Invalid or expired API key' };
     }
 
+    this.authFailures.delete(ip); // reset on success
     return {
       valid: true,
       status: 200,
@@ -703,6 +755,14 @@ export class AuraServer {
       keyName: keyRecord.name,
       scopes: keyRecord.scopes,
     };
+  }
+
+  private recordAuthFailure(ip: string): void {
+    const existing = this.authFailures.get(ip);
+    this.authFailures.set(ip, {
+      count: (existing?.count ?? 0) + 1,
+      lastAttempt: Date.now(),
+    });
   }
 
   private safeCompare(a: string, b: string): boolean {
@@ -717,7 +777,12 @@ export class AuraServer {
   }
 
   private async handleCreateApiKey(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const body = JSON.parse(await this.readBody(req));
+    let body: any;
+    try { body = JSON.parse(await this.readBody(req)); } catch {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: 'Invalid JSON' }));
+      return;
+    }
     const name = body.name;
     if (!name || typeof name !== 'string') {
       res.statusCode = 400;
@@ -758,10 +823,21 @@ export class AuraServer {
     res.end(JSON.stringify({ message: 'API key revoked', id: keyId }));
   }
 
+  private static readonly MAX_BODY_SIZE = 100 * 1024; // 100 KB
+
   private readBody(req: IncomingMessage): Promise<string> {
     return new Promise((resolve, reject) => {
       const chunks: Buffer[] = [];
-      req.on('data', chunk => chunks.push(chunk));
+      let totalSize = 0;
+      req.on('data', (chunk: Buffer) => {
+        totalSize += chunk.length;
+        if (totalSize > AuraServer.MAX_BODY_SIZE) {
+          req.destroy();
+          reject(new Error('BODY_TOO_LARGE'));
+          return;
+        }
+        chunks.push(chunk);
+      });
       req.on('end', () => resolve(Buffer.concat(chunks).toString()));
       req.on('error', reject);
     });
