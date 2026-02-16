@@ -1024,8 +1024,15 @@
     // CONFIG & STATE
     // ============================================
     const API_BASE = window.location.origin;
-    const API_KEY = '***REDACTED_DASHBOARD_KEY***';
-    const AUTH_HEADERS = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY };
+    function getApiKey() {
+      let key = sessionStorage.getItem('aura_api_key');
+      if (!key) {
+        key = prompt('Enter your Aura Security API key:');
+        if (key) sessionStorage.setItem('aura_api_key', key);
+      }
+      return key || '';
+    }
+    const AUTH_HEADERS = { 'Content-Type': 'application/json', get Authorization() { return 'Bearer ' + getApiKey(); } };
     const WS_PORT = 3001;
     let wsConnection = null;
     let wsReconnectTimer = null;

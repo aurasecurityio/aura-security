@@ -107,6 +107,7 @@ export class AuraServer {
     const isPublic = path === '/health' || path === '/info' || path.startsWith('/badge/');
 
     // Auth check (when enabled)
+    let authScopes: string[] = [];
     if (this.config.authEnabled && !isPublic) {
       // Auth key management endpoints use master key only
       const isAuthEndpoint = path.startsWith('/auth/');
@@ -115,6 +116,15 @@ export class AuraServer {
       if (!authResult.valid) {
         res.statusCode = authResult.status;
         res.end(JSON.stringify({ error: authResult.message }));
+        return;
+      }
+      authScopes = authResult.scopes || [];
+
+      // Scope enforcement — determine required scope for this request
+      const requiredScope = this.getRequiredScope(path, req.method || 'GET');
+      if (requiredScope && !authScopes.includes('admin') && !authScopes.includes(requiredScope)) {
+        res.statusCode = 403;
+        res.end(JSON.stringify({ error: `Insufficient permissions. Required scope: ${requiredScope}` }));
         return;
       }
     }
@@ -549,18 +559,13 @@ export class AuraServer {
   }
 
   private async handleHealthCheck(res: ServerResponse): Promise<void> {
+    // Public health check — only expose status, no internal details
     const health: Record<string, any> = {
       status: 'healthy',
-      uptime: process.uptime(),
       timestamp: new Date().toISOString(),
-      memory_mb: Math.round(process.memoryUsage().rss / 1024 / 1024),
-      env: {
-        github_token: !!process.env.GITHUB_TOKEN,
-        x_bearer_token: !!process.env.X_BEARER_TOKEN,
-      },
     };
 
-    // Check GitHub API reachability
+    // Check GitHub API reachability (internal only — don't expose details)
     try {
       const ghRes = await fetch('https://api.github.com/rate_limit', {
         headers: process.env.GITHUB_TOKEN
@@ -568,37 +573,18 @@ export class AuraServer {
           : { 'User-Agent': 'AuraSecurity' },
         signal: AbortSignal.timeout(5000),
       });
-      const ghData = await ghRes.json() as any;
-      health.github_api = {
-        status: 'ok',
-        rate_remaining: ghData?.rate?.remaining ?? 'unknown',
-        rate_limit: ghData?.rate?.limit ?? 'unknown',
-      };
+      if (!ghRes.ok) {
+        health.status = 'degraded';
+      }
     } catch {
-      health.github_api = { status: 'unreachable' };
       health.status = 'degraded';
     }
 
-    // Check disk space (basic — check /tmp since that's where scans go)
-    try {
-      const { spawnSync } = await import('child_process');
-      const df = spawnSync('df', ['-m', '/tmp'], { encoding: 'utf-8', timeout: 3000 });
-      if (df.stdout) {
-        const lines = df.stdout.trim().split('\n');
-        if (lines.length > 1) {
-          const parts = lines[1].split(/\s+/);
-          health.disk_tmp_available_mb = parseInt(parts[3]) || 'unknown';
-        }
-      }
-    } catch { /* ignore */ }
-
-    // Database check
+    // Database check (internal only — don't expose details)
     try {
       const db = this.db;
-      const stats = db.getStats();
-      health.database = { status: 'ok', total_audits: stats.totalAudits ?? 0 };
+      db.getStats();
     } catch {
-      health.database = { status: 'error' };
       health.status = 'degraded';
     }
 
@@ -607,6 +593,23 @@ export class AuraServer {
   }
 
   // ============ AUTH METHODS ============
+
+  private getRequiredScope(path: string, method: string): string | null {
+    // Auth endpoints require admin (already enforced via requireMaster)
+    if (path.startsWith('/auth/')) return 'admin';
+    // Settings write requires admin
+    if (path === '/settings' && method === 'POST') return 'admin';
+    // Delete operations require admin
+    if (method === 'DELETE') return 'admin';
+    // POST /tools = running scans
+    if (path === '/tools' && method === 'POST') return 'scan';
+    // Write operations
+    if (path === '/memory' && method === 'POST') return 'write';
+    if (path.startsWith('/notifications') && method === 'POST') return 'write';
+    // Read operations
+    if (method === 'GET') return 'read';
+    return null;
+  }
 
   private validateAuth(req: IncomingMessage, requireMaster = false): AuthResult {
     const authHeader = req.headers.authorization;
