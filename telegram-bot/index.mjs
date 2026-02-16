@@ -10,18 +10,48 @@
 
 import https from 'https';
 import { DynamoDBClient, PutItemCommand, GetItemCommand } from '@aws-sdk/client-dynamodb';
+import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const X_BEARER_TOKEN = process.env.X_BEARER_TOKEN;
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+// Secrets — loaded from AWS Secrets Manager (cached across warm invocations)
+let BOT_TOKEN = '';
+let X_BEARER_TOKEN = '';
+let ANTHROPIC_API_KEY = '';
+let AURA_API_KEY = '';
+let TELEGRAM_API = '';
+let _secretsLoaded = false;
 
-// Primary and fallback API URLs for reliability
+// Non-secret config
 const AURA_API_PRIMARY = process.env.AURA_API_URL || 'https://app.aurasecurity.io';
-const AURA_API_FALLBACK = 'https://app.aurasecurity.io'; // Same for now, can add backup server later
+const AURA_API_FALLBACK = 'https://app.aurasecurity.io';
 const AURA_API_URL = AURA_API_PRIMARY;
-const AURA_API_KEY = process.env.AURA_API_KEY || '';
 
-const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
+// Load secrets from Secrets Manager (cached for Lambda warm starts)
+const smClient = new SecretsManagerClient({ region: 'us-east-1' });
+async function loadSecrets() {
+  if (_secretsLoaded) return;
+  try {
+    const resp = await smClient.send(new GetSecretValueCommand({
+      SecretId: 'aurasecurity/telegram-bot-secrets'
+    }));
+    const secrets = JSON.parse(resp.SecretString);
+    BOT_TOKEN = secrets.BOT_TOKEN || '';
+    X_BEARER_TOKEN = secrets.X_BEARER_TOKEN || '';
+    ANTHROPIC_API_KEY = secrets.ANTHROPIC_API_KEY || '';
+    AURA_API_KEY = secrets.AURA_API_KEY || '';
+    TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
+    _secretsLoaded = true;
+    console.log('Secrets loaded from Secrets Manager');
+  } catch (err) {
+    // Fallback to env vars if Secrets Manager fails (resilience)
+    console.warn('Secrets Manager unavailable, falling back to env vars:', err.message);
+    BOT_TOKEN = process.env.BOT_TOKEN || '';
+    X_BEARER_TOKEN = process.env.X_BEARER_TOKEN || '';
+    ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
+    AURA_API_KEY = process.env.AURA_API_KEY || '';
+    TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
+    _secretsLoaded = true;
+  }
+}
 
 // Retry configuration
 const MAX_RETRIES = 3;
@@ -2227,6 +2257,9 @@ function formatCombinedResult(profile, xScore, gitResult) {
 
 // Main handler
 export async function handler(event) {
+  // Load secrets from Secrets Manager (cached after first cold start)
+  await loadSecrets();
+
   console.log('Event received:', event.path || event.rawPath || 'webhook');
 
   // Health check endpoint - for uptime monitoring

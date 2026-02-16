@@ -258,7 +258,7 @@ export class AuraServer {
   private static readonly PUBLIC_TOOLS = new Set([
     'audit', 'trust-scan', 'scam-scan', 'scan-local', 'scan-aura',
     'ai-check', 'compare', 'x-scan', 'generate-report',
-    'skill-scan', 'website-probe',
+    'skill-scan', 'probe', 'full-probe',
   ]);
 
   private async handleCallTool(req: IncomingMessage, res: ServerResponse): Promise<void> {
