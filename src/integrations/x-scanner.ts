@@ -411,6 +411,11 @@ export async function performXScan(usernameOrUrl: string): Promise<XScanResult> 
   }
   username = username.replace(/^@/, '');
 
+  // Sanitize username — only allow valid X usernames (alphanumeric + underscore, max 15 chars)
+  if (!/^[a-zA-Z0-9_]{1,15}$/.test(username)) {
+    throw new Error('Invalid username format. X usernames can only contain letters, numbers, and underscores (max 15 chars).');
+  }
+
   // Fetch profile
   const profile = await getXProfile(username, bearerToken);
   if (!profile) {

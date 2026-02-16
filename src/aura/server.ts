@@ -244,10 +244,12 @@ export class AuraServer {
     const body = await this.readBody(req);
     const { tool, arguments: args } = JSON.parse(body);
 
-    const toolDef = this.tools.get(tool);
+    // Sanitize tool name — alphanumeric, hyphens, underscores only
+    const sanitizedTool = typeof tool === 'string' ? tool.replace(/[^a-zA-Z0-9_-]/g, '') : '';
+    const toolDef = this.tools.get(sanitizedTool);
     if (!toolDef) {
       res.statusCode = 404;
-      res.end(JSON.stringify({ error: `Tool not found: ${tool}` }));
+      res.end(JSON.stringify({ error: 'Tool not found' }));
       return;
     }
 
