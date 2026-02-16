@@ -225,9 +225,8 @@ The bot will automatically:
 2. Return user-friendly error message
 3. Continue working for non-scan commands (devcheck, rugcheck basic)
 
-To fix Aura API, SSH to server and restart:
+To fix Aura API, SSH to the production server and restart PM2:
 ```bash
-ssh -i ~/.ssh/REDACTED_KEY_FILE ubuntu@REDACTED_IP
-cd ~/slop-security-auditor
-kill $(lsof -t -i:3000); nohup node dist/index.js > api.log 2>&1 &
+# See CLAUDE.md for SSH details (not committed for security)
+pm2 restart aura-security
 ```
