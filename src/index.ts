@@ -3,7 +3,7 @@
 
 // Load .env file for environment variables
 import { readFileSync, existsSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -438,7 +438,7 @@ async function main(): Promise<void> {
         ];
 
         if (!args.gitUrl && targetPath) {
-          const resolvedPath = require('path').resolve(targetPath);
+          const resolvedPath = resolve(targetPath);
           const isAllowed = ALLOWED_PREFIXES.some(p => resolvedPath.startsWith(p));
           const isBlocked = BLOCKED_PREFIXES.some(p => resolvedPath.startsWith(p));
 
@@ -777,7 +777,7 @@ async function main(): Promise<void> {
         if (!targetPath) {
           return { error: 'targetPath is required.', hint: 'Provide a path under /tmp/ to scan.' };
         }
-        const resolvedAuraPath = require('path').resolve(targetPath);
+        const resolvedAuraPath = resolve(targetPath);
         const auraAllowed = ['/tmp/', '/tmp'].some(p => resolvedAuraPath.startsWith(p));
         const auraBlocked = ['/home/', '/root/', '/etc/', '/var/', '/usr/', '/opt/', '/proc/', '/sys/', '/dev/'].some(p => resolvedAuraPath.startsWith(p));
         if (auraBlocked || !auraAllowed) {
