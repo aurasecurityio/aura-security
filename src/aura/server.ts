@@ -669,6 +669,12 @@ export class AuraServer {
       res.end(JSON.stringify({ error: 'name is required' }));
       return;
     }
+    // Validate key name: alphanumeric, hyphens, underscores only, max 64 chars
+    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(name)) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: 'Invalid key name. Use only letters, numbers, hyphens, and underscores (max 64 chars).' }));
+      return;
+    }
     const scopes = Array.isArray(body.scopes) ? body.scopes : ['read', 'write', 'scan'];
     const expiresInDays = typeof body.expiresInDays === 'number' ? body.expiresInDays : undefined;
 
