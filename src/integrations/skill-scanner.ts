@@ -526,8 +526,8 @@ export async function scanSkill(
     result.verdict = 'DANGEROUS';
     result.riskScore = 100;
     result.verifiedBadge = false;
-    result.badgeReason = `Scan failed: ${err.message}`;
-    result.summary = `Failed to scan skill: ${err.message}`;
+    result.badgeReason = 'Scan failed';
+    result.summary = 'Failed to scan skill. Please check the URL and try again.';
   }
 
   result.scanTime = Date.now() - startTime;

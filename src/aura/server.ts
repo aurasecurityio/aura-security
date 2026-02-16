@@ -145,7 +145,7 @@ export class AuraServer {
       else if (path === '/info' && req.method === 'GET') {
         await this.handleInfo(res);
       } else if (path === '/tools' && req.method === 'GET') {
-        await this.handleListTools(res);
+        await this.handleListTools(req, res);
       } else if (path === '/tools' && req.method === 'POST') {
         await this.handleCallTool(req, res);
       } else if (path === '/memory' && req.method === 'POST') {
@@ -226,12 +226,16 @@ export class AuraServer {
     }));
   }
 
-  private async handleListTools(res: ServerResponse): Promise<void> {
-    const toolList = Array.from(this.tools.values()).map(t => ({
-      name: t.name,
-      description: t.description,
-      parameters: t.parameters
-    }));
+  private async handleListTools(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    // Only show auth-protected tools if the caller is authenticated
+    const authResult = this.config.authEnabled ? this.validateAuth(req) : { valid: true };
+    const toolList = Array.from(this.tools.values())
+      .filter(t => authResult.valid || AuraServer.PUBLIC_TOOLS.has(t.name))
+      .map(t => ({
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters
+      }));
 
     res.statusCode = 200;
     res.end(JSON.stringify({ tools: toolList }));

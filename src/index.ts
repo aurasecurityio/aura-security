@@ -741,7 +741,7 @@ async function main(): Promise<void> {
             target: 'self',
             payload: {
               severity: 'medium',
-              claim: `Local scan failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+              claim: `Local scan failed: ${'Operation failed'}`,
               attack_path: ['Scan execution failed'],
               affected_assets: [],
               evidence_refs: [],
@@ -902,7 +902,7 @@ async function main(): Promise<void> {
           agent_id: 'aura-orchestrator',
           agent_state: 'blocked',
           events: [],
-          meta: { error: err instanceof Error ? err.message : 'Unknown error' }
+          meta: { error: 'Operation failed' }
         };
       }
     }
@@ -952,7 +952,7 @@ async function main(): Promise<void> {
       } catch (err) {
         console.error('[AURA] Rug Check error:', err);
         return {
-          error: err instanceof Error ? err.message : 'Unknown error',
+          error: 'Scan failed',
           trustScore: 0,
           grade: 'F',
           verdict: 'ERROR',
@@ -986,7 +986,7 @@ async function main(): Promise<void> {
       } catch (err) {
         console.error('[AURA] X scan error:', err);
         return {
-          error: err instanceof Error ? err.message : 'Unknown error',
+          error: 'Operation failed',
           score: 0,
           grade: 'F',
           verdict: 'ERROR',
@@ -1020,7 +1020,7 @@ async function main(): Promise<void> {
       } catch (err) {
         console.error('[AURA] AI check error:', err);
         return {
-          error: err instanceof Error ? err.message : 'Unknown error',
+          error: 'Operation failed',
           aiScore: 0,
           verdict: 'ERROR',
           isRealAI: false,
@@ -1438,7 +1438,7 @@ async function main(): Promise<void> {
       } catch (err) {
         console.error('[AURA] Scam detection error:', err);
         return {
-          error: err instanceof Error ? err.message : 'Unknown error',
+          error: 'Operation failed',
           scamScore: 0,
           riskLevel: 'unknown',
           isLikelyScam: false,
@@ -1504,7 +1504,7 @@ async function main(): Promise<void> {
       } catch (err) {
         console.error('[AURA] Compare error:', err);
         return {
-          error: err instanceof Error ? err.message : 'Unknown error',
+          error: 'Operation failed',
           summary: 'Failed to compare repositories. Check the URLs and try again.'
         };
       }
@@ -1654,7 +1654,7 @@ async function main(): Promise<void> {
         }
       } catch (err) {
         console.error('[AURA] Report rug error:', err);
-        return { error: err instanceof Error ? err.message : 'Unknown error' };
+        return { error: 'Operation failed' };
       }
     }
   });
@@ -1689,7 +1689,7 @@ async function main(): Promise<void> {
         };
       } catch (err) {
         console.error('[AURA] Rug DB stats error:', err);
-        return { error: err instanceof Error ? err.message : 'Unknown error' };
+        return { error: 'Operation failed' };
       }
     }
   });
@@ -1725,7 +1725,7 @@ async function main(): Promise<void> {
         }
       } catch (err) {
         console.error('[AURA] Submit feedback error:', err);
-        return { error: err instanceof Error ? err.message : 'Unknown error' };
+        return { error: 'Operation failed' };
       }
     }
   });
@@ -1765,7 +1765,7 @@ async function main(): Promise<void> {
         };
       } catch (err) {
         console.error('[AURA] Dev reputation error:', err);
-        return { error: err instanceof Error ? err.message : 'Unknown error' };
+        return { error: 'Operation failed' };
       }
     }
   });
@@ -1800,7 +1800,7 @@ async function main(): Promise<void> {
         }
       } catch (err) {
         console.error('[AURA] Flag dev error:', err);
-        return { error: err instanceof Error ? err.message : 'Unknown error' };
+        return { error: 'Operation failed' };
       }
     }
   });
@@ -1841,7 +1841,7 @@ async function main(): Promise<void> {
         };
       } catch (err) {
         console.error('[AURA] X reputation error:', err);
-        return { error: err instanceof Error ? err.message : 'Unknown error' };
+        return { error: 'Operation failed' };
       }
     }
   });
@@ -1876,7 +1876,7 @@ async function main(): Promise<void> {
         }
       } catch (err) {
         console.error('[AURA] Flag X account error:', err);
-        return { error: err instanceof Error ? err.message : 'Unknown error' };
+        return { error: 'Operation failed' };
       }
     }
   });
@@ -1911,7 +1911,7 @@ async function main(): Promise<void> {
       } catch (err) {
         console.error('[AURA] Enhanced trust scan error:', err);
         return {
-          error: err instanceof Error ? err.message : 'Unknown error',
+          error: 'Operation failed',
           trustScore: 0,
           grade: 'F',
           verdict: 'ERROR',
@@ -1948,7 +1948,7 @@ async function main(): Promise<void> {
       } catch (err) {
         console.error('[AURA] Probe error:', err);
         return {
-          error: err instanceof Error ? err.message : 'Unknown error',
+          error: 'Operation failed',
           verdict: 'ERROR',
           riskLevel: 'HIGH'
         };
@@ -1988,7 +1988,7 @@ async function main(): Promise<void> {
       } catch (err) {
         console.error('[AURA] Skill scan error:', err);
         return {
-          error: err instanceof Error ? err.message : 'Unknown error',
+          error: 'Operation failed',
           verdict: 'DANGEROUS',
           riskScore: 100,
           verifiedBadge: false
@@ -2196,7 +2196,7 @@ async function main(): Promise<void> {
       } catch (err) {
         console.error('[AURA] Full probe error:', err);
         return {
-          error: err instanceof Error ? err.message : 'Unknown error',
+          error: 'Operation failed',
           combined: {
             verdict: 'DANGER',
             score: 0,

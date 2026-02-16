@@ -270,7 +270,7 @@ export async function probeWebsite(targetUrl: string): Promise<ProbeResult> {
     return {
       url: targetUrl,
       success: false,
-      error: err.message || 'Unknown error',
+      error: 'Probe failed',
       totalRequests: 0,
       apiCalls: [],
       webSocketConnections: [],
@@ -281,7 +281,7 @@ export async function probeWebsite(targetUrl: string): Promise<ProbeResult> {
       frameworks: [],
       hosting: 'Unknown',
       verdict: 'ERROR',
-      verdictReason: err.message || 'Failed to probe website',
+      verdictReason: 'Failed to probe website',
       riskLevel: 'HIGH',
       loadTime: 0,
       probeTime: Date.now() - startTime,
