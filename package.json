@@ -15,8 +15,6 @@
     "dist/integrations/index.js",
     "dist/integrations/index.d.ts",
     "visualizer",
-    "schemas",
-    "deploy",
     "README.md",
     "LICENSE"
   ],

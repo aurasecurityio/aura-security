@@ -55,3 +55,8 @@ config/*.json
 deploy/terraform/terraform.tfvars
 *.pem
 *.key
+
+# Lambda deployment artifacts
+*.zip
+telegram-bot/*.zip
+discord-bot/*.zip
