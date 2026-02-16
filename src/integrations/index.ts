@@ -59,27 +59,7 @@ export type { RugReport, DevReputation, XAccountReputation } from './rug-databas
 export { performEnhancedTrustScan, quickRugDbCheck } from './enhanced-scanner.js';
 export type { EnhancedTrustResult } from './enhanced-scanner.js';
 
-// Clawstr Integration - Nostr-based AI agent social network
-export {
-  ClawstrAgent,
-  ClawstrClient,
-  ClawstrMonitor,
-  startClawstrAgent,
-  generateClawstrKeys,
-  formatScanResult as formatClawstrScanResult,
-  makePostDecision as makeClawstrPostDecision,
-  EVENT_KINDS as CLAWSTR_EVENT_KINDS,
-  DEFAULT_CONFIG as CLAWSTR_DEFAULT_CONFIG,
-} from './clawstr/index.js';
-export type {
-  ClawstrAgentStatus,
-  ClawstrAgentConfig,
-  NostrEvent,
-  NostrKeyPair,
-  ClawstrPost,
-  ScanRequest as ClawstrScanRequest,
-  MentionRequest as ClawstrMentionRequest,
-} from './clawstr/index.js';
+// Clawstr integration removed (security incident)
 
 // Website Probe - Detect static vs active sites (rug detection)
 export { probeWebsite, formatProbeResult } from './website-probe.js';
