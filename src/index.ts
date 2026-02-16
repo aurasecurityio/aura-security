@@ -423,7 +423,41 @@ async function main(): Promise<void> {
     },
     handler: async (args) => {
       try {
-        let targetPath = (args.targetPath as string) || process.cwd();
+        let targetPath = (args.targetPath as string) || '';
+
+        // === PATH SANDBOXING ===
+        // scan-local over the public API must ONLY scan:
+        //   1. Git URLs (cloned to /tmp)
+        //   2. Paths under /tmp/ (where cloned repos land)
+        // This prevents attackers from scanning the server's own directory
+        // and leaking .env secrets, config files, or credentials.
+        const ALLOWED_PREFIXES = ['/tmp/', '/tmp'];
+        const BLOCKED_PREFIXES = [
+          '/home/', '/root/', '/etc/', '/var/', '/usr/', '/opt/',
+          '/proc/', '/sys/', '/dev/', '/run/', '/srv/',
+        ];
+
+        if (!args.gitUrl && targetPath) {
+          const resolvedPath = require('path').resolve(targetPath);
+          const isAllowed = ALLOWED_PREFIXES.some(p => resolvedPath.startsWith(p));
+          const isBlocked = BLOCKED_PREFIXES.some(p => resolvedPath.startsWith(p));
+
+          if (isBlocked || !isAllowed) {
+            console.warn(`[AURA] BLOCKED scan-local attempt on restricted path: ${resolvedPath}`);
+            return {
+              error: 'Path not allowed. scan-local only permits scanning /tmp/ directories or Git URLs.',
+              hint: 'Use the gitUrl parameter to scan a repository instead.',
+            };
+          }
+        }
+
+        // If no gitUrl and no targetPath, refuse (don't default to cwd which is the server dir)
+        if (!args.gitUrl && !targetPath) {
+          return {
+            error: 'Either targetPath or gitUrl is required.',
+            hint: 'Use gitUrl to scan a Git repository.',
+          };
+        }
 
         // Handle Git URL - clone and scan with full tool suite
         if (args.gitUrl) {
@@ -736,8 +770,20 @@ async function main(): Promise<void> {
     },
     handler: async (args) => {
       try {
-        const targetPath = (args.targetPath as string) || process.cwd();
+        const targetPath = (args.targetPath as string) || '';
         const fullScan = args.fullScan !== false;
+
+        // === PATH SANDBOXING (same as scan-local) ===
+        if (!targetPath) {
+          return { error: 'targetPath is required.', hint: 'Provide a path under /tmp/ to scan.' };
+        }
+        const resolvedAuraPath = require('path').resolve(targetPath);
+        const auraAllowed = ['/tmp/', '/tmp'].some(p => resolvedAuraPath.startsWith(p));
+        const auraBlocked = ['/home/', '/root/', '/etc/', '/var/', '/usr/', '/opt/', '/proc/', '/sys/', '/dev/'].some(p => resolvedAuraPath.startsWith(p));
+        if (auraBlocked || !auraAllowed) {
+          console.warn(`[AURA] BLOCKED scan-aura attempt on restricted path: ${resolvedAuraPath}`);
+          return { error: 'Path not allowed. Scanning only permitted on /tmp/ directories.' };
+        }
 
         console.log(`[AURA] Starting Aura Protocol scan of: ${targetPath}`);
         console.log(`[AURA] Mode: ${fullScan ? 'Full (with policy evaluation)' : 'Quick (scanner only)'}`);
