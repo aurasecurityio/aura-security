@@ -24,7 +24,8 @@ if (existsSync(envPath)) {
         if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
           value = value.slice(1, -1);
         }
-        if (!process.env[key]) {
+        // .env file always wins for security-critical keys; for others, only set if not already present
+        if (key === 'AUTH_MASTER_KEY' || !process.env[key]) {
           process.env[key] = value;
         }
       }
