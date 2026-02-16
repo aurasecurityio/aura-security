@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+#
+# Pre-commit hook: block commits that contain secrets
+# Install: git config core.hooksPath .githooks
+#
+
+set -euo pipefail
+
+RED='\033[0;31m'
+YELLOW='\033[0;33m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+echo -e "${GREEN}[secret-scan]${NC} Scanning staged files for secrets..."
+
+# Get staged files (only added/modified, not deleted)
+STAGED=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null)
+
+if [ -z "$STAGED" ]; then
+    exit 0
+fi
+
+FOUND=0
+
+# Patterns that should NEVER appear in committed code
+# Each line: "PATTERN_NAME:::REGEX"
+PATTERNS=(
+    # AWS
+    "AWS Access Key:::AKIA[0-9A-Z]{16}"
+    "AWS Secret Key:::['\"]([A-Za-z0-9/+=]{40})['\"]"
+
+    # API Keys / Tokens
+    "GitHub Token:::gh[pousr]_[A-Za-z0-9_]{36,}"
+    "GitLab Token:::glpat-[A-Za-z0-9_-]{20,}"
+    "Slack Token:::xox[baprs]-[A-Za-z0-9-]{10,}"
+    "Stripe Live Key:::sk_live_[A-Za-z0-9]{24,}"
+    "Stripe Test Key:::sk_test_[A-Za-z0-9]{24,}"
+    "OpenAI Key:::sk-[A-Za-z0-9]{32,}"
+    "Anthropic Key:::sk-ant-[A-Za-z0-9_-]{20,}"
+    "Telegram Bot Token:::[0-9]{8,10}:[A-Za-z0-9_-]{35}"
+
+    # Private Keys
+    "Private Key:::-----BEGIN[[:space:]]+(RSA|EC|OPENSSH|PGP|ENCRYPTED)?[[:space:]]*PRIVATE[[:space:]]+KEY-----"
+    "Hex Private Key (64 chars):::(?:private[_-]?key|PRIVATE[_-]?KEY)\s*[=:]\s*['\"]?(?:0x)?[A-Fa-f0-9]{64}"
+
+    # Database URLs with credentials
+    "Database URL:::(mongodb|postgres|mysql|redis)://[^:]+:[^@]+@"
+
+    # JWT (long ones are likely real)
+    "JWT Token:::eyJ[A-Za-z0-9_-]{20,}\.eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}"
+
+    # Aura-specific
+    "Aura Master Key:::aura_master_[A-Fa-f0-9]{32,}"
+    "Aura API Key:::aura_[a-f0-9]{64}"
+
+    # Generic high-entropy secrets after = or :
+    "Hardcoded Bearer:::Bearer[[:space:]]+[A-Za-z0-9_-]{20,}"
+
+    # Nostr/Clawstr private keys (64-char hex)
+    "Nostr Private Key:::(?:CLAWSTR|NOSTR)[_-]?PRIVATE[_-]?KEY\s*[=:]\s*[A-Fa-f0-9]{64}"
+
+    # Ethereum/Base private keys
+    "Ethereum Private Key:::(?:BASE|ETH)[_-]?PRIVATE[_-]?KEY\s*[=:]\s*0x[A-Fa-f0-9]{64}"
+
+    # Moltbook
+    "Moltbook Key:::moltbook_sk_[A-Za-z0-9]{20,}"
+)
+
+# Files/patterns to skip (test fixtures, examples, docs about secrets)
+SKIP_PATTERNS="\.example\.|\.sample\.|\.test\.|\.spec\.|CHANGELOG|README|\.md$|package-lock\.json|yarn\.lock"
+
+for file in $STAGED; do
+    # Skip binary files
+    if file "$file" 2>/dev/null | grep -q "binary"; then
+        continue
+    fi
+
+    # Skip files matching skip patterns
+    if echo "$file" | grep -qE "$SKIP_PATTERNS"; then
+        continue
+    fi
+
+    # Skip if file doesn't exist (renamed/moved)
+    if [ ! -f "$file" ]; then
+        continue
+    fi
+
+    # Get the staged content (not the working tree version)
+    CONTENT=$(git show ":$file" 2>/dev/null) || continue
+
+    for pattern_entry in "${PATTERNS[@]}"; do
+        PATTERN_NAME="${pattern_entry%%:::*}"
+        REGEX="${pattern_entry##*:::}"
+
+        # Search staged content
+        MATCHES=$(echo "$CONTENT" | grep -nE "$REGEX" 2>/dev/null || true)
+
+        if [ -n "$MATCHES" ]; then
+            if [ "$FOUND" -eq 0 ]; then
+                echo ""
+                echo -e "${RED}========================================${NC}"
+                echo -e "${RED}  SECRETS DETECTED — COMMIT BLOCKED${NC}"
+                echo -e "${RED}========================================${NC}"
+            fi
+            FOUND=1
+            echo ""
+            echo -e "${RED}  [$PATTERN_NAME]${NC} in ${YELLOW}$file${NC}:"
+            echo "$MATCHES" | while read -r line; do
+                LINE_NUM=$(echo "$line" | cut -d: -f1)
+                # Mask the actual value in output
+                LINE_CONTENT=$(echo "$line" | cut -d: -f2- | sed -E 's/([A-Za-z0-9_-]{4})[A-Za-z0-9_+\/=-]{16,}/\1***MASKED***/g')
+                echo -e "    Line $LINE_NUM: $LINE_CONTENT"
+            done
+        fi
+    done
+done
+
+if [ "$FOUND" -ne 0 ]; then
+    echo ""
+    echo -e "${RED}========================================${NC}"
+    echo -e "${YELLOW}  To fix:${NC}"
+    echo -e "  1. Move secrets to .env (which is gitignored)"
+    echo -e "  2. Use process.env.VAR_NAME in code"
+    echo -e "  3. git reset HEAD <file> to unstage"
+    echo -e ""
+    echo -e "  To bypass (NOT recommended):"
+    echo -e "  git commit --no-verify"
+    echo -e "${RED}========================================${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}[secret-scan]${NC} No secrets found. Commit OK."
+exit 0
