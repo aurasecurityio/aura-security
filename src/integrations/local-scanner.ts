@@ -1954,10 +1954,10 @@ export class LocalScanner {
   private getSystemInfo(): SystemInfo {
     return {
       platform: process.platform,
-      hostname: process.env.COMPUTERNAME || process.env.HOSTNAME || 'unknown',
-      user: process.env.USERNAME || process.env.USER || 'unknown',
+      hostname: 'redacted',
+      user: 'redacted',
       nodeVersion: process.version,
-      cwd: process.cwd()
+      cwd: 'redacted'
     };
   }
 
@@ -2066,11 +2066,11 @@ export class LocalScanner {
   }
 
   private maskSecret(text: string): string {
-    // Mask secrets in the snippet to avoid exposing them
+    // Mask secrets in the snippet — never leak ANY part of the value
     // Mask quoted strings 8+ chars
     let masked = text.replace(/(['"])[^'"]{8,}(['"])/g, '$1***MASKED***$2');
-    // Mask values after = signs (e.g. KEY=abc123...) — keep first 4 chars for identification
-    masked = masked.replace(/=\s*([A-Za-z0-9_\-./+]{8,})/g, (_, val) => `=${val.slice(0, 4)}***MASKED***`);
+    // Mask values after = signs completely (no prefix leak)
+    masked = masked.replace(/=\s*([A-Za-z0-9_\-./+]{8,})/g, '=***MASKED***');
     return masked;
   }
 
