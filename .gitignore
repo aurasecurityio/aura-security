@@ -41,7 +41,14 @@ __pycache__/
 
 # Marketing/website (hosted separately)
 visualizer/landing.html
-docs/pitch-deck.html
+
+# Docs — private disclosures, exploit proofs, internal analysis
+# NEVER commit these to the public repo
+docs/
+!docs/whitepaper.md
+!docs/exchange-integration-pitch.md
+!docs/axiom-integration-diagram.md
+!docs/photon-integration-diagram.md
 
 # Internal development notes
 CLAUDE.md
@@ -60,3 +67,11 @@ deploy/terraform/terraform.tfvars
 *.zip
 telegram-bot/*.zip
 discord-bot/*.zip
+
+# Bot backup files (contain code with potential secrets context)
+*.backup
+*.mjs.backup
+*.bak
+
+# Scripts that may contain deployment secrets
+scripts/deploy-*
