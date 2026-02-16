@@ -104,6 +104,7 @@ export class AuraServer {
     }
 
     // Public endpoints that never require auth (scanning is the product)
+    // POST /tools has per-tool auth enforcement inside handleCallTool
     const isPublic = path === '/health' || path === '/info' || path.startsWith('/badge/')
       || path === '/tools' || path.startsWith('/score') || path.startsWith('/v1/');
 
@@ -240,6 +241,13 @@ export class AuraServer {
     res.end(JSON.stringify({ tools: toolList }));
   }
 
+  // Tools that can be called without authentication (public scanning endpoints)
+  private static readonly PUBLIC_TOOLS = new Set([
+    'audit', 'trust-scan', 'scam-scan', 'scan-local', 'scan-aura',
+    'ai-check', 'compare', 'x-scan', 'generate-report',
+    'skill-scan', 'website-probe',
+  ]);
+
   private async handleCallTool(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const body = await this.readBody(req);
     const { tool, arguments: args } = JSON.parse(body);
@@ -251,6 +259,16 @@ export class AuraServer {
       res.statusCode = 404;
       res.end(JSON.stringify({ error: 'Tool not found' }));
       return;
+    }
+
+    // Per-tool auth: non-public tools require authentication
+    if (this.config.authEnabled && !AuraServer.PUBLIC_TOOLS.has(sanitizedTool)) {
+      const authResult = this.validateAuth(req);
+      if (!authResult.valid) {
+        res.statusCode = authResult.status;
+        res.end(JSON.stringify({ error: authResult.message }));
+        return;
+      }
     }
 
     const result = await toolDef.handler(args ?? {});
