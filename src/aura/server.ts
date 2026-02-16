@@ -103,8 +103,9 @@ export class AuraServer {
       return;
     }
 
-    // Public endpoints that never require auth
-    const isPublic = path === '/health' || path === '/info' || path.startsWith('/badge/');
+    // Public endpoints that never require auth (scanning is the product)
+    const isPublic = path === '/health' || path === '/info' || path.startsWith('/badge/')
+      || path === '/tools' || path.startsWith('/score') || path.startsWith('/v1/');
 
     // Auth check (when enabled)
     let authScopes: string[] = [];

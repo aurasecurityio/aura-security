@@ -1024,15 +1024,7 @@
     // CONFIG & STATE
     // ============================================
     const API_BASE = window.location.origin;
-    function getApiKey() {
-      let key = sessionStorage.getItem('aura_api_key');
-      if (!key) {
-        key = prompt('Enter your Aura Security API key:');
-        if (key) sessionStorage.setItem('aura_api_key', key);
-      }
-      return key || '';
-    }
-    const AUTH_HEADERS = { 'Content-Type': 'application/json', get Authorization() { return 'Bearer ' + getApiKey(); } };
+    const AUTH_HEADERS = { 'Content-Type': 'application/json' };
     const WS_PORT = 3001;
     let wsConnection = null;
     let wsReconnectTimer = null;
