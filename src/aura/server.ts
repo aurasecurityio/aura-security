@@ -222,11 +222,7 @@ export class AuraServer {
     res.statusCode = 200;
     res.end(JSON.stringify({
       name: 'aura-security',
-      version: '0.6.0',
-      endpoints: ['/info', '/tools', '/memory', '/settings', '/audits', '/stats', '/notifications', '/score', '/badge', '/auth/keys'],
-      tools: Array.from(this.tools.keys()),
-      database: true,
-      auth: this.config.authEnabled ? 'enabled' : 'disabled'
+      tools: Array.from(this.tools.keys()).filter(t => AuraServer.PUBLIC_TOOLS.has(t)),
     }));
   }
 
@@ -250,7 +246,24 @@ export class AuraServer {
 
   private async handleCallTool(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const body = await this.readBody(req);
-    const { tool, arguments: args } = JSON.parse(body);
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(body);
+    } catch {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: 'Invalid JSON' }));
+      return;
+    }
+
+    // Reject deeply nested payloads (DoS prevention)
+    if (body.length > 0 && AuraServer.jsonDepth(body) > 20) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: 'Request too deeply nested' }));
+      return;
+    }
+
+    const { tool, arguments: args } = parsed;
 
     // Sanitize tool name — alphanumeric, hyphens, underscores only
     const sanitizedTool = typeof tool === 'string' ? tool.replace(/[^a-zA-Z0-9_-]/g, '') : '';
@@ -271,9 +284,26 @@ export class AuraServer {
       }
     }
 
-    const result = await toolDef.handler(args ?? {});
-    res.statusCode = 200;
-    res.end(JSON.stringify({ result }));
+    try {
+      const result = await toolDef.handler(args ?? {});
+      res.statusCode = 200;
+      res.end(JSON.stringify({ result }));
+    } catch (err) {
+      console.error(`[AURA] Tool "${sanitizedTool}" error:`, err);
+      res.statusCode = 500;
+      res.end(JSON.stringify({ error: 'Tool execution failed' }));
+    }
+  }
+
+  /** Estimate JSON nesting depth without full parse (DoS prevention) */
+  private static jsonDepth(s: string): number {
+    let max = 0, depth = 0;
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (c === '{' || c === '[') { depth++; if (depth > max) max = depth; }
+      else if (c === '}' || c === ']') { depth--; }
+    }
+    return max;
   }
 
   private async handleMemoryWrite(req: IncomingMessage, res: ServerResponse): Promise<void> {
