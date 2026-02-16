@@ -7,12 +7,12 @@
  * Requires BOT_TOKEN and APP_ID environment variables
  */
 
-const APP_ID = process.env.APP_ID || '1465522800180858906';
+const APP_ID = process.env.APP_ID;
 const BOT_TOKEN = process.env.BOT_TOKEN;
 
-if (!BOT_TOKEN) {
-  console.error('ERROR: BOT_TOKEN environment variable required');
-  console.log('Run: export BOT_TOKEN="your_bot_token"');
+if (!APP_ID || !BOT_TOKEN) {
+  console.error('ERROR: APP_ID and BOT_TOKEN environment variables required');
+  console.log('Run: export APP_ID="your_app_id" BOT_TOKEN="your_bot_token"');
   process.exit(1);
 }
 

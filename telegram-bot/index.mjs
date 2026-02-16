@@ -27,6 +27,28 @@ const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
 
+// SSRF protection: block requests to internal/cloud metadata IPs
+function isPrivateUrl(urlString) {
+  try {
+    const u = new URL(urlString);
+    const host = u.hostname.toLowerCase();
+    // Block localhost variants
+    if (host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '0.0.0.0') return true;
+    // Block AWS metadata
+    if (host === '169.254.169.254' || host === 'metadata.google.internal') return true;
+    // Block private IPv4 ranges
+    const parts = host.split('.').map(Number);
+    if (parts.length === 4 && parts.every(p => !isNaN(p))) {
+      if (parts[0] === 10) return true;
+      if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+      if (parts[0] === 192 && parts[1] === 168) return true;
+      if (parts[0] === 169 && parts[1] === 254) return true;
+      if (parts[0] === 0) return true;
+    }
+    return false;
+  } catch { return true; }
+}
+
 // DynamoDB client for deduplication (persists across Lambda instances)
 const dynamoClient = new DynamoDBClient({ region: 'us-east-1' });
 const DEDUP_TABLE = 'aura-telegram-dedup';
@@ -153,8 +175,12 @@ async function sendMessage(chatId, text, parseMode = 'Markdown', replyMarkup = n
   });
 }
 
-// Fetch HTML/JSON from URL
-async function fetchUrl(url, headers = {}) {
+// Fetch HTML/JSON from URL (redirect-safe, SSRF-protected)
+async function fetchUrl(url, headers = {}, _redirectCount = 0) {
+  const MAX_REDIRECTS = 5;
+  if (_redirectCount > MAX_REDIRECTS) throw new Error('Too many redirects');
+  if (isPrivateUrl(url)) throw new Error('Blocked: private/internal URL');
+
   return new Promise((resolve, reject) => {
     const urlObj = new URL(url);
     const options = {
@@ -170,9 +196,11 @@ async function fetchUrl(url, headers = {}) {
     };
 
     https.get(options, (res) => {
-      // Handle redirects
+      // Handle redirects (with limit and SSRF check)
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        fetchUrl(res.headers.location, headers).then(resolve).catch(reject);
+        const location = res.headers.location;
+        if (isPrivateUrl(location)) { reject(new Error('Blocked: redirect to private URL')); return; }
+        fetchUrl(location, headers, _redirectCount + 1).then(resolve).catch(reject);
         return;
       }
 
@@ -2199,20 +2227,13 @@ function formatCombinedResult(profile, xScore, gitResult) {
 
 // Main handler
 export async function handler(event) {
-  console.log('Event:', JSON.stringify(event));
+  console.log('Event received:', event.path || event.rawPath || 'webhook');
 
   // Health check endpoint - for uptime monitoring
   if (event.path === '/health' || event.rawPath === '/health' || event.httpMethod === 'GET') {
     const healthCheck = {
       status: 'ok',
-      timestamp: new Date().toISOString(),
-      version: '1.1.0',
-      services: {
-        telegram: BOT_TOKEN ? 'configured' : 'missing',
-        twitter: X_BEARER_TOKEN ? 'configured' : 'missing',
-        claude: ANTHROPIC_API_KEY ? 'configured' : 'missing',
-        aura_api: AURA_API_PRIMARY
-      }
+      version: '1.1.0'
     };
     return {
       statusCode: 200,
@@ -2235,7 +2256,13 @@ export async function handler(event) {
       const callback = body.callback_query;
       const chatId = callback.message.chat.id;
       const callbackId = callback.id;
-      const data = callback.data;
+      const data = callback.data || '';
+
+      // Validate callback data: max 64 chars, alphanumeric + safe delimiters only
+      if (data.length > 64 || !/^[a-zA-Z0-9_:\/\-\.@]+$/.test(data)) {
+        console.warn('Invalid callback data rejected:', data.substring(0, 20));
+        return { statusCode: 200, body: 'OK' };
+      }
 
       console.log('Callback query:', data);
 
@@ -2265,7 +2292,7 @@ export async function handler(event) {
           await sendMessage(chatId, detailedMsg);
         } catch (err) {
           console.error('Detailed analysis error:', err);
-          await sendMessage(chatId, `\u274C Analysis failed: ${err.message}`);
+          await sendMessage(chatId, `\u274C Analysis failed. Please try again later.`);
         }
       }
 
@@ -2281,7 +2308,7 @@ export async function handler(event) {
           await sendMessage(chatId, formatted.text);
         } catch (err) {
           console.error('Security scan error:', err);
-          await sendMessage(chatId, `❌ Security scan failed: ${err.message}`);
+          await sendMessage(chatId, `❌ Security scan failed. Please try again later.`);
         }
 
         return { statusCode: 200, body: 'OK' };
@@ -2337,7 +2364,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
           await sendMessage(chatId, aiMsg);
         } catch (err) {
           console.error('AI analysis error:', err);
-          await sendMessage(chatId, `\u274C AI analysis failed: ${err.message}`);
+          await sendMessage(chatId, `\u274C AI analysis failed. Please try again later.`);
         }
       }
 
@@ -2561,7 +2588,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
           await sendMessage(chatId, msg, 'Markdown', { inline_keyboard: buttons });
         } catch (err) {
           console.error('X scan callback error:', err);
-          await sendMessage(chatId, `\u274C Error: ${err.message}`);
+          await sendMessage(chatId, `\u274C Scan failed. Please try again.`);
         }
         return { statusCode: 200, body: 'OK' };
       }
@@ -2596,7 +2623,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
           await sendMessage(chatId, result.text, 'Markdown', { inline_keyboard: buttons });
         } catch (err) {
           console.error('Deep X scan error:', err);
-          await sendMessage(chatId, `\u274C Error: ${err.message}`);
+          await sendMessage(chatId, `\u274C Deep scan failed. Please try again.`);
         }
         return { statusCode: 200, body: 'OK' };
       }
@@ -2624,7 +2651,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
           await sendMessage(chatId, msg);
         } catch (err) {
           console.error('Social stats error:', err);
-          await sendMessage(chatId, `\u274C Failed to load social stats: ${err.message}`);
+          await sendMessage(chatId, `\u274C Failed to load social stats. Please try again.`);
         }
         return { statusCode: 200, body: 'OK' };
       }
@@ -2649,7 +2676,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
           await sendMessage(chatId, msg);
         } catch (err) {
           console.error('Security details error:', err);
-          await sendMessage(chatId, `\u274C Failed to load security details: ${err.message}`);
+          await sendMessage(chatId, `\u274C Failed to load security details. Please try again.`);
         }
         return { statusCode: 200, body: 'OK' };
       }
@@ -2758,7 +2785,8 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
 
         await sendMessage(chatId, formatted.text, 'Markdown', replyMarkup);
       } catch (err) {
-        await sendMessage(chatId, `\u274C Error: ${err.message}`);
+        console.error('Dev check error:', err);
+        await sendMessage(chatId, `\u274C Check failed. Please try again.`);
       }
     }
     // /scan command - Full security scan
@@ -2791,7 +2819,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         await sendMessage(chatId, formatted.text, 'Markdown', replyMarkup);
       } catch (err) {
         console.error('Scan error:', err);
-        await sendMessage(chatId, `\u274C Scan failed: ${err.message}\n\n_Try /rugcheck for a quick trust check instead._`);
+        await sendMessage(chatId, `\u274C Scan failed. Please try again.\n\n_Try /rugcheck for a quick trust check instead._`);
       }
     }
     // /xcheck or /devcheck command - DEEP ANALYSIS
@@ -2841,7 +2869,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         await sendMessage(chatId, result.text, 'Markdown', replyMarkup);
       } catch (err) {
         console.error('X check error:', err);
-        await sendMessage(chatId, `\u274C Error: ${err.message}`);
+        await sendMessage(chatId, `\u274C X check failed. Please try again.`);
       }
     }
     // /fullcheck command - redirect to devcheck (same deep analysis)
@@ -2887,7 +2915,8 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
 
         await sendMessage(chatId, result.text, 'Markdown', { inline_keyboard: buttons });
       } catch (err) {
-        await sendMessage(chatId, `\u274C Error: ${err.message}`);
+        console.error('Rugcheck error:', err);
+        await sendMessage(chatId, `\u274C Rug check failed. Please try again.`);
       }
     }
     // /scamcheck command - Detect scam patterns
@@ -3014,7 +3043,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         await sendMessage(chatId, text);
       } catch (err) {
         console.error('Scam check error:', err);
-        await sendMessage(chatId, `\u274C Scam check failed: ${err.message}`);
+        await sendMessage(chatId, `\u274C Scam check failed. Please try again.`);
       }
     }
     // /trustagent command - Check Moltbook agent trust score
@@ -3069,7 +3098,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         await sendMessage(chatId, msg);
       } catch (err) {
         console.error('Trust agent error:', err);
-        await sendMessage(chatId, `\u274C Agent trust check failed: ${err.message}`);
+        await sendMessage(chatId, `\u274C Agent trust check failed. Please try again.`);
       }
     }
     // /botcheck command - Run bot farm detection
@@ -3113,7 +3142,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         await sendMessage(chatId, msg);
       } catch (err) {
         console.error('Bot check error:', err);
-        await sendMessage(chatId, `\u274C Bot detection failed: ${err.message}`);
+        await sendMessage(chatId, `\u274C Bot detection failed. Please try again.`);
       }
     }
     // /report command - Generate HTML security report
@@ -3144,19 +3173,18 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
           return { statusCode: 200, body: 'OK' };
         }
 
-        const repoName = repoUrl.replace(/^https?:\/\/github\.com\//, '');
+        const repoName = repoUrl.replace(/^https?:\/\/github\.com\//, '').replace(/[^a-zA-Z0-9_\-\/\.]/g, '');
         const sizeKb = Math.round((data.reportLength || 0) / 1024);
         let msg = `\u2705 *Security Report Generated*\n\n`;
         msg += `*Repo:* \`${repoName}\`\n`;
         msg += `*Format:* ${(data.format || 'html').toUpperCase()}\n`;
         msg += `*Size:* ${sizeKb} KB\n\n`;
-        msg += `_Retrieve the full HTML report via API:_\n`;
-        msg += `\`\`\`\ncurl -s "https://app.aurasecurity.io/tools" -X POST -H "Content-Type: application/json" -d '{"tool":"generate-report","arguments":{"repoUrl":"${repoUrl}"}}'\n\`\`\``;
+        msg += `_Retrieve the full report at app.aurasecurity.io_`;
 
         await sendMessage(chatId, msg);
       } catch (err) {
         console.error('Report generation error:', err);
-        await sendMessage(chatId, `\u274C Report generation failed: ${err.message}`);
+        await sendMessage(chatId, `\u274C Report generation failed. Please try again.`);
       }
     }
     // /probe command - Detect if website has real backend activity
@@ -3168,10 +3196,10 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         targetUrl = 'https://' + targetUrl;
       }
 
-      // Validate URL format (must have domain with TLD)
+      // Validate URL format (must have domain with TLD, no internal IPs)
       const urlPattern = /^https?:\/\/[^\s]+\.[^\s]+/i;
-      if (!targetUrl || !urlPattern.test(targetUrl)) {
-        await sendMessage(chatId, `❌ Please provide a valid website URL.\n\n*Example:*\n/probe https://example.com\n/probe google.com\n\n_Probes a website to detect if it has real backend activity or is just a static landing page._`);
+      if (!targetUrl || !urlPattern.test(targetUrl) || isPrivateUrl(targetUrl)) {
+        await sendMessage(chatId, `❌ Please provide a valid public website URL.\n\n*Example:*\n/probe https://example.com\n/probe google.com\n\n_Probes a website to detect if it has real backend activity or is just a static landing page._`);
         return { statusCode: 200, body: 'OK' };
       }
 
@@ -3237,7 +3265,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         await sendMessage(chatId, msg);
       } catch (err) {
         console.error('Probe error:', err);
-        await sendMessage(chatId, `❌ Probe failed: ${err.message}`);
+        await sendMessage(chatId, `❌ Probe failed. Please try again.`);
       }
     }
     // /fullprobe command - Combined website probe + repo trust scan
@@ -3249,10 +3277,10 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         targetUrl = 'https://' + targetUrl;
       }
 
-      // Validate URL format (must have domain with TLD)
+      // Validate URL format (must have domain with TLD, no internal IPs)
       const urlPattern = /^https?:\/\/[^\s]+\.[^\s]+/i;
-      if (!targetUrl || !urlPattern.test(targetUrl)) {
-        await sendMessage(chatId, `❌ Please provide a valid website URL.\n\n*Example:*\n/fullprobe https://example.com\n/fullprobe google.com\n\n_Full analysis: probes website activity AND scans linked GitHub repo for trust signals._`);
+      if (!targetUrl || !urlPattern.test(targetUrl) || isPrivateUrl(targetUrl)) {
+        await sendMessage(chatId, `❌ Please provide a valid public website URL.\n\n*Example:*\n/fullprobe https://example.com\n/fullprobe google.com\n\n_Full analysis: probes website activity AND scans linked GitHub repo for trust signals._`);
         return { statusCode: 200, body: 'OK' };
       }
 
@@ -3322,7 +3350,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         }
       } catch (err) {
         console.error('Full probe error:', err);
-        await sendMessage(chatId, `❌ Full probe failed: ${err.message}`);
+        await sendMessage(chatId, `❌ Full probe failed. Please try again.`);
       }
     }
     // /skillcheck command - Scan AI agent skills for security issues
@@ -3421,7 +3449,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         await sendMessage(chatId, msg);
       } catch (err) {
         console.error('Skill scan error:', err);
-        await sendMessage(chatId, `❌ Skill scan failed: ${err.message}`);
+        await sendMessage(chatId, `❌ Skill scan failed. Please try again.`);
       }
     }
     // Auto-detect GitHub URLs - run scamcheck automatically
@@ -3541,7 +3569,7 @@ Be brutally honest. If it looks like a scam, say so clearly.`;
         await sendMessage(chatId, scanText);
       } catch (err) {
         console.error('Auto-scan error:', err);
-        await sendMessage(chatId, `\u274C Auto-scan failed: ${err.message}\n\n_Try /scamcheck ${url}_`);
+        await sendMessage(chatId, `\u274C Auto-scan failed. Please try again.\n\n_Try /scamcheck with the URL._`);
       }
     }
     // X URL DETECTION: Show confirmation button instead of auto-scanning (saves API costs)

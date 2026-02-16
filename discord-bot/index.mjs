@@ -115,7 +115,7 @@ function isValidGitUrl(url) {
 }
 
 /**
- * Validate website URL for probe commands
+ * Validate website URL for probe commands (blocks private/internal IPs)
  */
 function isValidWebUrl(url) {
   if (!url || typeof url !== 'string') return false;
@@ -125,7 +125,25 @@ function isValidWebUrl(url) {
 
   // Must be a valid URL with domain and TLD
   const urlPattern = /^https?:\/\/[^\s]+\.[^\s]+/i;
-  return urlPattern.test(url);
+  if (!urlPattern.test(url)) return false;
+
+  // Block private/internal IPs (SSRF protection)
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase();
+    if (host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '0.0.0.0') return false;
+    if (host === '169.254.169.254' || host === 'metadata.google.internal') return false;
+    const parts = host.split('.').map(Number);
+    if (parts.length === 4 && parts.every(p => !isNaN(p))) {
+      if (parts[0] === 10) return false;
+      if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return false;
+      if (parts[0] === 192 && parts[1] === 168) return false;
+      if (parts[0] === 169 && parts[1] === 254) return false;
+      if (parts[0] === 0) return false;
+    }
+  } catch { return false; }
+
+  return true;
 }
 
 /**
@@ -156,7 +174,7 @@ async function callScannerApi(tool, args) {
   const timeout = setTimeout(() => controller.abort(), 240000); // 4 minute timeout
 
   try {
-    console.log(`Calling API: ${tool} with args:`, JSON.stringify(args));
+    console.log(`Calling API: ${tool}`);
     const headers = { 'Content-Type': 'application/json' };
     if (SCANNER_API_KEY) headers['Authorization'] = `Bearer ${SCANNER_API_KEY}`;
     const response = await fetch(`${SCANNER_API}/tools`, {
@@ -1267,7 +1285,7 @@ async function processDeferredResponse(interaction, secrets) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        content: `:x: Scan failed: ${error.message}`
+        content: `:x: Scan failed. Please try again.`
       })
     });
   }
@@ -1352,7 +1370,7 @@ export const handler = async (event) => {
         await fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: `:x: ${event.command} failed: ${error.message}` }),
+          body: JSON.stringify({ content: `:x: ${event.command} failed. Please try again.` }),
           signal: errController.signal
         });
         clearTimeout(errTimeout);
